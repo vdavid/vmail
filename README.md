@@ -263,6 +263,8 @@ CREATE TABLE "action_queue" (
 ├── /cmd/
 │   └── /server/
 │       └── main.go           # Main entry point
+│   └── /key-gen/
+│       └── main.go           # Main entry point
 ├── /internal/
 │   ├── /api/                 # HTTP Handlers & routing
 │   │   ├── routes.go
@@ -282,6 +284,15 @@ CREATE TABLE "action_queue" (
 ├── go.sum
 └── Dockerfile
 ```
+
+### Environment variables
+
+* `VMAIL_ENCRYPTION_KEY`: The encryption key for AES-GCM encryption. 32-byte (256-bit) cryptographically secure random string, base64-encoded. Generate this with the tool in `/cmd/key-gen`.
+* `VMAIL_DB_HOST`: The Postgres host.
+* `VMAIL_DB_PORT`: The Postgres port.
+* `VMAIL_DB_NAME`: The Postgres database name.
+* `VMAIL_DB_USERNAME`: The Postgres username.
+* `VMAIL_DB_PASSWORD`: The Postgres password.
 
 ### REST API design
 
