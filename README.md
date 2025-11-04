@@ -93,6 +93,28 @@ The Go back end will validate the token with Authelia (or by checking its signat
 The back end is a **Go** application providing a **REST API** for the front end.
 It communicates with the IMAP and the SMTP server and uses a **Postgres** database for caching and internal storage.
 
+### Features
+
+* Serves the front end via `http.FileServer`
+* Validates JWTs from Authelia
+* Validates user credentials in the DB
+* Pools IMAP connections
+* Uses IMAP commands: `SELECT`, `FETCH`, `THREAD`, `SEARCH`, `STORE`, `APPEND`, `COPY`
+* Provides a helper function for generating an encryption key for AES-GCM encryption.
+* Uses IMAP's IDLE command as per [RFC 2177](https://datatracker.ietf.org/doc/html/rfc2177). Runs a goroutine
+  for each active user to get notified as soon as an email arrives.
+* Maintains a connection pool to the IMAP server, making sure connections exist at all times.
+  We need two types of connections for each active user:
+   * **The "Worker" Pool:** A pool of 1–3 "normal" connections used by the API handlers to run `SEARCH`, `FETCH`, `STORE`
+     (star, archive), and so on. These are for short-lived commands. 
+   * **The "Listener" Connection:** A single, dedicated connection per user that runs in its own persistent goroutine.
+     Its only job is to log in, `SELECT` `Inbox`, and run the `IDLE` command. 
+     * If this connection drops (which it will, due to network timeouts), the `client.Idle()` command in the goroutine
+       returns an error. The code catches this error, logs it, waits 5–10 seconds (uses exponential backoff),
+      and then reconnects and re-issues the IDLE command.
+* Provides WebSocket connections for clients for email push. When the IDLE goroutine gets a push, it finds
+  the user's WebSocket connection and sends a JSON message like `{"type": "new_email", "folder": "Inbox"}`.
+
 ### DB design
 
 We chose **Postgres** for its robustness, reliability, and excellent support for `JSONB`,
@@ -125,10 +147,10 @@ CREATE TABLE "user_settings" (
     "pagination_threads_per_page" INT NOT NULL DEFAULT 100,
     "imap_server_hostname" TEXT NOT NULL,
     "imap_username" TEXT NOT NULL,
-    "encrypted_imap_password" BYTEA NOT NULL, -- Encrypted using AES-GCM with a master key from an env var
+    "encrypted_imap_password" BYTEA NOT NULL, -- Encrypted using AES-GCM with an encryption key from an env var
     "smtp_server_hostname" TEXT NOT NULL,
     "smtp_username" TEXT NOT NULL,
-    "encrypted_smtp_password" BYTEA NOT NULL, -- Encrypted using AES-GCM with a master key from an env var
+    "encrypted_smtp_password" BYTEA NOT NULL, -- Encrypted using AES-GCM with an encryption key from an env var
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
     "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -147,6 +169,8 @@ CREATE TABLE "threads" (
     "is_archived" BOOLEAN NOT NULL DEFAULT false,
     "is_starred" BOOLEAN NOT NULL DEFAULT false,
     "is_unread" BOOLEAN NOT NULL DEFAULT false,
+    
+    "cached_at" TIMESTAMPTZ,
 
     UNIQUE("user_id", "folder_name", "stable_thread_id")
 );
@@ -267,7 +291,7 @@ CREATE TABLE "action_queue" (
 unique identifier, such as the `Message-ID` header of the root/first message in the thread.
 
 * `GET /folders`: List all IMAP folders (Inbox, Sent, etc.).
-* `GET /threads?folder=INBOX&page=1&limit=100`: Get paginated threads for a folder.
+* `GET /threads?folder=Inbox&page=1&limit=100`: Get paginated threads for a folder.
 * `GET /threads/search?q=from:george&page=1`: Get paginated search results.
 * `GET /thread/{thread_id}`: Get all messages and content for one thread.
 * `GET /message/{message_id}/attachment/{attachment_id}`: Download an attachment.
@@ -283,6 +307,18 @@ unique identifier, such as the `Message-ID` header of the root/first message in 
     * Body: `{"imap_host": "imap.example.com", "imap_user": "user", "imap_password": "pass", "smtp_host": "smtp.example.com", "smtp_user": "user", "smtp_password": "pass", "undo_send_delay_seconds": 20, "pagination_threads_per_page": 100}`
 * `DELETE /threads`: Move threads to trash.
     * Body: `{"thread_ids": ["id1", "id2"]}`
+
+### Real-time API (WebSockets) design
+
+For real-time updates (like new emails), the front end will open a WebSocket connection.
+
+* `GET /api/v1/ws`: Upgrades the HTTP connection to a WebSocket.
+    * The server will use this connection to push updates to the client.
+    * **Server-to-Client message example:**
+        ```json
+        {"type": "new_message", "folder": "INBOX"}
+        ```
+    * The front end listens for this message and, upon receiving it, invalidates its `TanStack Query` cache for the "INBOX" folder, triggering a refetch.
 
 ### Test plan
 
@@ -327,6 +363,11 @@ unique identifier, such as the `Message-ID` header of the root/first message in 
     * This page has fields for: IMAP Host, IMAP User, IMAP Password, SMTP Host, SMTP User, SMTP Password, Undo Send Delay (20s), Pagination Threads Per Page (100).
     * The back end encrypts the data and creates the `users` and `user_settings` records.
 * IMAP email loading and SMTP sending/replying.
+* WebSocket-based real-time email fetching
+  * The app opens a WebSocket connection to the API.
+    When the front end gets a message like `{"type": "new_email", "folder": "Inbox"}`, it invalidates
+    the TanStack Query cache for the inbox, triggering TanStack Query to GET `/api/v1/threads?folder=Inbox`.
+    The new email appears almost instantly.
 * Threaded view with thread-count display, such as `Sender Name (3)`. The server does the threading itself.
 * Search. Including some Gmail-like syntax, for example `from:george after:2025`. Search itself happens on the server. 
 * Pagination (100 emails/page).
@@ -460,7 +501,7 @@ Prettier config used: `{"tabWidth": 4,"useTabs": false,"semi": false,"singleQuot
     * Tasks: Build composer UI. Implement SMTP logic on the backend. Implement Reply/Forward. Implement "Undo Send."
 5.  **Milestone 5: Quality of life**
     * Goal: Polish the MVP. 
-    * Tasks: Auto-save drafts. Add keyboard shortcuts. Add pagination.
+    * Tasks: Auto-save drafts. Add keyboard shortcuts. Add pagination. Add IDLE and WebSocket connection.
 6.  **Milestone 6: Offline**
     * Goal: Basic offline support.
     * Tasks: Implement IndexedDB caching for recently viewed emails. Build the sync logic.
@@ -475,7 +516,7 @@ Prettier config used: `{"tabWidth": 4,"useTabs": false,"semi": false,"singleQuot
 * [ ] Implement logic to connect to the mailcow IMAP server (using `imap.DialTLS`).
 * [ ] Implement logic to log in using a username and password (from env vars for now).
 * [ ] Implement a function to run the `CAPABILITY` command and print the results (to verify `THREAD` support).
-* [ ] Implement a function to `SELECT` the "INBOX".
+* [ ] Implement a function to `SELECT` the "Inbox".
 * [ ] Implement a function to run a `THREAD` command (`THREAD=REFERENCES UTF-8 ALL`) and print the raw response.
 * [ ] Implement a function to run a `SEARCH` command (e.g., `SEARCH FROM "test"`) and print the resulting UIDs.
 * [ ] Implement a function to `FETCH` a single message (using a UID from the search) and print its body structure and headers.
