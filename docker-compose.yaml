@@ -1,0 +1,55 @@
+services:
+  # V-Mail app (React+Go)
+  vmail:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vmail
+    restart: unless-stopped
+    networks:
+      - vmail-internal
+    depends_on:
+      - db
+    environment:
+      # App settings
+      - VMAIL_PORT=8080
+      - VMAIL_ENCRYPTION_KEY=${VMAIL_ENCRYPTION_KEY}
+
+      # Postgres DB settings
+      - VMAIL_DB_HOST=${VMAIL_DB_HOST}
+      - VMAIL_DB_PORT=5432
+      - VMAIL_DB_USERNAME=${VMAIL_DB_USERNAME}
+      - VMAIL_DB_PASSWORD=${VMAIL_DB_PASSWORD}
+      - VMAIL_DB_NAME=vmail
+      - VMAIL_DB_SSLMODE=disable
+
+      # Authelia settings
+      - AUTHELIA_URL=${AUTHELIA_URL}
+
+      # Timezone
+      - TZ=${TZ}
+
+  # Postgres DB
+  db:
+    image: postgres:16-alpine
+    container_name: vmail-db
+    restart: unless-stopped
+    networks:
+      - vmail-internal
+    volumes:
+      - vmail-db-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USERNAME=${VMAIL_DB_USERNAME}
+      - POSTGRES_PASSWORD=${VMAIL_DB_PASSWORD}
+      - POSTGRES_DB=vmail
+      - TZ=${TZ}
+
+# Volumes for persistent data
+volumes:
+  vmail-db-data:
+  vmail-redis-data:
+
+#  Networks
+networks:
+  vmail-internal:
+    driver: bridge
