@@ -114,12 +114,6 @@ The user should regularly back up the database.
 CREATE TABLE "users" (
     "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     "email" TEXT NOT NULL UNIQUE,  -- The user's login email from Authelia
-    "imap_server_hostname" TEXT NOT NULL,
-    "imap_username" TEXT NOT NULL,
-    "encrypted_imap_password" BYTEA NOT NULL, -- Encrypted using AES-GCM with a master key from an env var
-    "smtp_server_hostname" TEXT NOT NULL,
-    "smtp_username" TEXT NOT NULL,
-    "encrypted_smtp_password" BYTEA NOT NULL, -- Encrypted using AES-GCM with a master key from an env var
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
     "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -128,7 +122,15 @@ CREATE TABLE "users" (
 CREATE TABLE "user_settings" (
     "user_id" UUID PRIMARY KEY REFERENCES "users"("id") ON DELETE CASCADE,
     "undo_send_delay_seconds" INT NOT NULL DEFAULT 20,
-    "pagination_threads_per_page" INT NOT NULL DEFAULT 100
+    "pagination_threads_per_page" INT NOT NULL DEFAULT 100,
+    "imap_server_hostname" TEXT NOT NULL,
+    "imap_username" TEXT NOT NULL,
+    "encrypted_imap_password" BYTEA NOT NULL, -- Encrypted using AES-GCM with a master key from an env var
+    "smtp_server_hostname" TEXT NOT NULL,
+    "smtp_username" TEXT NOT NULL,
+    "encrypted_smtp_password" BYTEA NOT NULL, -- Encrypted using AES-GCM with a master key from an env var
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Caches the thread metadata for fast UI loading
@@ -268,6 +270,7 @@ unique identifier, such as the `Message-ID` header of the root/first message in 
 * `GET /threads/search?q=from:george&page=1`: Get paginated search results.
 * `GET /thread/{thread_id}`: Get all messages and content for one thread.
 * `GET /message/{message_id}/attachment/{attachment_id}`: Download an attachment.
+* `GET /settings`: Get user settings.
 * `POST /send`: Send a new email (places in `action_queue` for "Undo Send").
 * `POST /drafts`: Create or update a draft.
 * `POST /actions`: Perform bulk actions.
@@ -275,6 +278,8 @@ unique identifier, such as the `Message-ID` header of the root/first message in 
     * Body: `{"action": "mark_read", "message_ids": ["id3"]}`
     * Body: `{"action": "star", "thread_ids": ["id1"]}`
 * `POST /undo`: Undo the last `send` action.
+* `POST /settings`: Save settings.
+    * Body: `{"imap_host": "imap.example.com", "imap_user": "user", "imap_password": "pass", "smtp_host": "smtp.example.com", "smtp_user": "user", "smtp_password": "pass", "undo_send_delay_seconds": 20, "pagination_threads_per_page": 100}`
 * `DELETE /threads`: Move threads to trash.
     * Body: `{"thread_ids": ["id1", "id2"]}`
 
@@ -313,6 +318,13 @@ unique identifier, such as the `Message-ID` header of the root/first message in 
 
 ### Features
 
+* Onboarding
+  * Problem: When a user first logs in via Authelia, the API will validate their token, but `users` is empty for them. The API has no IMAP settings to use. The app is unusable.
+  * Solution:
+    * Go's "get user" endpoint returns a `not_set_up` flag (or `null` if that's unidiomatic).
+    * The front end redirects to `/settings`.
+    * This page has fields for: IMAP Host, IMAP User, IMAP Password, SMTP Host, SMTP User, SMTP Password, Undo Send Delay (20s), Pagination Threads Per Page (100).
+    * The back end encrypts the data and creates the `users` and `user_settings` records.
 * IMAP email loading and SMTP sending/replying.
 * Threaded view with thread-count display, such as `Sender Name (3)`. The server does the threading itself.
 * Search. Including some Gmail-like syntax, for example `from:george after:2025`. Search itself happens on the server. 
@@ -323,6 +335,8 @@ unique identifier, such as the `Message-ID` header of the root/first message in 
 * Auto-saving drafts.
 * Basic offline support (read-only cache of viewed emails via `TanStack Query` persistence).
 * Periodic auto-sync and connection status indicator.
+* Settings page.
+  * Has fields for: IMAP Host, IMAP User, IMAP Password, SMTP Host, SMTP User, SMTP Password, Undo send delay, Pagination: threads per page.
 * URL-based routing.
 * Keyboard shortcuts.
 * Logout.
@@ -435,6 +449,8 @@ Prettier config used: `{"tabWidth": 4,"useTabs": false,"semi": false,"singleQuot
       * Build the React UI (layout, sidebar, list, thread view).
       * Implement j/k/o/u navigation.
       * No sending, no offline.
+      * Create Settings page with reading/writing fields.
+      * Build onboarding flow.
 3.  **Milestone 3: Actions**
     * Goal: Be able to manage email. 
     * Tasks: Implement Archive, Star, Trash (both frontend and backend). Implement the search bar UI to call the search API.
