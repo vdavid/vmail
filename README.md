@@ -224,6 +224,7 @@ CREATE TABLE "action_queue" (
       that `net/smtp` can then send.
 * **HTTP Router:** [`http.ServeMux`](https://pkg.go.dev/net/http#ServeMux)
     * It's part of the Go standard library, is battle-tested and well-documented.
+    * Selected based on [this guide](https://www.alexedwards.net/blog/which-go-router-should-i-use)
 * **Postgres Driver:** [`github.com/jackc/pgx`](https://github.com/jackc/pgx)
     * The modern, high-performance Postgres driver for Go. We need no full ORM (like [GORM](https://gorm.io/)) for this project.
 * **Encryption:** Standard `crypto/aes` and `crypto/cipher`
