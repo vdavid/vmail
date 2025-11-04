@@ -129,7 +129,296 @@ The DB's role is **not** to be a full, permanent copy of the mailbox. Its primar
 
 The user should regularly back up the database.
 
-#### Schema
+
+### Go libraries used
+
+* **IMAP Client:** [`github.com/emersion/go-imap`](https://github.com/emersion/go-imap)
+    * This seems to be the *de facto* standard library for client-side IMAP in Go.
+      It seems well-maintained and supports the necessary extensions like `THREAD`.
+* **MIME Parsing:** [`github.com/jhillyerd/enmime`](https://github.com/jhillyerd/enmime)
+    * The Go standard library is not enough for real-world, complex emails.
+    * `enmime` robustly handles attachments, encodings, and HTML/text parts. [Docs here.](https://pkg.go.dev/github.com/jhillyerd/enmime)
+* **SMTP Sending:** Standard `net/smtp` (for transport) with [`github.com/go-mail/mail`](https://github.com/go-mail/mail)
+    * `net/smtp` is the standard library for sending.
+    * `go-mail` is a popular and simple builder library for composing complex emails (HTML and attachments)
+      that `net/smtp` can then send.
+* **HTTP Router:** [`http.ServeMux`](https://pkg.go.dev/net/http#ServeMux)
+    * It's part of the Go standard library, is battle-tested and well-documented.
+    * Selected based on [this guide](https://www.alexedwards.net/blog/which-go-router-should-i-use)
+* **Postgres Driver:** [`github.com/jackc/pgx`](https://github.com/jackc/pgx)
+    * The modern, high-performance Postgres driver for Go. We need no full ORM (like [GORM](https://gorm.io/)) for this project.
+* **Encryption:** Standard `crypto/aes` and `crypto/cipher`
+    * For encrypting/decrypting user credentials in the DB using AES-GCM.
+* **Testing:** [`github.com/ory/dockertest`](https://github.com/ory/dockertest)
+    * Useful for integration tests to spin up real Postgres containers.
+
+### Test plan
+
+* **Unit tests (Go `testing` package):**
+    * **`imap` package:** Mock the IMAP server connection.
+        * Test `TestParseThreadResponse`: Feed it a sample `* (THREAD ...)` string and assert that it builds the correct Go struct tree.
+        * Test `TestBuildSearchQuery`: Feed it `"from:george after:2025"` and assert it creates the correct IMAP `SEARCH` query string.
+    * **`api` package:** Use `httptest` to test handlers. Mock the `imap` and `db` services.
+        * Test `TestGetThreadsHandler`: Send a mock request and ensure it calls the `imap` service and returns the correct JSON.
+* **Integration tests:**
+    * Use `testcontainers-go` to spin up a **real Postgres DB** for tests.
+    * Test the full flow: `api handler -> db package -> test postgres DB`.
+    * Example: "Call the draft saving endpoint and then query the test DB to ensure the draft was written correctly."
+
+## Front end
+
+### Tech
+
+* **Framework:** React 19+, with functional components and hooks.
+* **Language:** TypeScript, using no classes, just modules.
+* **Styling:** Tailwind 4, utility-first CSS.
+* **Package manager:** pnpm.
+* **State management:**
+    * `TanStack Query` (React Query): For server state (caching, invalidating, and refetching all data from our Go API).
+    * `Zustand`: For simple, global UI state (e.g., current selection, composer open/closed).
+* **Routing:** `react-router` (for URL-based navigation, e.g., `/inbox`, `/thread/id`).
+* **Linting/Formatting:** ESLint and Prettier.
+* **Testing:**
+    * `Jest` + `React Testing Library`: For unit and integration tests.
+    * `Playwright`: For end-to-end tests.
+* **Security:** [`DOMPurify`](https://github.com/cure53/DOMPurify)
+    * To sanitize all email HTML content before rendering it with `dangerouslySetInnerHTML`.
+      This is a **mandatory** security step.
+
+### Features
+
+* Onboarding
+  * Problem: When a user first logs in via Authelia, the API will validate their token, but `users` is empty for them. The API has no IMAP settings to use. The app is unusable.
+  * Solution:
+    * Go's "get user" endpoint returns a `not_set_up` flag (or `null` if that's unidiomatic).
+    * The front end redirects to `/settings`.
+    * This page has fields for: IMAP Host, IMAP User, IMAP Password, SMTP Host, SMTP User, SMTP Password, Undo Send Delay (20s), Pagination Threads Per Page (100).
+    * The back end encrypts the data and creates the `users` and `user_settings` records.
+* IMAP email loading and SMTP sending/replying.
+* WebSocket-based real-time email fetching
+  * The app opens a WebSocket connection to the API.
+    When the front end gets a message like `{"type": "new_email", "folder": "Inbox"}`, it invalidates
+    the TanStack Query cache for the inbox, triggering TanStack Query to GET `/api/v1/threads?folder=Inbox`.
+    The new email appears almost instantly.
+* Threaded view with thread-count display, such as `Sender Name (3)`. The server does the threading itself.
+* Search. Including some Gmail-like syntax, for example `from:george after:2025`. Search itself happens on the server. 
+* Pagination (100 emails/page).
+* Star, Archive, Trash actions.
+* Multi-select with checkboxes.
+* "Undo send" (20-second delay).
+* Auto-saving drafts.
+* Basic offline support (read-only cache of viewed emails via `TanStack Query` persistence).
+* Periodic auto-sync and connection status indicator.
+* Settings page.
+  * Has fields for: IMAP Host, IMAP User, IMAP Password, SMTP Host, SMTP User, SMTP Password, Undo send delay, Pagination: threads per page.
+* URL-based routing.
+* Keyboard shortcuts.
+* Logout.
+
+### UI
+
+* **Main layout:** Functionally similar to Gmail but aesthetically distinct (fonts, colors, logos).
+* **Top:** Persistent search bar.
+* **Left sidebar:** Main navigation links:
+    * `Inbox`
+    * `Starred`
+    * `Sent`
+    * `Drafts`
+    * `Spam`
+    * `Trash`
+* **Bottom:** Footer placeholder (e.g., "Copyright 2025 V-Mail").
+* **Email list view:** A paginated list of email threads. Each row shows: checkbox, star icon, sender(s), subject, thread count, date.
+* **Email thread view:** Replaces the list view when the user clicks a thread.
+  Shows all messages in the thread, expanded. Displays attachments and Reply/Forward actions.
+
+
+### Test plan
+
+* **Unit tests (Jest + React Testing Library):**
+    * Test all simple, reusable components (e.g., `Button`, `Checkbox`).
+    * Test all utility functions (e.g., date formatting, search query parsing).
+    * Test custom hooks in isolation (e.g., `useKeyboardShortcuts`).
+* **Integration tests (React Testing Library):**
+    * Test feature flows by mocking the API layer (`msw` or `jest.mock`).
+    * "Selecting three emails and pressing 'e' calls `api.archive` with the three correct IDs."
+    * "Typing in the composer and pausing triggers the `api.saveDraft` mock."
+    * "Loading the Inbox page displays a list of three emails returned from the `api.getThreads` mock."
+* **End-to-end tests (Playwright):**
+    * Test the *full*, running application.
+    * "User can log in (mocking Authelia), see the inbox, click an email, click 'Reply', type 'Test', click 'Send',
+      and then find that email in the 'Sent' folder."
+
+## Deployment
+
+With Docker.
+
+## Styles
+
+Writing and code styles.
+
+### Writing
+
+- Wording
+  - **Use a friendly style**: Make all texts informal, friendly, encouraging, and concise.
+  - **Use active voice**: Prefer an active voice rather than passive when writing text.
+  - **Abbreviate English**: Use "I'm", "don't", and such.
+  - **Don't trivialize**: Avoid the terminology of "just", "simple", "easy", and "all you have to do".
+  - **Use gender-neutral language**: Use they/them rather than he/him/she/her. Use "folks" or "everyone" rather than "guys".
+  - **Use universally understood terms**: Use "start" instead of "kickoff", and "end" instead of "wrap up".
+  - **Avoid ableist language**: "placeholder value" rather than "dummy value". No "lame", "sanity check" which derive from disabilities. 
+  - **Avoid violent terms**: "stop a process" rather than "kill" or "nuke" it.
+  - **Avoid exclusionary terminology**: Prefer "primary/secondary" or "main/replica" over "master/slave". Use "allowlist/denylist" over "whitelist/blacklist".
+  - **Be mindful of user expertise**: Avoid jargon. Link to definitions and explain concepts when necessary.
+  - **Avoid latinisms**: For example, use "for example" instead of "e.g.".
+  - **Avoid abbreviations**: Very common acronyms like "URL" are okay.
+- Punctuation, capitalization, numbers
+  - **Use sentence case in titles**: Regardless whether visible on the UI or dev only.
+  - **Use sentence case in labels**: Applies to buttons, labels, and similar. But omit periods on short microcopy.
+  - **Capitalize names correctly**: For example, there is GitHub but mailcow.
+  - **Use the Oxford comma**: Use "1, 2, and 3" rather than "1, 2 and 3".
+  - **Spell out numbers one through nine.** Use numerals for 10+.
+  - **Use ISO dates**: Use YYYY-MM-DD wherever it makes sense.
+- UI
+  - Make **error messages** positive, actionable, and specific.
+  - **Start UI actions with a verb**: This makes buttons and links more actionable. Use "Create user" instead of "New user".
+  - **Give examples in placeholder text**: Use "Example: 2025-01-01" or "name@example.com" rather than an instruction like "Enter your email".
+
+
+### TypeScript
+
+Prettier config used: `{"tabWidth": 4,"useTabs": false,"semi": false,"singleQuote": true,"quoteProps": "as-needed","jsxSingleQuote": false,"trailingComma": "all","bracketSpacing": true,"bracketSameLine": false,"arrowParens": "always","endOfLine": "lf","printWidth": 100,"proseWrap": "always"}`.
+
+## Designs
+
+This section contains design artifacts that are generally longer. I've extracted these because they are temporary
+artifacts for building the projects, and they're also relatively longer. 
+
+### Deployment
+
+#### High-level folder structure
+
+```
+/
+├── backend/
+│   ├── cmd/server/main.go
+│   ├── internal/
+│   └── go.mod
+├── frontend/
+│   ├── src/
+│   ├── package.json
+│   └── pnpm-lock.yaml
+└── Dockerfile
+```
+
+#### Dockerfile
+
+```dockerfile
+# --- Stage 1: Build the React front end ---
+FROM node:25-alpine AS builder-fe
+
+# Install pnpm
+RUN npm install -g pnpm
+
+WORKDIR /app/frontend
+
+# Copy package manifests and install dependencies
+# This layer is cached if the manifests don't change
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# Copy the rest of the source and build the app
+COPY frontend/ ./
+# This creates the static files in /app/frontend/dist (or /build)
+RUN pnpm build
+
+# --- Stage 2: Build the Go back end ---
+FROM golang:1.25-alpine AS builder-be
+
+WORKDIR /app/backend
+
+# Install build dependencies
+RUN apk add --no-cache gcc g++
+
+# Copy manifests and download modules
+# This layer is cached if the manifests don't change
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+
+# Copy the rest of the source code and build the binary
+COPY backend/ ./
+# Build a static binary for a minimal final image
+RUN CGO_ENABLED=0 GOOS=linux go build -o /backend-server ./cmd/server/main.go
+
+# --- Stage 3: Final image ---
+# Use a minimal, secure base image
+FROM alpine:3.22
+
+# Install ca-certificates (for making TLS/SSL calls to IMAP)
+RUN apk add --no-cache ca-certificates
+
+# Set a non-root user for security
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+
+WORKDIR /app
+
+# Copy the built Go binary from the 'builder-be' stage
+COPY --from=builder-be /backend-server .
+
+# Copy the built React app from the 'builder-fe' stage
+# Assuming the build output is in a 'dist' folder
+COPY --from=builder-fe /app/frontend/dist ./static
+
+# Expose the port your Go app listens on
+EXPOSE 8080
+
+# The command to run the application
+# The Go app serves files from './static'
+CMD ["/backend-server"]
+```
+
+### Back end
+
+#### Directory structure
+
+```
+/backend
+├── /cmd/
+│   └── /server/
+│       └── main.go           # Main entry point
+│   └── /key-gen/
+│       └── main.go           # Main entry point
+├── /internal/
+│   ├── /api/                 # HTTP Handlers & routing
+│   │   ├── routes.go
+│   │   ├── middleware.go
+│   │   └── thread_handler.go
+│   ├── /auth/                # Middleware for validating Authelia JWTs
+│   ├── /config/              # Config loading (env vars, etc.)
+│   ├── /db/                  # Postgres logic (pgx)
+│   ├── /imap/                # Core IMAP service logic
+│   │   ├── client.go         # Wrapper around go-imap
+│   │   ├── thread.go         # Logic for THREAD command
+│   │   └── search.go         # Logic for SEARCH command
+│   ├── /models/              # Core structs (Thread, Message, User)
+│   └── /sync/                # Logic for background jobs, action_queue
+├── /pkg/                     # (Optional) Any code you might share
+├── go.mod
+├── go.sum
+└── Dockerfile
+```
+
+#### Environment variables
+
+* `VMAIL_ENCRYPTION_KEY`: The encryption key for AES-GCM encryption. 32-byte (256-bit) cryptographically secure random string, base64-encoded. Generate this with the tool in `/cmd/key-gen`.
+* `VMAIL_DB_HOST`: The Postgres host.
+* `VMAIL_DB_PORT`: The Postgres port.
+* `VMAIL_DB_NAME`: The Postgres database name.
+* `VMAIL_DB_USERNAME`: The Postgres username.
+* `VMAIL_DB_PASSWORD`: The Postgres password.
+
+
+#### DB Schema
 
 ```sql
 -- Stores the V-Mail user and their encrypted IMAP/SMTP credentials
@@ -234,71 +523,13 @@ CREATE TABLE "action_queue" (
 );
 ```
 
-### Go libraries used
+#### APIs
 
-* **IMAP Client:** [`github.com/emersion/go-imap`](https://github.com/emersion/go-imap)
-    * This seems to be the *de facto* standard library for client-side IMAP in Go.
-      It seems well-maintained and supports the necessary extensions like `THREAD`.
-* **MIME Parsing:** [`github.com/jhillyerd/enmime`](https://github.com/jhillyerd/enmime)
-    * The Go standard library is not enough for real-world, complex emails.
-    * `enmime` robustly handles attachments, encodings, and HTML/text parts. [Docs here.](https://pkg.go.dev/github.com/jhillyerd/enmime)
-* **SMTP Sending:** Standard `net/smtp` (for transport) with [`github.com/go-mail/mail`](https://github.com/go-mail/mail)
-    * `net/smtp` is the standard library for sending.
-    * `go-mail` is a popular and simple builder library for composing complex emails (HTML and attachments)
-      that `net/smtp` can then send.
-* **HTTP Router:** [`http.ServeMux`](https://pkg.go.dev/net/http#ServeMux)
-    * It's part of the Go standard library, is battle-tested and well-documented.
-    * Selected based on [this guide](https://www.alexedwards.net/blog/which-go-router-should-i-use)
-* **Postgres Driver:** [`github.com/jackc/pgx`](https://github.com/jackc/pgx)
-    * The modern, high-performance Postgres driver for Go. We need no full ORM (like [GORM](https://gorm.io/)) for this project.
-* **Encryption:** Standard `crypto/aes` and `crypto/cipher`
-    * For encrypting/decrypting user credentials in the DB using AES-GCM.
-* **Testing:** [`github.com/ory/dockertest`](https://github.com/ory/dockertest)
-    * Useful for integration tests to spin up real Postgres containers.
-
-### Directory structure
-
-```
-/vmail-api
-├── /cmd/
-│   └── /server/
-│       └── main.go           # Main entry point
-│   └── /key-gen/
-│       └── main.go           # Main entry point
-├── /internal/
-│   ├── /api/                 # HTTP Handlers & routing
-│   │   ├── routes.go
-│   │   ├── middleware.go
-│   │   └── thread_handler.go
-│   ├── /auth/                # Middleware for validating Authelia JWTs
-│   ├── /config/              # Config loading (env vars, etc.)
-│   ├── /db/                  # Postgres logic (pgx)
-│   ├── /imap/                # Core IMAP service logic
-│   │   ├── client.go         # Wrapper around go-imap
-│   │   ├── thread.go         # Logic for THREAD command
-│   │   └── search.go         # Logic for SEARCH command
-│   ├── /models/              # Core structs (Thread, Message, User)
-│   └── /sync/                # Logic for background jobs, action_queue
-├── /pkg/                     # (Optional) Any code you might share
-├── go.mod
-├── go.sum
-└── Dockerfile
-```
-
-### Environment variables
-
-* `VMAIL_ENCRYPTION_KEY`: The encryption key for AES-GCM encryption. 32-byte (256-bit) cryptographically secure random string, base64-encoded. Generate this with the tool in `/cmd/key-gen`.
-* `VMAIL_DB_HOST`: The Postgres host.
-* `VMAIL_DB_PORT`: The Postgres port.
-* `VMAIL_DB_NAME`: The Postgres database name.
-* `VMAIL_DB_USERNAME`: The Postgres username.
-* `VMAIL_DB_PASSWORD`: The Postgres password.
-
-### REST API design
+##### REST API
 
 **Base path:** `/api/v1`
 
-**Thread ID:** The `thread_id` we use in the API (e.g., `/api/v1/thread/{thread_id}`) will be a stable,
+**Thread ID:** The `thread_id` we use in the API (e.g., `/api/v1/thread/{thread_id}`) is a stable,
 unique identifier, such as the `Message-ID` header of the root/first message in the thread.
 
 * `GET /folders`: List all IMAP folders (Inbox, Sent, etc.).
@@ -319,98 +550,19 @@ unique identifier, such as the `Message-ID` header of the root/first message in 
 * `DELETE /threads`: Move threads to trash.
     * Body: `{"thread_ids": ["id1", "id2"]}`
 
-### Real-time API (WebSockets) design
+##### Real-time API (WebSockets)
 
 For real-time updates (like new emails), the front end will open a WebSocket connection.
 
-* `GET /api/v1/ws`: Upgrades the HTTP connection to a WebSocket.
-    * The server will use this connection to push updates to the client.
-    * **Server-to-Client message example:**
+* `GET /api/v1/ws`: Upgrades the HTTP connection to a WebSocket. The server uses this connection to push updates to the client.
+    * **Server-to-client message example:**
         ```json
         {"type": "new_message", "folder": "INBOX"}
         ```
-    * The front end listens for this message and, upon receiving it, invalidates its `TanStack Query` cache for the "INBOX" folder, triggering a refetch.
 
-### Test plan
+### Front end
 
-* **Unit tests (Go `testing` package):**
-    * **`imap` package:** Mock the IMAP server connection.
-        * Test `TestParseThreadResponse`: Feed it a sample `* (THREAD ...)` string and assert that it builds the correct Go struct tree.
-        * Test `TestBuildSearchQuery`: Feed it `"from:george after:2025"` and assert it creates the correct IMAP `SEARCH` query string.
-    * **`api` package:** Use `httptest` to test handlers. Mock the `imap` and `db` services.
-        * Test `TestGetThreadsHandler`: Send a mock request and ensure it calls the `imap` service and returns the correct JSON.
-* **Integration tests:**
-    * Use `testcontainers-go` to spin up a **real Postgres DB** for tests.
-    * Test the full flow: `api handler -> db package -> test postgres DB`.
-    * Example: "Call the draft saving endpoint and then query the test DB to ensure the draft was written correctly."
-
-## Front end
-
-### Tech
-
-* **Framework:** React 19+, with functional components and hooks.
-* **Language:** TypeScript, using no classes, just modules.
-* **Styling:** Tailwind 4, utility-first CSS.
-* **Package manager:** pnpm.
-* **State management:**
-    * `TanStack Query` (React Query): For server state (caching, invalidating, and refetching all data from our Go API).
-    * `Zustand`: For simple, global UI state (e.g., current selection, composer open/closed).
-* **Routing:** `react-router` (for URL-based navigation, e.g., `/inbox`, `/thread/id`).
-* **Linting/Formatting:** ESLint and Prettier.
-* **Testing:**
-    * `Jest` + `React Testing Library`: For unit and integration tests.
-    * `Playwright`: For end-to-end tests.
-* **Security:** [`DOMPurify`](https://github.com/cure53/DOMPurify)
-    * To sanitize all email HTML content before rendering it with `dangerouslySetInnerHTML`.
-      This is a **mandatory** security step.
-
-### Features
-
-* Onboarding
-  * Problem: When a user first logs in via Authelia, the API will validate their token, but `users` is empty for them. The API has no IMAP settings to use. The app is unusable.
-  * Solution:
-    * Go's "get user" endpoint returns a `not_set_up` flag (or `null` if that's unidiomatic).
-    * The front end redirects to `/settings`.
-    * This page has fields for: IMAP Host, IMAP User, IMAP Password, SMTP Host, SMTP User, SMTP Password, Undo Send Delay (20s), Pagination Threads Per Page (100).
-    * The back end encrypts the data and creates the `users` and `user_settings` records.
-* IMAP email loading and SMTP sending/replying.
-* WebSocket-based real-time email fetching
-  * The app opens a WebSocket connection to the API.
-    When the front end gets a message like `{"type": "new_email", "folder": "Inbox"}`, it invalidates
-    the TanStack Query cache for the inbox, triggering TanStack Query to GET `/api/v1/threads?folder=Inbox`.
-    The new email appears almost instantly.
-* Threaded view with thread-count display, such as `Sender Name (3)`. The server does the threading itself.
-* Search. Including some Gmail-like syntax, for example `from:george after:2025`. Search itself happens on the server. 
-* Pagination (100 emails/page).
-* Star, Archive, Trash actions.
-* Multi-select with checkboxes.
-* "Undo send" (20-second delay).
-* Auto-saving drafts.
-* Basic offline support (read-only cache of viewed emails via `TanStack Query` persistence).
-* Periodic auto-sync and connection status indicator.
-* Settings page.
-  * Has fields for: IMAP Host, IMAP User, IMAP Password, SMTP Host, SMTP User, SMTP Password, Undo send delay, Pagination: threads per page.
-* URL-based routing.
-* Keyboard shortcuts.
-* Logout.
-
-### UI
-
-* **Main layout:** Functionally similar to Gmail but aesthetically distinct (fonts, colors, logos).
-* **Top:** Persistent search bar.
-* **Left sidebar:** Main navigation links:
-    * `Inbox`
-    * `Starred`
-    * `Sent`
-    * `Drafts`
-    * `Spam`
-    * `Trash`
-* **Bottom:** Footer placeholder (e.g., "Copyright 2025 V-Mail").
-* **Email list view:** A paginated list of email threads. Each row shows: checkbox, star icon, sender(s), subject, thread count, date.
-* **Email thread view:** Replaces the list view when the user clicks a thread.
-  Shows all messages in the thread, expanded. Displays attachments and Reply/Forward actions.
-
-### Keyboard shortcuts
+#### Keyboard shortcuts
 
 * **Navigation:**
     * `j` / `↓`: Move cursor to next email in list / next message in thread.
@@ -439,55 +591,6 @@ For real-time updates (like new emails), the front end will open a WebSocket con
     * `*` then `u`: Select unread.
     * `*` then `s`: Select starred.
     * `*` then `t`: Select unstarred.
-
-### Test plan
-
-* **Unit tests (Jest + React Testing Library):**
-    * Test all simple, reusable components (e.g., `Button`, `Checkbox`).
-    * Test all utility functions (e.g., date formatting, search query parsing).
-    * Test custom hooks in isolation (e.g., `useKeyboardShortcuts`).
-* **Integration tests (React Testing Library):**
-    * Test feature flows by mocking the API layer (`msw` or `jest.mock`).
-    * "Selecting three emails and pressing 'e' calls `api.archive` with the three correct IDs."
-    * "Typing in the composer and pausing triggers the `api.saveDraft` mock."
-    * "Loading the Inbox page displays a list of three emails returned from the `api.getThreads` mock."
-* **End-to-end tests (Playwright):**
-    * Test the *full*, running application.
-    * "User can log in (mocking Authelia), see the inbox, click an email, click 'Reply', type 'Test', click 'Send',
-      and then find that email in the 'Sent' folder."
-
-## Styles
-
-### TypeScript
-
-Prettier config used: `{"tabWidth": 4,"useTabs": false,"semi": false,"singleQuote": true,"quoteProps": "as-needed","jsxSingleQuote": false,"trailingComma": "all","bracketSpacing": true,"bracketSameLine": false,"arrowParens": "always","endOfLine": "lf","printWidth": 100,"proseWrap": "always"}`.
-
-### Writing
-
-- Wording
-  - **Use a friendly style**: Make all texts informal, friendly, encouraging, and concise.
-  - **Use active voice**: Prefer an active voice rather than passive when writing text.
-  - **Abbreviate English**: Use "I'm", "don't", and such.
-  - **Don't trivialize**: Avoid the terminology of "just", "simple", "easy", and "all you have to do".
-  - **Use gender-neutral language**: Use they/them rather than he/him/she/her. Use "folks" or "everyone" rather than "guys".
-  - **Use universally understood terms**: Use "start" instead of "kickoff", and "end" instead of "wrap up".
-  - **Avoid ableist language**: "placeholder value" rather than "dummy value". No "lame", "sanity check" which derive from disabilities. 
-  - **Avoid violent terms**: "stop a process" rather than "kill" or "nuke" it.
-  - **Avoid exclusionary terminology**: Prefer "primary/secondary" or "main/replica" over "master/slave". Use "allowlist/denylist" over "whitelist/blacklist".
-  - **Be mindful of user expertise**: Avoid jargon. Link to definitions and explain concepts when necessary.
-  - **Avoid latinisms**: For example, use "for example" instead of "e.g.".
-  - **Avoid abbreviations**: Very common acronyms like "URL" are okay.
-- Punctuation, capitalization, numbers
-  - **Use sentence case in titles**: Regardless whether visible on the UI or dev only.
-  - **Use sentence case in labels**: Applies to buttons, labels, and similar. But omit periods on short microcopy.
-  - **Capitalize names correctly**: For example, there is GitHub but mailcow.
-  - **Use the Oxford comma**: Use "1, 2, and 3" rather than "1, 2 and 3".
-  - **Spell out numbers one through nine.** Use numerals for 10+.
-  - **Use ISO dates**: Use YYYY-MM-DD wherever it makes sense.
-- UI
-  - Make **error messages** positive, actionable, and specific.
-  - **Start UI actions with a verb**: This makes buttons and links more actionable. Use "Create user" instead of "New user".
-  - **Give examples in placeholder text**: Use "Example: 2025-01-01" or "name@example.com" rather than an instruction like "Enter your email".
 
 ## Milestones
 
@@ -521,7 +624,7 @@ Prettier config used: `{"tabWidth": 4,"useTabs": false,"semi": false,"singleQuot
 
 **Goal:** Prove the core technology works. A simple Go CLI app. No UI.
 
-* [ ] Set up a new Go module (`go mod init vmail-api`).
+* [ ] Set up a new Go module (`go mod init backend`).
 * [ ] Add `github.com/emersion/go-imap` as a dependency.
 * [ ] Create a `main.go` file.
 * [ ] Implement logic to connect to the mailcow IMAP server (using `imap.DialTLS`).
