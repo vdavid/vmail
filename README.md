@@ -21,6 +21,7 @@ Compared to Gmail, this project does **not** include:
 * 95% of Gmail's settings. V-Mail has some basic settings like emails per page and undo send delay, but that's it.
 * Automatic categorization such as primary/social/promotions.
 * The ability to collapse the left sidebar.
+* Signature management.
 * Smiley/emoji reactions to emails. This is Google's proprietary thing.
 
 ## Architecture
@@ -126,7 +127,6 @@ CREATE TABLE "users" (
 -- User-specific settings for the V-Mail app
 CREATE TABLE "user_settings" (
     "user_id" UUID PRIMARY KEY REFERENCES "users"("id") ON DELETE CASCADE,
-    "signature" TEXT,
     "undo_send_delay_seconds" INT NOT NULL DEFAULT 20,
     "pagination_threads_per_page" INT NOT NULL DEFAULT 100
 );
