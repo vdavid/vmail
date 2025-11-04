@@ -527,12 +527,17 @@ CREATE TABLE "action_queue"
 **Thread ID:** The `thread_id` we use in the API (e.g., `/api/v1/thread/{thread_id}`) is a stable,
 unique identifier, such as the `Message-ID` header of the root/first message in the thread.
 
+* `GET /auth/status`: Checks the Authelia token and tells the front end if the user is 1) Authenticated, and 2) Has completed the setup/onboarding.
+  * Response: `{"isAuthenticated": true, "isSetupComplete": false}`. 
+  * `isSetupComplete: false` tells the React app to redirect to the `/settings` page for onboarding.
 * `GET /folders`: List all IMAP folders (Inbox, Sent, etc.).
 * `GET /threads?folder=Inbox&page=1&limit=100`: Get paginated threads for a folder.
 * `GET /threads/search?q=from:george&page=1`: Get paginated search results.
 * `GET /thread/{thread_id}`: Get all messages and content for one thread.
 * `GET /message/{message_id}/attachment/{attachment_id}`: Download an attachment.
 * `GET /settings`: Get user settings.
+  * Response: `{"imap_server_hostname": "mail.example.com", "archive_folder_name": "Archive", ...}`
+  * It should **not** return the encrypted passwords.
 * `POST /send`: Send a new email (places in `action_queue` for "Undo Send").
 * `POST /drafts`: Create or update a draft.
 * `POST /actions`: Perform bulk actions.
@@ -542,7 +547,8 @@ unique identifier, such as the `Message-ID` header of the root/first message in 
 * `POST /undo`: Undo the last `send` action.
 * `POST /settings`: Save settings.
     * Body:
-      `{"imap_host": "imap.example.com", "imap_user": "user", "imap_password": "pass", "smtp_host": "smtp.example.com", "smtp_user": "user", "smtp_password": "pass", "undo_send_delay_seconds": 20, "pagination_threads_per_page": 100}`
+      `{"imap_server_hostname": "imap.example.com", "imap_username": "user", "imap_password": "pass", "smtp_server_hostname": "smtp.example.com", "smtp_username": "user", "smtp_password": "pass", "undo_send_delay_seconds": 20, "pagination_threads_per_page": 100}`
+    * Response: `200 OK`
 * `DELETE /threads`: Move threads to trash.
     * Body: `{"thread_ids": ["id1", "id2"]}`
 

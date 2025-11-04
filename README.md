@@ -65,13 +65,13 @@ The back end validates the token before processing requests.
 
 ## Security
 
-The project is designed with security in mind.
+We designed the project with security in mind.
 However, you are responsible for regularly backing up the database to avoid data loss. The emails themselves
-are stored on the IMAP server, but drafts and settings live in the database.
+live on the IMAP server, but offline drafts and settings are in the database.
 
 ## Keyboard shortcuts
 
-The app is designed to be fully usable via keyboard shortcuts, similar to Gmail.
+We designed the app to be fully usable via a subset of Gmail's shortcuts.
 
 * **Navigation:**
     * `j` / `↓`: Move cursor to next email in list / next message in thread.
@@ -144,7 +144,7 @@ The app is designed to be fully usable via keyboard shortcuts, similar to Gmail.
 * [x] Implement a function to run a `SEARCH` command (e.g., `SEARCH FROM "test"`) and print the resulting UIDs.
 * [x] Implement a function to `FETCH` a single message (using a UID from the search) and print its body structure and headers.
 
-This is done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.md` for details on milestone 1.
+Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.md` for details on milestone 1.
 
 ### Milestone 2
 
