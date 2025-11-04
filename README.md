@@ -133,16 +133,18 @@ The app is designed to be fully usable via keyboard shortcuts, similar to Gmail.
 
 **Goal:** Prove the core technology works. A simple Go CLI app. No UI.
 
-* [ ] Set up a new Go module (`go mod init backend`).
-* [ ] Add `github.com/emersion/go-imap` as a dependency.
-* [ ] Create a `main.go` file.
-* [ ] Implement logic to connect to the mailcow IMAP server (using `imap.DialTLS`).
-* [ ] Implement logic to log in using a username and password (from env vars for now).
-* [ ] Implement a function to run the `CAPABILITY` command and print the results (to verify `THREAD` support).
-* [ ] Implement a function to `SELECT` the "Inbox".
-* [ ] Implement a function to run a `THREAD` command (`THREAD=REFERENCES UTF-8 ALL`) and print the raw response.
-* [ ] Implement a function to run a `SEARCH` command (e.g., `SEARCH FROM "test"`) and print the resulting UIDs.
-* [ ] Implement a function to `FETCH` a single message (using a UID from the search) and print its body structure and headers.
+* [x] Set up a new Go module (`go mod init backend`).
+* [x] Add `github.com/emersion/go-imap` as a dependency.
+* [x] Create a `main.go` file.
+* [x] Implement logic to connect to the mailcow IMAP server (using `imap.DialTLS`).
+* [x] Implement logic to log in using a username and password (from env vars for now).
+* [x] Implement a function to run the `CAPABILITY` command and print the results (to verify `THREAD` support).
+* [x] Implement a function to `SELECT` the "Inbox".
+* [x] Implement a function to run a `THREAD` command (`THREAD=REFERENCES UTF-8 ALL`) and print the raw response.
+* [x] Implement a function to run a `SEARCH` command (e.g., `SEARCH FROM "test"`) and print the resulting UIDs.
+* [x] Implement a function to `FETCH` a single message (using a UID from the search) and print its body structure and headers.
+
+This is done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.md` for details on milestone 1.
 
 ### Milestone 2
 

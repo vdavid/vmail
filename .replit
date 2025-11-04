@@ -1,0 +1,29 @@
+modules = ["go-1.24"]
+[agent]
+expertMode = true
+
+[nix]
+channel = "stable-25_05"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "imap-spike"
+
+[[workflows.workflow]]
+name = "imap-spike"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && go run ./cmd/spike"
+
+[workflows.workflow.metadata]
+outputType = "console"
