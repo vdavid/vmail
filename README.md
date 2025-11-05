@@ -204,7 +204,7 @@ Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.m
     * In `/frontend/src`, create a `components/Layout.tsx`.
     * `Layout.tsx` should have a static `Sidebar.tsx` (left), `Header.tsx` (top, for search), and a main content area that renders `{children}`.
 * [ ] **Set up routing:**
-    * In `main.tsx`, wrap your app in `&lt;BrowserRouter>`.
+    * In `main.tsx`, wrap your app in `<BrowserRouter>`.
     * Create `App.tsx` to define your routes:
         * `/` (goes to `Inbox.page.tsx`)
         * `/thread/:threadId` (goes to `Thread.page.tsx`)
@@ -215,8 +215,8 @@ Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.m
         * This component uses `useEffect` on mount to `fetch` your `GET /api/v1/auth/status` endpoint.
         * When it gets the response, it sets the `isSetupComplete` state in your Zustand store.
         * It should render `{children}` *only if* `isSetupComplete` is true.
-        * If `isSetupComplete` is `false`, it should render `&lt;Navigate to="/settings" />` (from `react-router-dom`).
-    * Wrap your main `&lt;Layout />` in `AuthWrapper.tsx`.
+        * If `isSetupComplete` is `false`, it should render `<Navigate to="/settings" />` (from `react-router-dom`).
+    * Wrap your main `<Layout />` in `AuthWrapper.tsx`.
 * [ ] **Build Settings Page:**
     * Create `pages/Settings.page.tsx`.
     * This page should be a simple form with fields for all the `user_settings` (IMAP server, username, password, folder names, etc.).
