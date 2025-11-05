@@ -1,4 +1,4 @@
-modules = ["go-1.24"]
+modules = ["go-1.24", "nodejs-20"]
 [agent]
 expertMode = true
 
@@ -15,15 +15,20 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "imap-spike"
+args = "frontend"
 
 [[workflows.workflow]]
-name = "imap-spike"
+name = "frontend"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd backend && go run ./cmd/spike"
+args = "cd frontend && pnpm dev"
+waitForPort = 5000
 
 [workflows.workflow.metadata]
-outputType = "console"
+outputType = "webview"
+
+[[ports]]
+localPort = 5000
+externalPort = 80

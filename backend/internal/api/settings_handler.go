@@ -36,7 +36,7 @@ func (h *SettingsHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 
 	settings, err := db.GetUserSettings(ctx, h.pool, userID)
 	if errors.Is(err, db.ErrUserSettingsNotFound) {
-		http.Error(w, "Settings not found", http.StatusNotFound)
+		http.Error(w, "Settings not found for this user", http.StatusNotFound)
 		return
 	}
 	if err != nil {

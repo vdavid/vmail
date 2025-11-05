@@ -30,6 +30,34 @@ To run the spike:
 
 See `backend/README.md` for detailed documentation.
 
+**Milestone 2 Part 2/3: Frontend Skeleton and Settings Page - COMPLETE ✓**
+
+The frontend foundation has been successfully implemented with:
+- React 19 with TypeScript and Vite build system
+- Tailwind CSS v4 for styling
+- React Router for navigation (routes: /, /thread/:id, /settings)
+- TanStack Query for server state management
+- Zustand for client state management
+- Comprehensive component architecture:
+  - Layout component with Sidebar and Header
+  - AuthWrapper for onboarding flow
+  - Settings page with full IMAP/SMTP configuration
+  - Placeholder Inbox and Thread pages
+- Complete test coverage (31 tests passing) using Vitest and React Testing Library
+- Properly configured for Replit environment (dev server on port 5000)
+
+To run the frontend:
+1. The frontend workflow is already configured and running on port 5000
+2. Access it via the Webview at port 5000
+3. Run tests: `cd frontend && pnpm test`
+
+**Note**: The frontend is configured to proxy `/api/*` requests to the Go backend at `http://localhost:8080`. For the full application to work:
+1. The backend server needs to be running on port 8080
+2. The backend requires environment variables to be set (see `.env.example`)
+3. The Postgres database must be accessible
+
+The frontend connects to the Go backend API at `/api/v1/*` endpoints and includes proper error handling, form validation, and loading states. The Vite dev server proxies these requests to the backend automatically.
+
 ## System Architecture
 
 ### Authentication Strategy

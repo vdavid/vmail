@@ -192,7 +192,7 @@ Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.m
 
 ### **2/3. 🎨 Frontend: Skeleton and settings page**
 
-* [ ] **Set up the React project:**
+* [x] **Set up the React project:**
     * In the root `/frontend` folder, run `pnpm create vite . --template react-ts`. 
     * Install all your core dependencies:
       ```bash
@@ -200,16 +200,16 @@ Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.m
       pnpm install -D tailwindcss postcss autoprefixer
       ```
     * Initialize Tailwind (`pnpm tailwindcss init -p`).
-* [ ] **Create the basic layout:**
+* [x] **Create the basic layout:**
     * In `/frontend/src`, create a `components/Layout.tsx`.
     * `Layout.tsx` should have a static `Sidebar.tsx` (left), `Header.tsx` (top, for search), and a main content area that renders `{children}`.
-* [ ] **Set up routing:**
+* [x] **Set up routing:**
     * In `main.tsx`, wrap your app in `<BrowserRouter>`.
     * Create `App.tsx` to define your routes:
         * `/` (goes to `Inbox.page.tsx`)
         * `/thread/:threadId` (goes to `Thread.page.tsx`)
         * `/settings` (goes to `Settings.page.tsx`)
-* [ ] **Create Auth/Onboarding flow:**
+* [x] **Create Auth/Onboarding flow:**
     * Create an "auth" store in `store/auth.store.ts` (using Zustand). It should hold `isSetupComplete` (boolean, default `false`).
     * Create a `components/AuthWrapper.tsx` component.
         * This component uses `useEffect` on mount to `fetch` your `GET /api/v1/auth/status` endpoint.
@@ -217,7 +217,7 @@ Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.m
         * It should render `{children}` *only if* `isSetupComplete` is true.
         * If `isSetupComplete` is `false`, it should render `<Navigate to="/settings" />` (from `react-router-dom`).
     * Wrap your main `<Layout />` in `AuthWrapper.tsx`.
-* [ ] **Build Settings Page:**
+* [x] **Build Settings Page:**
     * Create `pages/Settings.page.tsx`.
     * This page should be a simple form with fields for all the `user_settings` (IMAP server, username, password, folder names, etc.).
     * Use `TanStack Query` to fetch data from `GET /api/v1/settings` to populate the form.
@@ -277,6 +277,10 @@ Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.m
     * (For now) Just implement `j` (next item) and `k` (previous item) to move a "selected" index, which you'll store in a new Zustand store (`ui.store.ts`).
     * Implement `o` (open) or `Enter` to navigate to the selected thread (using `react-router`'s `useNavigate` hook).
     * Implement `u` (up) to navigate from a thread view back to the inbox (`Maps('/')`).
+
+### **Front end cleanup**
+
+* [ ] Do the stuff from frontend/README.md and get rid of that file.
 
 ### Later
 * [ ] Write a doc for how to create a daily DB backup, e.g., via a `pg_dump` cron job.
