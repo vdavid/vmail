@@ -8,17 +8,17 @@ import (
 )
 
 type Config struct {
-	Environment   string
-	EncryptionKey string
-	AutheliaURL   string
-	DBHost        string
-	DBPort        string
-	DBUsername    string
-	DBPassword    string
-	DBName        string
-	DBSSLMode     string
-	Port          string
-	Timezone      string
+	Environment         string
+	EncryptionKeyBase64 string
+	AutheliaURL         string
+	DBHost              string
+	DBPort              string
+	DBUsername          string
+	DBPassword          string
+	DBName              string
+	DBSSLMode           string
+	Port                string
+	Timezone            string
 }
 
 func NewConfig() (*Config, error) {
@@ -34,17 +34,17 @@ func NewConfig() (*Config, error) {
 	}
 
 	config := &Config{
-		Environment:   env,
-		EncryptionKey: os.Getenv("VMAIL_ENCRYPTION_KEY"),
-		AutheliaURL:   os.Getenv("AUTHELIA_URL"),
-		DBHost:        getEnvOrDefault("VMAIL_DB_HOST", "localhost"),
-		DBPort:        getEnvOrDefault("VMAIL_DB_PORT", "5432"),
-		DBUsername:    getEnvOrDefault("VMAIL_DB_USER", "vmail"),
-		DBPassword:    os.Getenv("VMAIL_DB_PASSWORD"),
-		DBName:        getEnvOrDefault("VMAIL_DB_NAME", "vmail"),
-		DBSSLMode:     getEnvOrDefault("VMAIL_DB_SSLMODE", "disable"),
-		Port:          getEnvOrDefault("PORT", "8080"),
-		Timezone:      getEnvOrDefault("TZ", "UTC"),
+		Environment:         env,
+		EncryptionKeyBase64: os.Getenv("VMAIL_ENCRYPTION_KEY_BASE64"),
+		AutheliaURL:         os.Getenv("AUTHELIA_URL"),
+		DBHost:              getEnvOrDefault("VMAIL_DB_HOST", "localhost"),
+		DBPort:              getEnvOrDefault("VMAIL_DB_PORT", "5432"),
+		DBUsername:          getEnvOrDefault("VMAIL_DB_USER", "vmail"),
+		DBPassword:          os.Getenv("VMAIL_DB_PASSWORD"),
+		DBName:              getEnvOrDefault("VMAIL_DB_NAME", "vmail"),
+		DBSSLMode:           getEnvOrDefault("VMAIL_DB_SSLMODE", "disable"),
+		Port:                getEnvOrDefault("PORT", "8080"),
+		Timezone:            getEnvOrDefault("TZ", "UTC"),
 	}
 
 	if err := config.Validate(); err != nil {
@@ -55,8 +55,8 @@ func NewConfig() (*Config, error) {
 }
 
 func (c *Config) Validate() error {
-	if c.EncryptionKey == "" {
-		return fmt.Errorf("VMAIL_ENCRYPTION_KEY is required")
+	if c.EncryptionKeyBase64 == "" {
+		return fmt.Errorf("VMAIL_ENCRYPTION_KEY_BASE64 is required")
 	}
 
 	if c.AutheliaURL == "" {

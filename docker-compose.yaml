@@ -13,7 +13,7 @@ services:
     environment:
       # App settings
       - VMAIL_PORT=8080
-      - VMAIL_ENCRYPTION_KEY=${VMAIL_ENCRYPTION_KEY}
+      - VMAIL_ENCRYPTION_KEY_BASE64=${VMAIL_ENCRYPTION_KEY_BASE64}
 
       # Postgres DB settings
       - VMAIL_DB_HOST=${VMAIL_DB_HOST}

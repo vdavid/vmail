@@ -12,7 +12,7 @@ func TestNewConfig(t *testing.T) {
 	}("VMAIL_ENV", originalEnv)
 
 	_ = os.Setenv("VMAIL_ENV", "production")
-	_ = os.Setenv("VMAIL_ENCRYPTION_KEY", "test-encryption-key-12345678901234")
+	_ = os.Setenv("VMAIL_ENCRYPTION_KEY_BASE64", "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=")
 	_ = os.Setenv("AUTHELIA_URL", "http://authelia:9091")
 	_ = os.Setenv("VMAIL_DB_PASSWORD", "test-password")
 	_ = os.Setenv("VMAIL_DB_HOST", "localhost")
@@ -23,7 +23,7 @@ func TestNewConfig(t *testing.T) {
 
 	defer func() {
 		_ = os.Unsetenv("VMAIL_ENV")
-		_ = os.Unsetenv("VMAIL_ENCRYPTION_KEY")
+		_ = os.Unsetenv("VMAIL_ENCRYPTION_KEY_BASE64")
 		_ = os.Unsetenv("AUTHELIA_URL")
 		_ = os.Unsetenv("VMAIL_DB_PASSWORD")
 		_ = os.Unsetenv("VMAIL_DB_HOST")
@@ -42,8 +42,8 @@ func TestNewConfig(t *testing.T) {
 		t.Errorf("expected Environment 'production', got '%s'", config.Environment)
 	}
 
-	if config.EncryptionKey != "test-encryption-key-12345678901234" {
-		t.Errorf("expected EncryptionKey 'test-encryption-key-12345678901234', got '%s'", config.EncryptionKey)
+	if config.EncryptionKeyBase64 != "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=" {
+		t.Errorf("expected EncryptionKeyBase64 'dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=', got '%s'", config.EncryptionKeyBase64)
 	}
 
 	if config.AutheliaURL != "http://authelia:9091" {
@@ -77,13 +77,13 @@ func TestNewConfig(t *testing.T) {
 
 func TestNewConfigWithDefaults(t *testing.T) {
 	_ = os.Setenv("VMAIL_ENV", "production")
-	_ = os.Setenv("VMAIL_ENCRYPTION_KEY", "test-key")
+	_ = os.Setenv("VMAIL_ENCRYPTION_KEY_BASE64", "test-key")
 	_ = os.Setenv("AUTHELIA_URL", "http://authelia:9091")
 	_ = os.Setenv("VMAIL_DB_PASSWORD", "password")
 
 	defer func() {
 		_ = os.Unsetenv("VMAIL_ENV")
-		_ = os.Unsetenv("VMAIL_ENCRYPTION_KEY")
+		_ = os.Unsetenv("VMAIL_ENCRYPTION_KEY_BASE64")
 		_ = os.Unsetenv("AUTHELIA_URL")
 		_ = os.Unsetenv("VMAIL_DB_PASSWORD")
 	}()
@@ -128,9 +128,9 @@ func TestValidate(t *testing.T) {
 		{
 			name: "valid config",
 			config: &Config{
-				EncryptionKey: "test-key",
-				AutheliaURL:   "http://authelia:9091",
-				DBPassword:    "password",
+				EncryptionKeyBase64: "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=",
+				AutheliaURL:         "http://authelia:9091",
+				DBPassword:          "password",
 			},
 			shouldErr: false,
 		},
@@ -141,13 +141,13 @@ func TestValidate(t *testing.T) {
 				DBPassword:  "password",
 			},
 			shouldErr: true,
-			errMsg:    "VMAIL_ENCRYPTION_KEY is required",
+			errMsg:    "VMAIL_ENCRYPTION_KEY_BASE64 is required",
 		},
 		{
 			name: "missing authelia URL",
 			config: &Config{
-				EncryptionKey: "test-key",
-				DBPassword:    "password",
+				EncryptionKeyBase64: "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=",
+				DBPassword:          "password",
 			},
 			shouldErr: true,
 			errMsg:    "AUTHELIA_URL is required",
@@ -155,8 +155,8 @@ func TestValidate(t *testing.T) {
 		{
 			name: "missing DB password",
 			config: &Config{
-				EncryptionKey: "test-key",
-				AutheliaURL:   "http://authelia:9091",
+				EncryptionKeyBase64: "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=",
+				AutheliaURL:         "http://authelia:9091",
 			},
 			shouldErr: true,
 			errMsg:    "VMAIL_DB_PASSWORD is required",

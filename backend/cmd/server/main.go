@@ -40,7 +40,7 @@ func main() {
 }
 
 func NewServer(cfg *config.Config, pool *pgxpool.Pool) http.Handler {
-	encryptor, err := crypto.NewEncryptor(cfg.EncryptionKey)
+	encryptor, err := crypto.NewEncryptor(cfg.EncryptionKeyBase64)
 	if err != nil {
 		log.Fatalf("Failed to create encryptor: %v", err)
 	}

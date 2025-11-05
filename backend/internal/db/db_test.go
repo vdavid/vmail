@@ -38,17 +38,17 @@ func getTestDBConfig() *config.Config {
 	}
 
 	return &config.Config{
-		Environment:   "test",
-		EncryptionKey: "test-key",
-		AutheliaURL:   "http://authelia:9091",
-		DBHost:        pgHost,
-		DBPort:        pgPort,
-		DBUsername:    pgUser,
-		DBPassword:    pgPassword,
-		DBName:        pgDatabase,
-		DBSSLMode:     sslMode,
-		Port:          "8080",
-		Timezone:      "UTC",
+		Environment:         "test",
+		EncryptionKeyBase64: "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=",
+		AutheliaURL:         "http://authelia:9091",
+		DBHost:              pgHost,
+		DBPort:              pgPort,
+		DBUsername:          pgUser,
+		DBPassword:          pgPassword,
+		DBName:              pgDatabase,
+		DBSSLMode:           sslMode,
+		Port:                "8080",
+		Timezone:            "UTC",
 	}
 }
 

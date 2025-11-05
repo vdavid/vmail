@@ -41,17 +41,17 @@ func getTestConfig() *config.Config {
 	}
 
 	return &config.Config{
-		Environment:   "test",
-		EncryptionKey: "test-encryption-key",
-		AutheliaURL:   "http://authelia:9091",
-		DBHost:        pgHost,
-		DBPort:        pgPort,
-		DBUsername:    pgUser,
-		DBPassword:    pgPassword,
-		DBName:        pgDatabase,
-		DBSSLMode:     sslMode,
-		Port:          "8080",
-		Timezone:      "UTC",
+		Environment:         "test",
+		EncryptionKeyBase64: "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=",
+		AutheliaURL:         "http://authelia:9091",
+		DBHost:              pgHost,
+		DBPort:              pgPort,
+		DBUsername:          pgUser,
+		DBPassword:          pgPassword,
+		DBName:              pgDatabase,
+		DBSSLMode:           sslMode,
+		Port:                "8080",
+		Timezone:            "UTC",
 	}
 }
 
@@ -135,7 +135,7 @@ func TestNewServer(t *testing.T) {
 
 func TestMainWithConfig(t *testing.T) {
 	_ = os.Setenv("VMAIL_ENV", "production")
-	_ = os.Setenv("VMAIL_ENCRYPTION_KEY", "test-key-123456789012345678901234")
+	_ = os.Setenv("VMAIL_ENCRYPTION_KEY_BASE64", "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=")
 	_ = os.Setenv("AUTHELIA_URL", "http://authelia:9091")
 	_ = os.Setenv("VMAIL_DB_HOST", os.Getenv("PGHOST"))
 	_ = os.Setenv("VMAIL_DB_PORT", os.Getenv("PGPORT"))
@@ -152,7 +152,7 @@ func TestMainWithConfig(t *testing.T) {
 
 	defer func() {
 		_ = os.Unsetenv("VMAIL_ENV")
-		_ = os.Unsetenv("VMAIL_ENCRYPTION_KEY")
+		_ = os.Unsetenv("VMAIL_ENCRYPTION_KEY_BASE64")
 		_ = os.Unsetenv("AUTHELIA_URL")
 		_ = os.Unsetenv("VMAIL_DB_HOST")
 		_ = os.Unsetenv("VMAIL_DB_PORT")
