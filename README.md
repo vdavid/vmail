@@ -150,18 +150,18 @@ Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.m
 
 #### **2/1. 🏗️ Backend: Server foundation**
 
-* [ ] **Create the main server:** In `/backend/cmd/server`, create a new `main.go`. This will be your *actual* server (unlike the `spike`).
+* [x] **Create the main server:** In `/backend/cmd/server`, create a new `main.go`. This will be your *actual* server (unlike the `spike`).
     * It should start a `net/http` server using `http.ListenAndServe`.
     * It should use `http.ServeMux` (as specified in your spec) for routing.
     * Add a simple `http.HandlerFunc` for `/` that responds with "V-Mail API is running".
-* [ ] **Set up config loading:** In `/backend/internal/config`, create a `config.go`.
+* [x] **Set up config loading:** In `/backend/internal/config`, create a `config.go`.
     * Create a `struct` that holds all env vars (DB host, master key, etc.).
     * Create a `NewConfig()` function that reads from the `.env` file (using `godotenv` for local dev) and `os.Getenv` (for production).
     * Pass this `Config` struct to your server in `main.go`.
-* [ ] **Set up database connection:** In `/backend/internal/db`, create a `db.go`.
+* [x] **Set up database connection:** In `/backend/internal/db`, create a `db.go`.
     * Create a `NewConnection()` function that takes the DB config and returns a `*pgxpool.Pool`.
     * Add this `*pgxpool.Pool` to your server's dependencies.
-* [ ] **Set up DB migrations:**
+* [x] **Set up DB migrations:**
     * Install `golang-migrate` (e.g., `brew install golang-migrate`).
     * Create a `/backend/migrations` directory.
     * Create a new migration file (e.g., `migrate create -ext sql -dir backend/migrations -seq init_schema`).

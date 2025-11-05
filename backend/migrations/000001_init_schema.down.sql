@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS "action_queue";
+DROP TABLE IF EXISTS "drafts";
+DROP TABLE IF EXISTS "attachments";
+DROP TABLE IF EXISTS "messages";
+DROP TABLE IF EXISTS "threads";
+DROP TABLE IF EXISTS "user_settings";
+DROP TABLE IF EXISTS "users";

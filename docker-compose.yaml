@@ -18,7 +18,7 @@ services:
       # Postgres DB settings
       - VMAIL_DB_HOST=${VMAIL_DB_HOST}
       - VMAIL_DB_PORT=5432
-      - VMAIL_DB_USERNAME=${VMAIL_DB_USERNAME}
+      - VMAIL_DB_USER=${VMAIL_DB_USER}
       - VMAIL_DB_PASSWORD=${VMAIL_DB_PASSWORD}
       - VMAIL_DB_NAME=vmail
       - VMAIL_DB_SSLMODE=disable
@@ -39,7 +39,7 @@ services:
     volumes:
       - vmail-db-data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_USERNAME=${VMAIL_DB_USERNAME}
+      - POSTGRES_USERNAME=${VMAIL_DB_USER}
       - POSTGRES_PASSWORD=${VMAIL_DB_PASSWORD}
       - POSTGRES_DB=vmail
       - TZ=${TZ}
