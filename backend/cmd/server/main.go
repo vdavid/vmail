@@ -7,7 +7,10 @@ import (
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/vdavid/vmail/backend/internal/api"
+	"github.com/vdavid/vmail/backend/internal/auth"
 	"github.com/vdavid/vmail/backend/internal/config"
+	"github.com/vdavid/vmail/backend/internal/crypto"
 	"github.com/vdavid/vmail/backend/internal/db"
 )
 
@@ -37,9 +40,29 @@ func main() {
 }
 
 func NewServer(cfg *config.Config, pool *pgxpool.Pool) http.Handler {
+	encryptor, err := crypto.NewEncryptor(cfg.EncryptionKey)
+	if err != nil {
+		log.Fatalf("Failed to create encryptor: %v", err)
+	}
+
+	authHandler := api.NewAuthHandler(pool)
+	settingsHandler := api.NewSettingsHandler(pool, encryptor)
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", handleRoot)
+
+	mux.Handle("/api/v1/auth/status", auth.RequireAuth(http.HandlerFunc(authHandler.GetAuthStatus)))
+	mux.Handle("/api/v1/settings", auth.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			settingsHandler.GetSettings(w, r)
+		case http.MethodPost:
+			settingsHandler.PostSettings(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})))
 
 	return mux
 }
