@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/vdavid/vmail/backend/internal/api"
@@ -12,6 +13,7 @@ import (
 	"github.com/vdavid/vmail/backend/internal/config"
 	"github.com/vdavid/vmail/backend/internal/crypto"
 	"github.com/vdavid/vmail/backend/internal/db"
+	"github.com/vdavid/vmail/backend/internal/imap"
 )
 
 func main() {
@@ -31,10 +33,10 @@ func main() {
 
 	server := NewServer(cfg, pool)
 
-	addr := ":" + cfg.Port
-	log.Printf("V-Mail backend server starting on %s (environment: %s)", addr, cfg.Environment)
+	address := ":" + cfg.Port
+	log.Printf("V-Mail backend server starting on %s (environment: %s)", address, cfg.Environment)
 
-	if err := http.ListenAndServe(addr, server); err != nil {
+	if err := http.ListenAndServe(address, server); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
 }
@@ -45,8 +47,14 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool) http.Handler {
 		log.Fatalf("Failed to create encryptor: %v", err)
 	}
 
+	imapPool := imap.NewPool()
+	imapService := imap.NewService(pool, encryptor)
+
 	authHandler := api.NewAuthHandler(pool)
 	settingsHandler := api.NewSettingsHandler(pool, encryptor)
+	foldersHandler := api.NewFoldersHandler(pool, encryptor, imapPool)
+	threadsHandler := api.NewThreadsHandler(pool, encryptor, imapService)
+	threadHandler := api.NewThreadHandler(pool, encryptor, imapService)
 
 	mux := http.NewServeMux()
 
@@ -62,6 +70,21 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool) http.Handler {
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
+	})))
+	mux.Handle("/api/v1/folders", auth.RequireAuth(http.HandlerFunc(foldersHandler.GetFolders)))
+	mux.Handle("/api/v1/threads", auth.RequireAuth(http.HandlerFunc(threadsHandler.GetThreads)))
+
+	// Handle /api/v1/thread/{thread_id} pattern
+	mux.Handle("/api/v1/thread/", auth.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Extract thread_id from path
+		path := strings.TrimPrefix(r.URL.Path, "/api/v1/thread/")
+		if path == "" || path == r.URL.Path {
+			http.Error(w, "thread_id is required", http.StatusBadRequest)
+			return
+		}
+		// Set the thread_id in the URL path for the handler to use
+		r.URL.Path = "/api/v1/thread/" + path
+		threadHandler.GetThread(w, r)
 	})))
 
 	return mux

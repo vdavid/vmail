@@ -122,16 +122,16 @@ Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.m
 
 ### **2/4. 📨 Backend: Read-only email API**
 
-* [ ] **Refactor <code>spike</code> code:** Move your `connectToIMAP`, `login`, `runThreadCommand`, etc. from the `spike` into reusable functions in `/backend/internal/imap`.
+* [x] **Refactor <code>spike</code> code:** Move your `connectToIMAP`, `login`, `runThreadCommand`, etc. from the `spike` into reusable functions in `/backend/internal/imap`.
     * Create an `imap/client.go` that manages a **connection pool** (as discussed). This is complex, so start simple: just a `map[string]*client.Client` to hold one connection per user.
-* [ ] **Create API: <code>folders</code> endpoint:**
+* [x] **Create API: <code>folders</code> endpoint:**
     * Add the `GET /api/v1/folders` route and handler.
     * The handler should:
         1. Get the user's IMAP credentials from the DB.
         2. Get an IMAP connection from your pool.
         3. Run the IMAP `LIST` command to get all folders.
         4. Return them as a JSON array: `[{"name": "INBOX"}, {"name": "Sent"}]`.
-* [ ] **Create API: <code>threads</code> endpoint:**
+* [x] **Create API: <code>threads</code> endpoint:**
     * Add the `GET /api/v1/threads` route (it needs a query param, e.g., `?folder=INBOX`).
     * This is the most complex handler:
         1. Get user credentials.
@@ -140,7 +140,7 @@ Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.m
         4. Parse the messages (using `enmime` for headers).
         5. Save the data to your `threads` and `messages` tables.
         6. Return the list of threads from your **database**.
-* [ ] **Create API: <code>thread/:thread_id</code> endpoint:**
+* [x] **Create API: <code>thread/:thread_id</code> endpoint:**
     * Add the `GET /api/v1/thread/:thread_id` route.
     * This handler should:
         1. Query your *database* for the thread (using `stable_thread_id`).
