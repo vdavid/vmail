@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -113,7 +114,7 @@ func TestSaveAndGetMessage(t *testing.T) {
 		if err == nil {
 			t.Error("Expected error for non-existent message")
 		}
-		if err != ErrMessageNotFound {
+		if !errors.Is(err, ErrMessageNotFound) {
 			t.Errorf("Expected ErrMessageNotFound, got %v", err)
 		}
 	})

@@ -113,7 +113,7 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 		return fmt.Errorf("failed to fetch message headers: %w", err)
 	}
 
-	// Build map of UID to message for quick lookup
+	// Build map of UID to message for a quick lookup
 	uidToMessageMap := make(map[uint32]*imap.Message)
 	for _, msg := range messages {
 		uidToMessageMap[msg.Uid] = msg
@@ -140,10 +140,10 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 			continue
 		}
 
-		// Get stable thread ID from root message's Message-ID
+		// Get stable thread ID from the root message's Message-ID
 		stableThreadID, ok := rootUIDToStableID[rootUID]
 		if !ok {
-			// Fallback: try to get from root message if we have it
+			// Fallback: try to get from the root message if we have it
 			if rootMsg, found := uidToMessageMap[rootUID]; found {
 				if rootMsg.Envelope != nil && len(rootMsg.Envelope.MessageId) > 0 {
 					stableThreadID = rootMsg.Envelope.MessageId
@@ -156,7 +156,7 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 			}
 		}
 
-		// Get or create thread
+		// Get or create the thread
 		threadModel, err := db.GetThreadByStableID(ctx, s.pool, userID, stableThreadID)
 		if err != nil {
 			if !errors.Is(err, db.ErrThreadNotFound) {
@@ -181,7 +181,7 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 			}
 		}
 
-		// Parse and save message
+		// Parse and save the message
 		msg, err := ParseMessage(imapMsg, threadModel.ID, userID, folderName)
 		if err != nil {
 			log.Printf("Warning: Failed to parse message UID %d: %v", imapMsg.Uid, err)
@@ -193,7 +193,7 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 		}
 	}
 
-	// Set the folder sync timestamp after successful sync
+	// Set the folder sync timestamp after a successful sync
 	if err := db.SetFolderSyncTimestamp(ctx, s.pool, userID, folderName); err != nil {
 		log.Printf("Warning: Failed to set folder sync timestamp: %v", err)
 		// Don't fail the entire sync if timestamp update fails
@@ -227,7 +227,7 @@ func (s *Service) SyncFullMessage(ctx context.Context, userID, folderName string
 		return fmt.Errorf("failed to select folder %s: %w", folderName, err)
 	}
 
-	// Fetch full message
+	// Fetch the full message
 	imapMsg, err := FetchFullMessage(client, uint32(imapUID))
 	if err != nil {
 		return fmt.Errorf("failed to fetch full message: %w", err)

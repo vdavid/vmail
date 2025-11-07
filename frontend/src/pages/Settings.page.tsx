@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, type UserSettings } from '../lib/api'
 import * as React from 'react'
@@ -21,8 +21,8 @@ const defaultSettings: UserSettings = {
 
 export default function SettingsPage() {
     const queryClient = useQueryClient()
-    const [formData, setFormData] = useState<UserSettings>(defaultSettings)
     const [saveMessage, setSaveMessage] = useState<string | null>(null)
+    const initializedRef = useRef(false)
 
     const { data, isLoading, isError } = useQuery<UserSettings>({
         queryKey: ['settings'],
@@ -30,14 +30,21 @@ export default function SettingsPage() {
         retry: false,
     })
 
+    const [formData, setFormData] = useState<UserSettings>(defaultSettings)
+
+    // Initialize form data from query data when it first loads
+    // Using a ref to ensure we only initialize once to avoid cascading renders
     useEffect(() => {
-        if (data) {
+        if (data && !initializedRef.current) {
+            initializedRef.current = true
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- Synchronizing external query state with form state
             setFormData({
                 ...data,
                 imap_password: '',
                 smtp_password: '',
             })
-        } else if (isError) {
+        } else if (isError && !initializedRef.current) {
+            initializedRef.current = true
             setFormData(defaultSettings)
         }
     }, [data, isError])

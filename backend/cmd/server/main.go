@@ -76,7 +76,7 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool) http.Handler {
 
 	// Handle /api/v1/thread/{thread_id} pattern
 	mux.Handle("/api/v1/thread/", auth.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract thread_id from path
+		// Extract thread_id from the path
 		path := strings.TrimPrefix(r.URL.Path, "/api/v1/thread/")
 		if path == "" || path == r.URL.Path {
 			http.Error(w, "thread_id is required", http.StatusBadRequest)
@@ -90,7 +90,7 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool) http.Handler {
 	return mux
 }
 
-func handleRoot(w http.ResponseWriter, r *http.Request) {
+func handleRoot(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	_, _ = fmt.Fprintf(w, "V-Mail API is running")
 }

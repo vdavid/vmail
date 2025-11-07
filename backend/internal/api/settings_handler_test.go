@@ -43,7 +43,7 @@ func TestSettingsHandler_GetSettings(t *testing.T) {
 	handler := NewSettingsHandler(pool, encryptor)
 
 	t.Run("returns 404 for user without settings", func(t *testing.T) {
-		email := "newuser@example.com"
+		email := "new-user@example.com"
 
 		req := httptest.NewRequest("GET", "/api/v1/settings", nil)
 		ctx := context.WithValue(req.Context(), auth.UserEmailKey, email)
@@ -137,16 +137,16 @@ func TestSettingsHandler_PostSettings(t *testing.T) {
 	handler := NewSettingsHandler(pool, encryptor)
 
 	t.Run("saves new settings successfully", func(t *testing.T) {
-		email := "newuser@example.com"
+		email := "new-user@example.com"
 
 		reqBody := models.UserSettingsRequest{
 			UndoSendDelaySeconds:     25,
 			PaginationThreadsPerPage: 75,
 			IMAPServerHostname:       "imap.new.com",
-			IMAPUsername:             "newuser",
+			IMAPUsername:             "new-user",
 			IMAPPassword:             "imap_password_123",
 			SMTPServerHostname:       "smtp.new.com",
-			SMTPUsername:             "newuser",
+			SMTPUsername:             "new-user",
 			SMTPPassword:             "smtp_password_456",
 			ArchiveFolderName:        "MyArchive",
 			SentFolderName:           "MySent",

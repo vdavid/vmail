@@ -3,7 +3,9 @@ package imap
 import (
 	"fmt"
 	"log"
+	"net"
 	"sync"
+	"time"
 
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/client"
@@ -95,9 +97,13 @@ func (p *Pool) Close() {
 	}
 }
 
-// ConnectToIMAP connects to the IMAP server using TLS.
+// ConnectToIMAP connects to the IMAP server using TLS with a 5-second timeout.
 func ConnectToIMAP(server string) (*client.Client, error) {
-	c, err := client.DialTLS(server, nil)
+	dialer := &net.Dialer{
+		Timeout: 5 * time.Second,
+	}
+
+	c, err := client.DialWithDialerTLS(dialer, server, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial: %w", err)
 	}

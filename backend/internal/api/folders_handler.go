@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/vdavid/vmail/backend/internal/auth"
@@ -61,7 +62,13 @@ func (h *FoldersHandler) GetFolders(w http.ResponseWriter, r *http.Request) {
 	client, err := h.imapPool.GetClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
 	if err != nil {
 		log.Printf("FoldersHandler: Failed to get IMAP client: %v", err)
-		http.Error(w, "Failed to connect to IMAP server", http.StatusInternalServerError)
+		// Check if it's a timeout or connection error
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "i/o timeout") {
+			http.Error(w, "Connection to IMAP server timed out. Please double-check your server hostname in your Settings and try again.", http.StatusServiceUnavailable)
+		} else {
+			http.Error(w, "Failed to connect to IMAP server", http.StatusInternalServerError)
+		}
 		return
 	}
 

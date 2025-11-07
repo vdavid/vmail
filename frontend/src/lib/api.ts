@@ -21,13 +21,58 @@ export interface UserSettings {
     pagination_threads_per_page: number
 }
 
+export interface Folder {
+    name: string
+}
+
+export interface Message {
+    id: string
+    thread_id: string
+    user_id: string
+    imap_uid: number
+    imap_folder_name: string
+    message_id_header: string
+    from_address: string
+    to_addresses: string[]
+    cc_addresses: string[]
+    sent_at: string | null
+    subject: string
+    unsafe_body_html: string
+    body_text: string
+    is_read: boolean
+    is_starred: boolean
+    attachments: Attachment[]
+}
+
+export interface Attachment {
+    id: string
+    message_id: string
+    filename: string
+    mime_type: string
+    size_bytes: number
+    is_inline: boolean
+    content_id?: string
+}
+
+export interface Thread {
+    id: string
+    stable_thread_id: string
+    subject: string
+    user_id: string
+    messages?: Message[]
+}
+
+function getAuthHeaders() {
+    return {
+        Authorization: 'Bearer token',
+    }
+}
+
 export const api = {
     async getAuthStatus(): Promise<AuthStatus> {
         const response = await fetch(`${API_BASE_URL}/auth/status`, {
             credentials: 'include',
-            headers: {
-                'Authorization': 'Bearer token'
-            },
+            headers: getAuthHeaders(),
         })
         if (!response.ok) {
             throw new Error('Failed to fetch auth status')
@@ -38,9 +83,7 @@ export const api = {
     async getSettings(): Promise<UserSettings> {
         const response = await fetch(`${API_BASE_URL}/settings`, {
             credentials: 'include',
-            headers: {
-                'Authorization': 'Bearer token'
-            },
+            headers: getAuthHeaders(),
         })
         if (!response.ok) {
             throw new Error('Failed to fetch settings')
@@ -53,7 +96,7 @@ export const api = {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': 'Bearer token'
+                ...getAuthHeaders(),
             },
             credentials: 'include',
             body: JSON.stringify(settings),
@@ -61,5 +104,47 @@ export const api = {
         if (!response.ok) {
             throw new Error('Failed to save settings')
         }
+    },
+
+    async getFolders(): Promise<Folder[]> {
+        const response = await fetch(`${API_BASE_URL}/folders`, {
+            credentials: 'include',
+            headers: getAuthHeaders(),
+        })
+        if (!response.ok) {
+            const errorText = await response.text()
+            // Try to extract a meaningful error message from the response
+            const errorMessage =
+                errorText && errorText.length > 0 && errorText.length < 200
+                    ? errorText
+                    : 'Failed to fetch folders'
+            throw new Error(errorMessage)
+        }
+        return response.json()
+    },
+
+    async getThreads(folder: string): Promise<Thread[]> {
+        const response = await fetch(
+            `${API_BASE_URL}/threads?folder=${encodeURIComponent(folder)}`,
+            {
+                credentials: 'include',
+                headers: getAuthHeaders(),
+            },
+        )
+        if (!response.ok) {
+            throw new Error('Failed to fetch threads')
+        }
+        return response.json()
+    },
+
+    async getThread(threadId: string): Promise<Thread> {
+        const response = await fetch(`${API_BASE_URL}/thread/${encodeURIComponent(threadId)}`, {
+            credentials: 'include',
+            headers: getAuthHeaders(),
+        })
+        if (!response.ok) {
+            throw new Error('Failed to fetch thread')
+        }
+        return response.json()
     },
 }

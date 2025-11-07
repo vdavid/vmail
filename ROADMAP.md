@@ -151,16 +151,16 @@ Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.m
 
 ### **2/5. 🖥️ Frontend: Read-only email UI**
 
-* [ ] **Render folders:**
+* [x] **Render folders:**
     * In `Sidebar.tsx`, use `TanStack Query` (`useQuery`) to fetch from `GET /api/v1/folders`.
     * Render the list of folders as links (`<Link to="/?folder=INBOX">Inbox</Link>`).
-* [ ] **Render thread list:**
+* [x] **Render thread list:**
     * Create `pages/Inbox.page.tsx`.
     * It should read the `?folder=` query param from the URL (using `react-router`'s `useSearchParams` hook).
     * Use `useQuery` to fetch from `GET /api/v1/threads?folder=...`.
     * Create an `EmailListItem.tsx` component.
     * Render the list of threads using this component, showing sender, subject, date, etc.
-* [ ] **Render thread view:**
+* [x] **Render thread view:**
     * Create `pages/Thread.page.tsx`.
     * It should read the `:threadId` from the URL (using `useParams`).
     * Use `useQuery` to fetch from `GET /api/v1/thread/:threadId`.
@@ -168,7 +168,7 @@ Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.m
     * Render each message in the thread.
     * **Crucially:** In `Message.tsx`, use `DOMPurify.sanitize()` on the `unsafe_body_html` before rendering it with `dangerouslySetInnerHTML`.
     * Render the list of attachments.
-* [ ] **Implement basic keyboard navigation:**
+* [x] **Implement basic keyboard navigation:**
     * Create a `hooks/useKeyboardShortcuts.ts`.
     * This hook should `useEffect` to add a `keydown` event listener.
     * (For now) Just implement `j` (next item) and `k` (previous item) to move a "selected" index, which you'll store in a new Zustand store (`ui.store.ts`).
@@ -177,10 +177,10 @@ Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.m
 
 #### **Testing: Unit Tests (Jest + React Testing Library)**
 
-* [ ] **<code>Message.tsx</code> (Security):**
+* [x] **<code>Message.tsx</code> (Security):**
     * Test that the component *always* calls `DOMPurify.sanitize()` with the `unsafe_body_html` prop.
     * Test that the output of `DOMPurify.sanitize` is what's actually rendered via `dangerouslySetInnerHTML`.
-* [ ] **<code>hooks/useKeyboardShortcuts.ts</code>:**
+* [x] **<code>hooks/useKeyboardShortcuts.ts</code>:**
     * Mock `window.addEventListener` and `window.removeEventListener` to test that they are called on mount/unmount.
     * Test that pressing "j" calls the function to increment the selected index.
     * Test that pressing "k" calls the function to decrement the selected index.
@@ -189,18 +189,18 @@ Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.m
 
 #### **Testing: Integration Tests (React Testing Library + <code>msw</code>)**
 
-* [ ] **Mock API:** Set up `msw` (Mock Service Worker) to intercept and mock all API calls (`GET /api/v1/folders`, `GET /api/v1/threads`, `GET /api/v1/thread/:threadId`).
-* [ ] **<code>Sidebar.tsx</code>:**
+* [x] **Mock API:** Set up `msw` (Mock Service Worker) to intercept and mock all API calls (`GET /api/v1/folders`, `GET /api/v1/threads`, `GET /api/v1/thread/:threadId`).
+* [x] **<code>Sidebar.tsx</code>:**
     * Test that it renders a "Loading..." state.
     * Test that it calls `GET /api/v1/folders`.
     * Test that it renders a list of links (e.g., "Inbox", "Sent") based on the mock API response.
     * Test that clicking the "Sent" link navigates the user to `/?folder=Sent`.
-* [ ] **<code>Inbox.page.tsx</code> (Thread List):**
+* [x] **<code>Inbox.page.tsx</code> (Thread List):**
     * Test that it renders a "Loading..." state.
     * Test that it reads the `?folder=INBOX` URL parameter and calls the correct API: `GET /api/v1/threads?folder=INBOX`.
     * Test that it renders the list of `EmailListItem` components based on the mock response.
     * Test that clicking an `EmailListItem` navigates the user to the correct thread (e.g., `/thread/thread-id-123`).
-* [ ] **<code>Thread.page.tsx</code> (Thread View):**
+* [x] **<code>Thread.page.tsx</code> (Thread View):**
     * Test that it renders a "Loading..." state.
     * Test that it reads the `:threadId` URL parameter and calls the correct API: `GET /api/v1/thread/thread-id-123`.
     * Test that it correctly renders all messages, sender names, subjects, and attachment filenames from the mock response.
@@ -491,7 +491,7 @@ Breakdown:
 
 ### **4/1. 🏗️ Backend: "Send" & "Undo" API endpoints**
 
-We'll start by creating the two API endpoints the frontend needs: one to *queue* a send, and one to *cancel* it.
+We'll start by creating the two API endpoints the frontend needs: one to *queue* a send action, and one to *cancel* it.
 
 * [ ] **Create the "Send" API endpoint:**
     * Add the route: `router.Post("/api/v1/send", app.sendHandler)`.

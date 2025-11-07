@@ -72,9 +72,9 @@ describe('SettingsPage', () => {
             expect(screen.getByText('Settings')).toBeInTheDocument()
         })
 
-        expect(screen.getByLabelText('IMAP Server')).toBeInTheDocument()
-        expect(screen.getByLabelText('IMAP Username')).toBeInTheDocument()
-        expect(screen.getByLabelText('SMTP Server')).toBeInTheDocument()
+        expect(screen.getByLabelText('IMAP server')).toBeInTheDocument()
+        expect(screen.getByLabelText('IMAP username')).toBeInTheDocument()
+        expect(screen.getByLabelText('SMTP server')).toBeInTheDocument()
     })
 
     it('should load existing settings', async () => {
@@ -98,14 +98,14 @@ describe('SettingsPage', () => {
         renderSettingsPage()
 
         await waitFor(() => {
-            expect(screen.getByLabelText('IMAP Server')).toBeInTheDocument()
+            expect(screen.getByLabelText('IMAP server')).toBeInTheDocument()
         })
 
-        const imapServerInput = screen.getByLabelText('IMAP Server')
+        const imapServerInput = screen.getByLabelText('IMAP server')
         await user.clear(imapServerInput)
-        await user.type(imapServerInput, 'imap.newserver.com:993')
+        await user.type(imapServerInput, 'imap.new-server.com:993')
 
-        expect(imapServerInput).toHaveValue('imap.newserver.com:993')
+        expect(imapServerInput).toHaveValue('imap.new-server.com:993')
     })
 
     it('should submit settings form', async () => {
@@ -116,15 +116,15 @@ describe('SettingsPage', () => {
         renderSettingsPage()
 
         await waitFor(() => {
-            expect(screen.getByLabelText('IMAP Server')).toBeInTheDocument()
+            expect(screen.getByLabelText('IMAP server')).toBeInTheDocument()
         })
 
-        await user.type(screen.getByLabelText('IMAP Server'), 'imap.example.com:993')
-        await user.type(screen.getByLabelText('IMAP Username'), 'user@example.com')
-        await user.type(screen.getByLabelText('IMAP Password'), 'password123')
-        await user.type(screen.getByLabelText('SMTP Server'), 'smtp.example.com:587')
-        await user.type(screen.getByLabelText('SMTP Username'), 'user@example.com')
-        await user.type(screen.getByLabelText('SMTP Password'), 'password123')
+        await user.type(screen.getByLabelText('IMAP server'), 'imap.example.com:993')
+        await user.type(screen.getByLabelText('IMAP username'), 'user@example.com')
+        await user.type(screen.getByLabelText('IMAP password'), 'password123')
+        await user.type(screen.getByLabelText('SMTP server'), 'smtp.example.com:587')
+        await user.type(screen.getByLabelText('SMTP username'), 'user@example.com')
+        await user.type(screen.getByLabelText('SMTP password'), 'password123')
 
         const submitButton = screen.getByRole('button', {
             name: /Save Settings/i,
@@ -147,8 +147,8 @@ describe('SettingsPage', () => {
             expect(screen.getByDisplayValue('imap.example.com:993')).toBeInTheDocument()
         })
 
-        await user.type(screen.getByLabelText('IMAP Password'), 'test123')
-        await user.type(screen.getByLabelText('SMTP Password'), 'test123')
+        await user.type(screen.getByLabelText('IMAP password'), 'test123')
+        await user.type(screen.getByLabelText('SMTP password'), 'test123')
 
         const submitButton = screen.getByRole('button', {
             name: /Save Settings/i,
@@ -174,8 +174,8 @@ describe('SettingsPage', () => {
             expect(screen.getByDisplayValue('imap.example.com:993')).toBeInTheDocument()
         })
 
-        await user.type(screen.getByLabelText('IMAP Password'), 'test123')
-        await user.type(screen.getByLabelText('SMTP Password'), 'test123')
+        await user.type(screen.getByLabelText('IMAP password'), 'test123')
+        await user.type(screen.getByLabelText('SMTP password'), 'test123')
 
         const submitButton = screen.getByRole('button', {
             name: /Save Settings/i,

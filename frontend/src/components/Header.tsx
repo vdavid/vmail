@@ -1,11 +1,12 @@
 import { useState } from 'react'
+import * as React from 'react'
 
 export default function Header() {
     const [searchQuery, setSearchQuery] = useState('')
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault()
-        console.log('Search:', searchQuery)
+        // TODO: Implement search functionality
     }
 
     return (

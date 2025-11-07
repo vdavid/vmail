@@ -113,7 +113,7 @@ The frontend connects to the Go backend API at `/api/v1/*` endpoints and include
   - Requires IMAP and SMTP credentials
 
 - **SMTP Server**: For sending emails
-  - Typically the same server as IMAP
+  - Typically, the same server as IMAP
   - Credentials configured via environment variables
 
 ### Database

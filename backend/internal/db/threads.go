@@ -101,32 +101,8 @@ func GetThreadsForFolder(ctx context.Context, pool *pgxpool.Pool, userID, folder
 	return threads, nil
 }
 
-// GetThreadCacheAge returns the age of the oldest message in the cache for a folder.
-// Returns nil if the cache is empty.
-// DEPRECATED: Use GetFolderSyncTimestamp instead.
-func GetThreadCacheAge(ctx context.Context, pool *pgxpool.Pool, userID, folderName string) (*time.Time, error) {
-	var oldestMessageTime *time.Time
-
-	err := pool.QueryRow(ctx, `
-		SELECT MIN(sent_at)
-		FROM messages m
-		INNER JOIN threads t ON m.thread_id = t.id
-		WHERE t.user_id = $1 AND m.imap_folder_name = $2
-	`, userID, folderName).Scan(&oldestMessageTime)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to get cache age: %w", err)
-	}
-
-	return oldestMessageTime, nil
-}
-
-// GetFolderSyncTimestamp returns the timestamp when a folder was last synced.
-// Returns nil if the folder has never been synced.
+// GetFolderSyncTimestamp returns the timestamp when we last synced the given folder.
+// Returns nil if we've never synced it.
 func GetFolderSyncTimestamp(ctx context.Context, pool *pgxpool.Pool, userID, folderName string) (*time.Time, error) {
 	var syncedAt *time.Time
 
@@ -147,7 +123,7 @@ func GetFolderSyncTimestamp(ctx context.Context, pool *pgxpool.Pool, userID, fol
 	return syncedAt, nil
 }
 
-// SetFolderSyncTimestamp sets the timestamp when a folder was last synced.
+// SetFolderSyncTimestamp sets the timestamp when we last synced the given folder.
 func SetFolderSyncTimestamp(ctx context.Context, pool *pgxpool.Pool, userID, folderName string) error {
 	_, err := pool.Exec(ctx, `
 		INSERT INTO folder_sync_timestamps (user_id, folder_name, synced_at)

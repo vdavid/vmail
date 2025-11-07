@@ -1,12 +1,15 @@
 import type { ReactNode } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 
 interface LayoutProps {
     children: ReactNode
 }
 
 export default function Layout({ children }: LayoutProps) {
+    useKeyboardShortcuts()
+
     return (
         <div className='flex h-screen overflow-hidden bg-gray-50'>
             <Sidebar />

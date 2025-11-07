@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import AuthWrapper from './AuthWrapper'
 import { useAuthStore } from '../store/auth.store'
 import * as apiModule from '../lib/api'
+import * as React from 'react'
 
 vi.mock('../lib/api', () => ({
     api: {

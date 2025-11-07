@@ -1,4 +1,4 @@
--- Table to track when each folder was last synced for each user.
+-- Table to track when we synced each folder for each user.
 -- This enables efficient cache TTL checking without scanning all messages.
 CREATE TABLE "folder_sync_timestamps"
 (

@@ -11,24 +11,6 @@ import (
 )
 
 var ErrUserSettingsNotFound = errors.New("user settings not found")
-var ErrUserNotFound = errors.New("user not found")
-
-// GetUserIDByEmail returns the user's id for the given email.
-// Returns ErrUserNotFound when no user exists with that email.
-func GetUserIDByEmail(ctx context.Context, pool *pgxpool.Pool, email string) (string, error) {
-	var userID string
-
-	err := pool.QueryRow(ctx, `SELECT id FROM users WHERE email = $1`, email).Scan(&userID)
-	if err == nil {
-		return userID, nil
-	}
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", ErrUserNotFound
-	}
-
-	return "", fmt.Errorf("failed to get user by email: %w", err)
-}
 
 // GetOrCreateUser returns the user's id for the given email.
 // If no user exists with that email, it creates a new one.

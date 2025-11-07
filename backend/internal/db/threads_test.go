@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -86,7 +87,7 @@ func TestSaveAndGetThread(t *testing.T) {
 		if err == nil {
 			t.Error("Expected error for non-existent thread")
 		}
-		if err != ErrThreadNotFound {
+		if !errors.Is(err, ErrThreadNotFound) {
 			t.Errorf("Expected ErrThreadNotFound, got %v", err)
 		}
 	})
