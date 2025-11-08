@@ -70,22 +70,42 @@ func (m *mockIMAPClient) ListFolders() ([]string, error) {
 
 // mockIMAPPool is a mock implementation of IMAPPool for testing
 type mockIMAPPool struct {
-	getClientResult imap.IMAPClient
-	getClientErr    error
-	getClientCalled bool
-	getClientUserID string
-	getClientServer string
-	getClientUser   string
-	getClientPass   string
+	getClientResult    imap.IMAPClient
+	getClientErr       error
+	getClientCalled    bool
+	getClientCallCount int
+	getClientUserID    string
+	getClientServer    string
+	getClientUser      string
+	getClientPass      string
+	removeClientCalled map[string]bool
+	// For retry scenarios: the first call returns one client, the second call returns another
+	retryClient    imap.IMAPClient
+	retryClientErr error
 }
 
 func (m *mockIMAPPool) GetClient(userID, server, username, password string) (imap.IMAPClient, error) {
 	m.getClientCalled = true
+	m.getClientCallCount++
 	m.getClientUserID = userID
 	m.getClientServer = server
 	m.getClientUser = username
 	m.getClientPass = password
+
+	// If this is a retry (second call) and we have a retry client configured, use it
+	if m.getClientCallCount > 1 && m.retryClient != nil {
+		return m.retryClient, m.retryClientErr
+	}
+
 	return m.getClientResult, m.getClientErr
+}
+
+func (m *mockIMAPPool) RemoveClient(userID string) {
+	// Track removals for testing
+	if m.removeClientCalled == nil {
+		m.removeClientCalled = make(map[string]bool)
+	}
+	m.removeClientCalled[userID] = true
 }
 
 func (m *mockIMAPPool) Close() {}
@@ -225,6 +245,213 @@ func TestFoldersHandler_WithMocks(t *testing.T) {
 
 		if rr.Code != http.StatusInternalServerError {
 			t.Errorf("Expected status 500, got %d", rr.Code)
+		}
+	})
+
+	t.Run("recovers from broken pipe error with retry", func(t *testing.T) {
+		// First client returns broken pipe error
+		brokenClient := &mockIMAPClient{
+			listFoldersResult: nil,
+			listFoldersErr:    fmt.Errorf("failed to list folders: write tcp 192.168.1.191:51443->37.27.245.171:993: write: broken pipe"),
+		}
+
+		// Retry client succeeds
+		retryClient := &mockIMAPClient{
+			listFoldersResult: []string{"INBOX", "Sent"},
+			listFoldersErr:    nil,
+		}
+
+		mockPool := &mockIMAPPool{
+			getClientResult: brokenClient,
+			getClientErr:    nil,
+			retryClient:     retryClient,
+			retryClientErr:  nil,
+		}
+
+		handler := NewFoldersHandler(pool, encryptor, mockPool)
+
+		req := httptest.NewRequest("GET", "/api/v1/folders", nil)
+		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
+		req = req.WithContext(reqCtx)
+
+		rr := httptest.NewRecorder()
+		handler.GetFolders(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status 200 after retry, got %d", rr.Code)
+		}
+
+		// Verify RemoveClient was called
+		if mockPool.removeClientCalled == nil || !mockPool.removeClientCalled[userID] {
+			t.Error("Expected RemoveClient to be called for broken connection")
+		}
+
+		// Verify GetClient was called twice (initial + retry)
+		if mockPool.getClientCallCount != 2 {
+			t.Errorf("Expected GetClient to be called 2 times, got %d", mockPool.getClientCallCount)
+		}
+
+		// Verify response contains folders
+		var response []models.Folder
+		if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+
+		if len(response) != 2 {
+			t.Errorf("Expected 2 folders, got %d", len(response))
+		}
+	})
+
+	t.Run("handles connection reset error with retry", func(t *testing.T) {
+		// First client returns connection reset error
+		brokenClient := &mockIMAPClient{
+			listFoldersResult: nil,
+			listFoldersErr:    fmt.Errorf("failed to list folders: connection reset by peer"),
+		}
+
+		// Retry client succeeds
+		retryClient := &mockIMAPClient{
+			listFoldersResult: []string{"INBOX"},
+			listFoldersErr:    nil,
+		}
+
+		mockPool := &mockIMAPPool{
+			getClientResult: brokenClient,
+			getClientErr:    nil,
+			retryClient:     retryClient,
+			retryClientErr:  nil,
+		}
+
+		handler := NewFoldersHandler(pool, encryptor, mockPool)
+
+		req := httptest.NewRequest("GET", "/api/v1/folders", nil)
+		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
+		req = req.WithContext(reqCtx)
+
+		rr := httptest.NewRecorder()
+		handler.GetFolders(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status 200 after retry, got %d", rr.Code)
+		}
+
+		// Verify RemoveClient was called
+		if mockPool.removeClientCalled == nil || !mockPool.removeClientCalled[userID] {
+			t.Error("Expected RemoveClient to be called for broken connection")
+		}
+	})
+
+	t.Run("handles EOF error with retry", func(t *testing.T) {
+		// First client returns EOF error
+		brokenClient := &mockIMAPClient{
+			listFoldersResult: nil,
+			listFoldersErr:    fmt.Errorf("failed to list folders: EOF"),
+		}
+
+		// Retry client succeeds
+		retryClient := &mockIMAPClient{
+			listFoldersResult: []string{"INBOX", "Drafts"},
+			listFoldersErr:    nil,
+		}
+
+		mockPool := &mockIMAPPool{
+			getClientResult: brokenClient,
+			getClientErr:    nil,
+			retryClient:     retryClient,
+			retryClientErr:  nil,
+		}
+
+		handler := NewFoldersHandler(pool, encryptor, mockPool)
+
+		req := httptest.NewRequest("GET", "/api/v1/folders", nil)
+		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
+		req = req.WithContext(reqCtx)
+
+		rr := httptest.NewRecorder()
+		handler.GetFolders(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status 200 after retry, got %d", rr.Code)
+		}
+	})
+
+	t.Run("returns error if retry also fails", func(t *testing.T) {
+		// First client returns broken pipe error
+		brokenClient := &mockIMAPClient{
+			listFoldersResult: nil,
+			listFoldersErr:    fmt.Errorf("failed to list folders: write: broken pipe"),
+		}
+
+		// Retry client also fails
+		retryClient := &mockIMAPClient{
+			listFoldersResult: nil,
+			listFoldersErr:    fmt.Errorf("failed to list folders: connection refused"),
+		}
+
+		mockPool := &mockIMAPPool{
+			getClientResult: brokenClient,
+			getClientErr:    nil,
+			retryClient:     retryClient,
+			retryClientErr:  nil,
+		}
+
+		handler := NewFoldersHandler(pool, encryptor, mockPool)
+
+		req := httptest.NewRequest("GET", "/api/v1/folders", nil)
+		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
+		req = req.WithContext(reqCtx)
+
+		rr := httptest.NewRecorder()
+		handler.GetFolders(rr, req)
+
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("Expected status 500 when retry also fails, got %d", rr.Code)
+		}
+
+		// Verify RemoveClient was called
+		if mockPool.removeClientCalled == nil || !mockPool.removeClientCalled[userID] {
+			t.Error("Expected RemoveClient to be called for broken connection")
+		}
+
+		// Verify GetClient was called twice (initial + retry)
+		if mockPool.getClientCallCount != 2 {
+			t.Errorf("Expected GetClient to be called 2 times, got %d", mockPool.getClientCallCount)
+		}
+	})
+
+	t.Run("does not retry on non-connection errors", func(t *testing.T) {
+		// Client returns a non-connection error
+		mockClient := &mockIMAPClient{
+			listFoldersResult: nil,
+			listFoldersErr:    fmt.Errorf("failed to list folders: authentication failed"),
+		}
+
+		mockPool := &mockIMAPPool{
+			getClientResult: mockClient,
+			getClientErr:    nil,
+		}
+
+		handler := NewFoldersHandler(pool, encryptor, mockPool)
+
+		req := httptest.NewRequest("GET", "/api/v1/folders", nil)
+		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
+		req = req.WithContext(reqCtx)
+
+		rr := httptest.NewRecorder()
+		handler.GetFolders(rr, req)
+
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("Expected status 500, got %d", rr.Code)
+		}
+
+		// Verify RemoveClient was NOT called for non-connection errors
+		if mockPool.removeClientCalled != nil && mockPool.removeClientCalled[userID] {
+			t.Error("Expected RemoveClient NOT to be called for non-connection errors")
+		}
+
+		// Verify GetClient was called only once
+		if mockPool.getClientCallCount != 1 {
+			t.Errorf("Expected GetClient to be called 1 time, got %d", mockPool.getClientCallCount)
 		}
 	})
 }

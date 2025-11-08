@@ -23,6 +23,9 @@ type IMAPPool interface {
 	// GetClient gets or creates an IMAP client for a user.
 	GetClient(userID, server, username, password string) (IMAPClient, error)
 
+	// RemoveClient removes a client from the pool (useful when a connection is broken).
+	RemoveClient(userID string)
+
 	// Close closes all connections in the pool.
 	Close()
 }

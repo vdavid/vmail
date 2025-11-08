@@ -76,8 +76,32 @@ func (h *FoldersHandler) GetFolders(w http.ResponseWriter, r *http.Request) {
 	folderNames, err := client.ListFolders()
 	if err != nil {
 		log.Printf("FoldersHandler: Failed to list folders: %v", err)
-		http.Error(w, "Failed to list folders", http.StatusInternalServerError)
-		return
+
+		// Check if it's a broken connection error
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "broken pipe") || strings.Contains(errMsg, "connection reset") || strings.Contains(errMsg, "EOF") {
+			// Remove the dead connection from the pool and retry once
+			h.imapPool.RemoveClient(userID)
+
+			// Retry with a fresh connection
+			client, retryErr := h.imapPool.GetClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
+			if retryErr != nil {
+				log.Printf("FoldersHandler: Failed to get IMAP client on retry: %v", retryErr)
+				http.Error(w, "Failed to connect to IMAP server", http.StatusInternalServerError)
+				return
+			}
+
+			folderNames, err = client.ListFolders()
+			if err != nil {
+				log.Printf("FoldersHandler: Failed to list folders on retry: %v", err)
+				http.Error(w, "Failed to list folders", http.StatusInternalServerError)
+				return
+			}
+			// Success on retry, continue below
+		} else {
+			http.Error(w, "Failed to list folders", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// Convert to response format
