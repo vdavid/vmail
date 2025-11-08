@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/vdavid/vmail/backend/internal/auth"
+	"github.com/vdavid/vmail/backend/internal/crypto"
 	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/imap"
 	"github.com/vdavid/vmail/backend/internal/models"
@@ -110,6 +112,47 @@ func (m *mockIMAPPool) RemoveClient(userID string) {
 
 func (m *mockIMAPPool) Close() {}
 
+// callGetFolders is a helper function that sets up and calls GetFolders handler.
+// It returns the response recorder for assertions.
+func callGetFolders(t *testing.T, handler *FoldersHandler, email string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest("GET", "/api/v1/folders", nil)
+	reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
+	req = req.WithContext(reqCtx)
+
+	rr := httptest.NewRecorder()
+	handler.GetFolders(rr, req)
+	return rr
+}
+
+// testRetryScenario is a helper function for testing retry scenarios with broken connections.
+// It sets up a broken client, a retry client, calls GetFolders, and verifies RemoveClient was called.
+// Returns the response recorder and mock pool for additional assertions.
+func testRetryScenario(t *testing.T, pool *pgxpool.Pool, encryptor *crypto.Encryptor, email, userID string, brokenClientErr error, retryClient *mockIMAPClient) (*httptest.ResponseRecorder, *mockIMAPPool) {
+	t.Helper()
+	brokenClient := &mockIMAPClient{
+		listFoldersResult: nil,
+		listFoldersErr:    brokenClientErr,
+	}
+
+	mockPool := &mockIMAPPool{
+		getClientResult: brokenClient,
+		getClientErr:    nil,
+		retryClient:     retryClient,
+		retryClientErr:  nil,
+	}
+
+	handler := NewFoldersHandler(pool, encryptor, mockPool)
+	rr := callGetFolders(t, handler, email)
+
+	// Verify RemoveClient was called
+	if mockPool.removeClientCalled == nil || !mockPool.removeClientCalled[userID] {
+		t.Error("Expected RemoveClient to be called for broken connection")
+	}
+
+	return rr, mockPool
+}
+
 func TestFoldersHandler_WithMocks(t *testing.T) {
 	pool := setupTestPool(t)
 	if pool == nil {
@@ -162,13 +205,7 @@ func TestFoldersHandler_WithMocks(t *testing.T) {
 		}
 
 		handler := NewFoldersHandler(pool, encryptor, mockPool)
-
-		req := httptest.NewRequest("GET", "/api/v1/folders", nil)
-		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
-		req = req.WithContext(reqCtx)
-
-		rr := httptest.NewRecorder()
-		handler.GetFolders(rr, req)
+		rr := callGetFolders(t, handler, email)
 
 		if rr.Code != http.StatusOK {
 			t.Errorf("Expected status 200, got %d", rr.Code)
@@ -210,13 +247,7 @@ func TestFoldersHandler_WithMocks(t *testing.T) {
 		}
 
 		handler := NewFoldersHandler(pool, encryptor, mockPool)
-
-		req := httptest.NewRequest("GET", "/api/v1/folders", nil)
-		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
-		req = req.WithContext(reqCtx)
-
-		rr := httptest.NewRecorder()
-		handler.GetFolders(rr, req)
+		rr := callGetFolders(t, handler, email)
 
 		if rr.Code != http.StatusInternalServerError {
 			t.Errorf("Expected status 500, got %d", rr.Code)
@@ -235,13 +266,7 @@ func TestFoldersHandler_WithMocks(t *testing.T) {
 		}
 
 		handler := NewFoldersHandler(pool, encryptor, mockPool)
-
-		req := httptest.NewRequest("GET", "/api/v1/folders", nil)
-		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
-		req = req.WithContext(reqCtx)
-
-		rr := httptest.NewRecorder()
-		handler.GetFolders(rr, req)
+		rr := callGetFolders(t, handler, email)
 
 		if rr.Code != http.StatusInternalServerError {
 			t.Errorf("Expected status 500, got %d", rr.Code)
@@ -249,44 +274,20 @@ func TestFoldersHandler_WithMocks(t *testing.T) {
 	})
 
 	t.Run("recovers from broken pipe error with retry", func(t *testing.T) {
-		// First client returns broken pipe error
-		brokenClient := &mockIMAPClient{
-			listFoldersResult: nil,
-			listFoldersErr:    fmt.Errorf("failed to list folders: write tcp 192.168.1.191:51443->37.27.245.171:993: write: broken pipe"),
-		}
-
-		// Retry client succeeds
 		retryClient := &mockIMAPClient{
 			listFoldersResult: []string{"INBOX", "Sent"},
 			listFoldersErr:    nil,
 		}
 
-		mockPool := &mockIMAPPool{
-			getClientResult: brokenClient,
-			getClientErr:    nil,
-			retryClient:     retryClient,
-			retryClientErr:  nil,
-		}
-
-		handler := NewFoldersHandler(pool, encryptor, mockPool)
-
-		req := httptest.NewRequest("GET", "/api/v1/folders", nil)
-		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
-		req = req.WithContext(reqCtx)
-
-		rr := httptest.NewRecorder()
-		handler.GetFolders(rr, req)
+		rr, mockPool := testRetryScenario(t, pool, encryptor, email, userID,
+			fmt.Errorf("failed to list folders: write tcp 192.168.1.191:51443->37.27.245.171:993: write: broken pipe"),
+			retryClient)
 
 		if rr.Code != http.StatusOK {
 			t.Errorf("Expected status 200 after retry, got %d", rr.Code)
 		}
 
-		// Verify RemoveClient was called
-		if mockPool.removeClientCalled == nil || !mockPool.removeClientCalled[userID] {
-			t.Error("Expected RemoveClient to be called for broken connection")
-		}
-
-		// Verify GetClient was called twice (initial + retry)
+		// Verify GetClient was called twice (initial plus retry)
 		if mockPool.getClientCallCount != 2 {
 			t.Errorf("Expected GetClient to be called 2 times, got %d", mockPool.getClientCallCount)
 		}
@@ -303,72 +304,29 @@ func TestFoldersHandler_WithMocks(t *testing.T) {
 	})
 
 	t.Run("handles connection reset error with retry", func(t *testing.T) {
-		// First client returns connection reset error
-		brokenClient := &mockIMAPClient{
-			listFoldersResult: nil,
-			listFoldersErr:    fmt.Errorf("failed to list folders: connection reset by peer"),
-		}
-
-		// Retry client succeeds
 		retryClient := &mockIMAPClient{
 			listFoldersResult: []string{"INBOX"},
 			listFoldersErr:    nil,
 		}
 
-		mockPool := &mockIMAPPool{
-			getClientResult: brokenClient,
-			getClientErr:    nil,
-			retryClient:     retryClient,
-			retryClientErr:  nil,
-		}
-
-		handler := NewFoldersHandler(pool, encryptor, mockPool)
-
-		req := httptest.NewRequest("GET", "/api/v1/folders", nil)
-		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
-		req = req.WithContext(reqCtx)
-
-		rr := httptest.NewRecorder()
-		handler.GetFolders(rr, req)
+		rr, _ := testRetryScenario(t, pool, encryptor, email, userID,
+			fmt.Errorf("failed to list folders: connection reset by peer"),
+			retryClient)
 
 		if rr.Code != http.StatusOK {
 			t.Errorf("Expected status 200 after retry, got %d", rr.Code)
 		}
-
-		// Verify RemoveClient was called
-		if mockPool.removeClientCalled == nil || !mockPool.removeClientCalled[userID] {
-			t.Error("Expected RemoveClient to be called for broken connection")
-		}
 	})
 
 	t.Run("handles EOF error with retry", func(t *testing.T) {
-		// First client returns EOF error
-		brokenClient := &mockIMAPClient{
-			listFoldersResult: nil,
-			listFoldersErr:    fmt.Errorf("failed to list folders: EOF"),
-		}
-
-		// Retry client succeeds
 		retryClient := &mockIMAPClient{
 			listFoldersResult: []string{"INBOX", "Drafts"},
 			listFoldersErr:    nil,
 		}
 
-		mockPool := &mockIMAPPool{
-			getClientResult: brokenClient,
-			getClientErr:    nil,
-			retryClient:     retryClient,
-			retryClientErr:  nil,
-		}
-
-		handler := NewFoldersHandler(pool, encryptor, mockPool)
-
-		req := httptest.NewRequest("GET", "/api/v1/folders", nil)
-		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
-		req = req.WithContext(reqCtx)
-
-		rr := httptest.NewRecorder()
-		handler.GetFolders(rr, req)
+		rr, _ := testRetryScenario(t, pool, encryptor, email, userID,
+			fmt.Errorf("failed to list folders: EOF"),
+			retryClient)
 
 		if rr.Code != http.StatusOK {
 			t.Errorf("Expected status 200 after retry, got %d", rr.Code)
@@ -376,44 +334,20 @@ func TestFoldersHandler_WithMocks(t *testing.T) {
 	})
 
 	t.Run("returns error if retry also fails", func(t *testing.T) {
-		// First client returns broken pipe error
-		brokenClient := &mockIMAPClient{
-			listFoldersResult: nil,
-			listFoldersErr:    fmt.Errorf("failed to list folders: write: broken pipe"),
-		}
-
-		// Retry client also fails
 		retryClient := &mockIMAPClient{
 			listFoldersResult: nil,
 			listFoldersErr:    fmt.Errorf("failed to list folders: connection refused"),
 		}
 
-		mockPool := &mockIMAPPool{
-			getClientResult: brokenClient,
-			getClientErr:    nil,
-			retryClient:     retryClient,
-			retryClientErr:  nil,
-		}
-
-		handler := NewFoldersHandler(pool, encryptor, mockPool)
-
-		req := httptest.NewRequest("GET", "/api/v1/folders", nil)
-		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
-		req = req.WithContext(reqCtx)
-
-		rr := httptest.NewRecorder()
-		handler.GetFolders(rr, req)
+		rr, mockPool := testRetryScenario(t, pool, encryptor, email, userID,
+			fmt.Errorf("failed to list folders: write: broken pipe"),
+			retryClient)
 
 		if rr.Code != http.StatusInternalServerError {
 			t.Errorf("Expected status 500 when retry also fails, got %d", rr.Code)
 		}
 
-		// Verify RemoveClient was called
-		if mockPool.removeClientCalled == nil || !mockPool.removeClientCalled[userID] {
-			t.Error("Expected RemoveClient to be called for broken connection")
-		}
-
-		// Verify GetClient was called twice (initial + retry)
+		// Verify GetClient was called twice (initial plus retry)
 		if mockPool.getClientCallCount != 2 {
 			t.Errorf("Expected GetClient to be called 2 times, got %d", mockPool.getClientCallCount)
 		}
@@ -432,13 +366,7 @@ func TestFoldersHandler_WithMocks(t *testing.T) {
 		}
 
 		handler := NewFoldersHandler(pool, encryptor, mockPool)
-
-		req := httptest.NewRequest("GET", "/api/v1/folders", nil)
-		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
-		req = req.WithContext(reqCtx)
-
-		rr := httptest.NewRecorder()
-		handler.GetFolders(rr, req)
+		rr := callGetFolders(t, handler, email)
 
 		if rr.Code != http.StatusInternalServerError {
 			t.Errorf("Expected status 500, got %d", rr.Code)
