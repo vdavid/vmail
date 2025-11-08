@@ -18,11 +18,19 @@ export function useKeyboardShortcuts() {
         setSelectedThreadIndex,
     } = useUIStore()
 
+    // Get user settings to determine pagination limit
+    const { data: settings } = useQuery({
+        queryKey: ['settings'],
+        queryFn: () => api.getSettings(),
+    })
+
+    const limit = settings?.pagination_threads_per_page ?? 100
+
     // Get threads for navigation
     const { data: threadsResponse } = useQuery({
-        queryKey: ['threads', folder],
-        queryFn: () => api.getThreads(folder),
-        enabled: location.pathname === '/',
+        queryKey: ['threads', folder, 1, limit],
+        queryFn: () => api.getThreads(folder, 1, limit),
+        enabled: location.pathname === '/' && !!settings,
     })
 
     const threads = threadsResponse?.threads ?? null

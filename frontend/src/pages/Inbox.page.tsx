@@ -12,13 +12,22 @@ export default function InboxPage() {
     const page = parseInt(searchParams.get('page') || '1', 10)
     const selectedThreadIndex = useUIStore((state) => state.selectedThreadIndex)
 
+    // Get user settings to determine pagination limit
+    const { data: settings } = useQuery({
+        queryKey: ['settings'],
+        queryFn: () => api.getSettings(),
+    })
+
+    const limit = settings?.pagination_threads_per_page ?? 100
+
     const {
         data: threadsResponse,
         isLoading,
         error,
     } = useQuery({
-        queryKey: ['threads', folder, page],
-        queryFn: () => api.getThreads(folder, page),
+        queryKey: ['threads', folder, page, limit],
+        queryFn: () => api.getThreads(folder, page, limit),
+        enabled: !!settings, // Wait for settings to load before fetching threads
     })
 
     if (isLoading) {

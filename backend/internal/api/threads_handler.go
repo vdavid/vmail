@@ -46,7 +46,7 @@ func (h *ThreadsHandler) GetThreads(w http.ResponseWriter, r *http.Request) {
 
 	// Get pagination params
 	page := 1
-	limit := 100
+	limit := 100 // Default fallback
 	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
 		if parsed, err := strconv.Atoi(pageStr); err == nil && parsed > 0 {
 			page = parsed
@@ -56,6 +56,13 @@ func (h *ThreadsHandler) GetThreads(w http.ResponseWriter, r *http.Request) {
 		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
 			limit = parsed
 		}
+	} else {
+		// If no limit provided, use user's setting as default
+		settings, err := db.GetUserSettings(ctx, h.pool, userID)
+		if err == nil {
+			limit = settings.PaginationThreadsPerPage
+		}
+		// If settings not found, use default 100 (already set above)
 	}
 	offset := (page - 1) * limit
 

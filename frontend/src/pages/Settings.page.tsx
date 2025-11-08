@@ -55,6 +55,8 @@ export default function SettingsPage() {
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ['settings'] })
             void queryClient.invalidateQueries({ queryKey: ['authStatus'] })
+            // Invalidate threads queries so they refetch with new pagination limit
+            void queryClient.invalidateQueries({ queryKey: ['threads'] })
             setSaveMessage('Settings saved successfully')
             setTimeout(() => {
                 setSaveMessage(null)
