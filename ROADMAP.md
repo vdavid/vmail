@@ -218,7 +218,7 @@ This plan uses **Playwright** to test the entire read-only flow, assuming the ba
     * **Assert** the app redirects to the Inbox (`/`).
     * (Optional DB check): `SELECT` from `user_settings` and `users` to verify the user was created and the passwords are *encrypted*.
 * [ ] **Test 2: Existing User Read-Only Flow**
-    * Log in as an *existing* (already set up) user.
+    * Log in as an *existing* (already set-up) user.
     * **Assert** the app lands on the Inbox (`/`).
     * **Assert** the sidebar populates with folders (e.g., "Inbox", "Sent").
     * **Assert** the main view populates with a list of email threads.

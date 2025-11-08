@@ -1,4 +1,7 @@
+/* eslint-disable react-dom/no-dangerously-set-innerhtml,react/no-danger --- We need dangerouslySetInnerHTML for HTML rendering.
+   We sanitize the content so it should be safe. */
 import DOMPurify from 'dompurify'
+
 import type { Message as MessageType } from '../lib/api'
 
 interface MessageProps {
@@ -38,7 +41,7 @@ export default function Message({ message }: MessageProps) {
                     <div className='mt-2 font-semibold text-gray-900'>{message.subject}</div>
                 )}
             </div>
-            {message.attachments && message.attachments.length > 0 && (
+            {message.attachments.length > 0 && (
                 <div className='mb-4'>
                     <div className='text-sm font-semibold text-gray-700'>Attachments:</div>
                     <ul className='mt-1 space-y-1'>
@@ -64,7 +67,7 @@ export default function Message({ message }: MessageProps) {
 }
 
 function formatFileSize(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024) return `${String(bytes)} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }

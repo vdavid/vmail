@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api, type UserSettings } from '../lib/api'
+import { useState, useEffect, useRef } from 'react'
 import * as React from 'react'
+
+import { api, type UserSettings } from '../lib/api'
 
 const defaultSettings: UserSettings = {
     imap_server_hostname: '',
@@ -26,7 +27,7 @@ export default function SettingsPage() {
 
     const { data, isLoading, isError } = useQuery<UserSettings>({
         queryKey: ['settings'],
-        queryFn: api.getSettings,
+        queryFn: () => api.getSettings(),
         retry: false,
     })
 
@@ -50,16 +51,20 @@ export default function SettingsPage() {
     }, [data, isError])
 
     const saveMutation = useMutation({
-        mutationFn: api.saveSettings,
+        mutationFn: (settings: UserSettings) => api.saveSettings(settings),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ['settings'] })
             void queryClient.invalidateQueries({ queryKey: ['authStatus'] })
             setSaveMessage('Settings saved successfully')
-            setTimeout(() => setSaveMessage(null), 3_000)
+            setTimeout(() => {
+                setSaveMessage(null)
+            }, 3_000)
         },
         onError: (error: Error) => {
             setSaveMessage(`Error: ${error.message}`)
-            setTimeout(() => setSaveMessage(null), 5_000)
+            setTimeout(() => {
+                setSaveMessage(null)
+            }, 5_000)
         },
     })
 

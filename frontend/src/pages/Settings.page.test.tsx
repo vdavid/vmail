@@ -1,10 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import SettingsPage from './Settings.page'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
 import * as apiModule from '../lib/api'
 import type { UserSettings } from '../lib/api'
+
+import SettingsPage from './Settings.page'
 
 vi.mock('../lib/api', () => ({
     api: {
@@ -52,6 +54,7 @@ describe('SettingsPage', () => {
     }
 
     it('should show loading state initially', () => {
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         vi.mocked(apiModule.api.getSettings).mockImplementation(
             () =>
                 new Promise(() => {
@@ -64,6 +67,7 @@ describe('SettingsPage', () => {
     })
 
     it('should render settings form', async () => {
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         vi.mocked(apiModule.api.getSettings).mockRejectedValue(new Error('Not found'))
 
         renderSettingsPage()
@@ -78,6 +82,7 @@ describe('SettingsPage', () => {
     })
 
     it('should load existing settings', async () => {
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         vi.mocked(apiModule.api.getSettings).mockResolvedValue(mockSettings)
 
         renderSettingsPage()
@@ -92,6 +97,7 @@ describe('SettingsPage', () => {
     })
 
     it('should handle form input changes', async () => {
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         vi.mocked(apiModule.api.getSettings).mockRejectedValue(new Error('Not found'))
 
         const user = userEvent.setup()
@@ -109,7 +115,9 @@ describe('SettingsPage', () => {
     })
 
     it('should submit settings form', async () => {
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         vi.mocked(apiModule.api.getSettings).mockRejectedValue(new Error('Not found'))
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         vi.mocked(apiModule.api.saveSettings).mockResolvedValue()
 
         const user = userEvent.setup()
@@ -132,12 +140,15 @@ describe('SettingsPage', () => {
         await user.click(submitButton)
 
         await waitFor(() => {
+            // eslint-disable-next-line @typescript-eslint/unbound-method
             expect(apiModule.api.saveSettings).toHaveBeenCalled()
         })
     })
 
     it('should show success message after saving', async () => {
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         vi.mocked(apiModule.api.getSettings).mockResolvedValue(mockSettings)
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         vi.mocked(apiModule.api.saveSettings).mockResolvedValue()
 
         const user = userEvent.setup()
@@ -164,7 +175,9 @@ describe('SettingsPage', () => {
     })
 
     it('should show error message on save failure', async () => {
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         vi.mocked(apiModule.api.getSettings).mockResolvedValue(mockSettings)
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         vi.mocked(apiModule.api.saveSettings).mockRejectedValue(new Error('Save failed'))
 
         const user = userEvent.setup()

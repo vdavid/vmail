@@ -1,7 +1,8 @@
-import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../lib/api'
+import { useParams, useNavigate } from 'react-router-dom'
+
 import Message from '../components/Message'
+import { api } from '../lib/api'
 
 export default function ThreadPage() {
     const { threadId } = useParams<{ threadId: string }>()
@@ -13,12 +14,17 @@ export default function ThreadPage() {
         error,
     } = useQuery({
         queryKey: ['thread', threadId],
-        queryFn: () => api.getThread(threadId!),
+        queryFn: () => {
+            if (!threadId) {
+                throw new Error('Thread ID is required')
+            }
+            return api.getThread(threadId)
+        },
         enabled: !!threadId,
     })
 
     const handleBack = () => {
-        navigate('/')
+        void navigate('/')
     }
 
     if (isLoading) {

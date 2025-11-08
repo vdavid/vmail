@@ -1,9 +1,10 @@
+import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { useAuthStore } from '../store/auth.store'
+
 import { api, type AuthStatus } from '../lib/api'
+import { useAuthStore } from '../store/auth.store'
 
 interface AuthWrapperProps {
     children: ReactNode
@@ -15,7 +16,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
     const { data, isLoading, isError } = useQuery<AuthStatus>({
         queryKey: ['authStatus'],
-        queryFn: api.getAuthStatus,
+        queryFn: () => api.getAuthStatus(),
         retry: false,
         refetchOnWindowFocus: false,
     })

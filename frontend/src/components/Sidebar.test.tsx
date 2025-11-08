@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
-import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import Sidebar from './Sidebar'
+import { render, screen, waitFor } from '@testing-library/react'
 import * as React from 'react'
+import { BrowserRouter } from 'react-router-dom'
+import { describe, it, expect } from 'vitest'
+
+import Sidebar from './Sidebar'
 
 const createWrapper = () => {
     const queryClient = new QueryClient({

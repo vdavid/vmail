@@ -30,14 +30,12 @@ const localStorageMock = createLocalStorageMock()
 // Set up localStorage on all possible global objects
 const setLocalStorage = (target: typeof globalThis | Window) => {
     try {
-        if (!target.localStorage) {
-            Object.defineProperty(target, 'localStorage', {
-                value: localStorageMock,
-                writable: true,
-                configurable: true,
-                enumerable: true,
-            })
-        }
+        Object.defineProperty(target, 'localStorage', {
+            value: localStorageMock,
+            writable: true,
+            configurable: true,
+            enumerable: true,
+        })
     } catch {
         // Ignore errors
     }

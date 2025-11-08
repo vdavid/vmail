@@ -1,8 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render } from '@testing-library/react'
 import DOMPurify from 'dompurify'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+import type { Message as MessageType } from '../lib/api'
+
 import Message from './Message'
-import { Message as MessageType } from '../lib/api'
 
 // Mock DOMPurify
 vi.mock('dompurify', () => ({
@@ -38,6 +40,7 @@ describe('Message', () => {
 
         render(<Message message={message} />)
 
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         expect(DOMPurify.sanitize).toHaveBeenCalledWith(
             '<p>Test HTML</p><script>alert("xss")</script>',
         )
@@ -66,6 +69,7 @@ describe('Message', () => {
         const { container } = render(<Message message={message} />)
 
         // Check that the sanitized content is rendered
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         expect(DOMPurify.sanitize).toHaveBeenCalled()
         const messageContent = container.querySelector('.prose')
         expect(messageContent).toBeTruthy()
@@ -120,6 +124,7 @@ describe('Message', () => {
         render(<Message message={message} />)
 
         // DOMPurify should not be called when unsafe_body_html is empty
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         expect(DOMPurify.sanitize).not.toHaveBeenCalled()
     })
 })

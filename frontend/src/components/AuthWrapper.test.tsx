@@ -1,11 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import AuthWrapper from './AuthWrapper'
-import { useAuthStore } from '../store/auth.store'
-import * as apiModule from '../lib/api'
+import { render, screen, waitFor } from '@testing-library/react'
 import * as React from 'react'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+import * as apiModule from '../lib/api'
+import { useAuthStore } from '../store/auth.store'
+
+import AuthWrapper from './AuthWrapper'
 
 vi.mock('../lib/api', () => ({
     api: {
@@ -42,6 +44,7 @@ describe('AuthWrapper', () => {
     }
 
     it('should show loading state initially', () => {
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         vi.mocked(apiModule.api.getAuthStatus).mockImplementation(
             () =>
                 new Promise(() => {
@@ -54,6 +57,7 @@ describe('AuthWrapper', () => {
     })
 
     it('should render children when setup is complete', async () => {
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         vi.mocked(apiModule.api.getAuthStatus).mockResolvedValue({
             isAuthenticated: true,
             isSetupComplete: true,
@@ -67,6 +71,7 @@ describe('AuthWrapper', () => {
     })
 
     it('should redirect to settings when setup is not complete', async () => {
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         vi.mocked(apiModule.api.getAuthStatus).mockResolvedValue({
             isAuthenticated: true,
             isSetupComplete: false,
@@ -80,6 +85,7 @@ describe('AuthWrapper', () => {
     })
 
     it('should set setup to false on API error', async () => {
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         vi.mocked(apiModule.api.getAuthStatus).mockRejectedValue(new Error('API Error'))
 
         renderAuthWrapper(<div>Protected Content</div>)

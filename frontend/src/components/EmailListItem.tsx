@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+
 import type { Thread } from '../lib/api'
 
 interface EmailListItemProps {

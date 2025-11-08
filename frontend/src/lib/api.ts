@@ -77,7 +77,7 @@ export const api = {
         if (!response.ok) {
             throw new Error('Failed to fetch auth status')
         }
-        return response.json()
+        return (await response.json()) as Promise<AuthStatus>
     },
 
     async getSettings(): Promise<UserSettings> {
@@ -88,7 +88,7 @@ export const api = {
         if (!response.ok) {
             throw new Error('Failed to fetch settings')
         }
-        return response.json()
+        return (await response.json()) as Promise<UserSettings>
     },
 
     async saveSettings(settings: UserSettings): Promise<void> {
@@ -120,7 +120,7 @@ export const api = {
                     : 'Failed to fetch folders'
             throw new Error(errorMessage)
         }
-        return response.json()
+        return (await response.json()) as Promise<Folder[]>
     },
 
     async getThreads(folder: string): Promise<Thread[]> {
@@ -134,7 +134,7 @@ export const api = {
         if (!response.ok) {
             throw new Error('Failed to fetch threads')
         }
-        return response.json()
+        return (await response.json()) as Promise<Thread[]>
     },
 
     async getThread(threadId: string): Promise<Thread> {
@@ -145,6 +145,6 @@ export const api = {
         if (!response.ok) {
             throw new Error('Failed to fetch thread')
         }
-        return response.json()
+        return (await response.json()) as Promise<Thread>
     },
 }

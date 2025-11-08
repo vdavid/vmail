@@ -7,5 +7,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>((set) => ({
     isSetupComplete: false,
-    setIsSetupComplete: (isComplete: boolean) => set({ isSetupComplete: isComplete }),
+    setIsSetupComplete: (isComplete: boolean) => {
+        set({ isSetupComplete: isComplete })
+    },
 }))

@@ -1,5 +1,6 @@
-import { Link, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { Link, useLocation } from 'react-router-dom'
+
 import { api } from '../lib/api'
 
 export default function Sidebar() {
@@ -25,11 +26,11 @@ export default function Sidebar() {
                     <div className='px-3 py-2 text-sm text-gray-500'>Loading...</div>
                 ) : error ? (
                     <div className='px-3 py-2'>
-                        <div className='mb-2 text-sm text-red-600'>
-                            {error.message}
-                        </div>
+                        <div className='mb-2 text-sm text-red-600'>{error.message}</div>
                         <button
-                            onClick={() => refetch()}
+                            onClick={() => {
+                                void refetch()
+                            }}
                             disabled={isRefetching}
                             className='rounded-md bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50'
                         >

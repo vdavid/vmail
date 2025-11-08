@@ -1,7 +1,8 @@
-import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../lib/api'
+import { useSearchParams } from 'react-router-dom'
+
 import EmailListItem from '../components/EmailListItem'
+import { api } from '../lib/api'
 import { useUIStore } from '../store/ui.store'
 
 export default function InboxPage() {

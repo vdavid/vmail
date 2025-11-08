@@ -1,12 +1,14 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
+import * as React from 'react'
 import { act } from 'react'
 import { BrowserRouter } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useKeyboardShortcuts } from './useKeyboardShortcuts'
-import { useUIStore } from '../store/ui.store'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
 import * as api from '../lib/api'
-import * as React from 'react'
+import { useUIStore } from '../store/ui.store'
+
+import { useKeyboardShortcuts } from './useKeyboardShortcuts'
 
 // Mock react-router-dom
 const mockNavigate = vi.fn()
@@ -43,6 +45,45 @@ const createWrapper = (queryClient?: QueryClient) => {
     )
 }
 
+type MockThread = {
+    id: string
+    stable_thread_id: string
+    subject: string
+    user_id: string
+}
+
+const setupMockThreadsAndQueryClient = (mockThreads: MockThread[]) => {
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    vi.mocked(api.api.getThreads).mockResolvedValue(mockThreads)
+
+    return new QueryClient({
+        defaultOptions: {
+            queries: { retry: false },
+        },
+    })
+}
+
+const waitForQueryToResolve = async (queryClient: QueryClient, mockThreads: MockThread[]) => {
+    await waitFor(() => {
+        const data = queryClient.getQueryData(['threads', 'INBOX'])
+        expect(data).toEqual(mockThreads)
+    })
+}
+
+const dispatchKeydown = (key: string) => {
+    act(() => {
+        const event = new KeyboardEvent('keydown', { key })
+        window.dispatchEvent(event)
+    })
+}
+
+const selectThread = async () => {
+    dispatchKeydown('j')
+    await waitFor(() => {
+        expect(useUIStore.getState().selectedThreadIndex).toBe(0)
+    })
+}
+
 describe('useKeyboardShortcuts', () => {
     beforeEach(() => {
         vi.clearAllMocks()
@@ -59,9 +100,14 @@ describe('useKeyboardShortcuts', () => {
         const addEventListenerSpy = vi.spyOn(window, 'addEventListener')
         const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
 
-        const { unmount } = renderHook(() => useKeyboardShortcuts(), {
-            wrapper: createWrapper(),
-        })
+        const { unmount } = renderHook(
+            () => {
+                useKeyboardShortcuts()
+            },
+            {
+                wrapper: createWrapper(),
+            },
+        )
 
         expect(addEventListenerSpy).toHaveBeenCalledWith('keydown', expect.any(Function))
 
@@ -75,28 +121,20 @@ describe('useKeyboardShortcuts', () => {
             { id: '1', stable_thread_id: 'thread-1', subject: 'Test 1', user_id: 'user-1' },
             { id: '2', stable_thread_id: 'thread-2', subject: 'Test 2', user_id: 'user-1' },
         ]
-        vi.mocked(api.api.getThreads).mockResolvedValue(mockThreads)
+        const queryClient = setupMockThreadsAndQueryClient(mockThreads)
 
-        const queryClient = new QueryClient({
-            defaultOptions: {
-                queries: { retry: false },
+        renderHook(
+            () => {
+                useKeyboardShortcuts()
             },
-        })
+            {
+                wrapper: createWrapper(queryClient),
+            },
+        )
 
-        renderHook(() => useKeyboardShortcuts(), {
-            wrapper: createWrapper(queryClient),
-        })
+        await waitForQueryToResolve(queryClient, mockThreads)
 
-        // Wait for the query to resolve by checking the query cache
-        await waitFor(() => {
-            const data = queryClient.getQueryData(['threads', 'INBOX'])
-            expect(data).toEqual(mockThreads)
-        })
-
-        await act(async () => {
-            const event = new KeyboardEvent('keydown', { key: 'j' })
-            window.dispatchEvent(event)
-        })
+        dispatchKeydown('j')
 
         await waitFor(() => {
             expect(useUIStore.getState().selectedThreadIndex).toBe(0)
@@ -107,28 +145,20 @@ describe('useKeyboardShortcuts', () => {
         const mockThreads = [
             { id: '1', stable_thread_id: 'thread-1', subject: 'Test 1', user_id: 'user-1' },
         ]
-        vi.mocked(api.api.getThreads).mockResolvedValue(mockThreads)
+        const queryClient = setupMockThreadsAndQueryClient(mockThreads)
 
-        const queryClient = new QueryClient({
-            defaultOptions: {
-                queries: { retry: false },
+        renderHook(
+            () => {
+                useKeyboardShortcuts()
             },
-        })
+            {
+                wrapper: createWrapper(queryClient),
+            },
+        )
 
-        renderHook(() => useKeyboardShortcuts(), {
-            wrapper: createWrapper(queryClient),
-        })
+        await waitForQueryToResolve(queryClient, mockThreads)
 
-        // Wait for the query to resolve
-        await waitFor(() => {
-            const data = queryClient.getQueryData(['threads', 'INBOX'])
-            expect(data).toEqual(mockThreads)
-        })
-
-        await act(async () => {
-            const event = new KeyboardEvent('keydown', { key: 'ArrowDown' })
-            window.dispatchEvent(event)
-        })
+        dispatchKeydown('ArrowDown')
 
         await waitFor(() => {
             expect(useUIStore.getState().selectedThreadIndex).toBe(0)
@@ -138,12 +168,16 @@ describe('useKeyboardShortcuts', () => {
     it('decrements selected index when "k" is pressed', () => {
         useUIStore.setState({ selectedThreadIndex: 1 })
 
-        renderHook(() => useKeyboardShortcuts(), {
-            wrapper: createWrapper(),
-        })
+        renderHook(
+            () => {
+                useKeyboardShortcuts()
+            },
+            {
+                wrapper: createWrapper(),
+            },
+        )
 
-        const event = new KeyboardEvent('keydown', { key: 'k' })
-        window.dispatchEvent(event)
+        dispatchKeydown('k')
 
         expect(useUIStore.getState().selectedThreadIndex).toBe(0)
     })
@@ -151,12 +185,16 @@ describe('useKeyboardShortcuts', () => {
     it('decrements selected index when ArrowUp is pressed', () => {
         useUIStore.setState({ selectedThreadIndex: 1 })
 
-        renderHook(() => useKeyboardShortcuts(), {
-            wrapper: createWrapper(),
-        })
+        renderHook(
+            () => {
+                useKeyboardShortcuts()
+            },
+            {
+                wrapper: createWrapper(),
+            },
+        )
 
-        const event = new KeyboardEvent('keydown', { key: 'ArrowUp' })
-        window.dispatchEvent(event)
+        dispatchKeydown('ArrowUp')
 
         expect(useUIStore.getState().selectedThreadIndex).toBe(0)
     })
@@ -165,41 +203,22 @@ describe('useKeyboardShortcuts', () => {
         const mockThreads = [
             { id: '1', stable_thread_id: 'thread-1', subject: 'Test 1', user_id: 'user-1' },
         ]
-        vi.mocked(api.api.getThreads).mockResolvedValue(mockThreads)
+        const queryClient = setupMockThreadsAndQueryClient(mockThreads)
 
-        const queryClient = new QueryClient({
-            defaultOptions: {
-                queries: { retry: false },
+        renderHook(
+            () => {
+                useKeyboardShortcuts()
             },
-        })
+            {
+                wrapper: createWrapper(queryClient),
+            },
+        )
 
-        renderHook(() => useKeyboardShortcuts(), {
-            wrapper: createWrapper(queryClient),
-        })
+        await waitForQueryToResolve(queryClient, mockThreads)
+        await selectThread()
 
-        // Wait for the query to resolve
-        await waitFor(() => {
-            const data = queryClient.getQueryData(['threads', 'INBOX'])
-            expect(data).toEqual(mockThreads)
-        })
+        dispatchKeydown('o')
 
-        // First select a thread
-        await act(async () => {
-            const downEvent = new KeyboardEvent('keydown', { key: 'j' })
-            window.dispatchEvent(downEvent)
-        })
-
-        await waitFor(() => {
-            expect(useUIStore.getState().selectedThreadIndex).toBe(0)
-        })
-
-        // Then open it
-        await act(async () => {
-            const openEvent = new KeyboardEvent('keydown', { key: 'o' })
-            window.dispatchEvent(openEvent)
-        })
-
-        // Wait for navigation
         await waitFor(() => {
             expect(mockNavigate).toHaveBeenCalledWith('/thread/thread-1')
         })
@@ -209,57 +228,42 @@ describe('useKeyboardShortcuts', () => {
         const mockThreads = [
             { id: '1', stable_thread_id: 'thread-1', subject: 'Test 1', user_id: 'user-1' },
         ]
-        vi.mocked(api.api.getThreads).mockResolvedValue(mockThreads)
+        const queryClient = setupMockThreadsAndQueryClient(mockThreads)
 
-        const queryClient = new QueryClient({
-            defaultOptions: {
-                queries: { retry: false },
+        renderHook(
+            () => {
+                useKeyboardShortcuts()
             },
-        })
+            {
+                wrapper: createWrapper(queryClient),
+            },
+        )
 
-        renderHook(() => useKeyboardShortcuts(), {
-            wrapper: createWrapper(queryClient),
-        })
+        await waitForQueryToResolve(queryClient, mockThreads)
+        await selectThread()
 
-        // Wait for the query to resolve
-        await waitFor(() => {
-            const data = queryClient.getQueryData(['threads', 'INBOX'])
-            expect(data).toEqual(mockThreads)
-        })
+        dispatchKeydown('Enter')
 
-        // First select a thread
-        await act(async () => {
-            const downEvent = new KeyboardEvent('keydown', { key: 'j' })
-            window.dispatchEvent(downEvent)
-        })
-
-        await waitFor(() => {
-            expect(useUIStore.getState().selectedThreadIndex).toBe(0)
-        })
-
-        // Then open it
-        await act(async () => {
-            const enterEvent = new KeyboardEvent('keydown', { key: 'Enter' })
-            window.dispatchEvent(enterEvent)
-        })
-
-        // Wait for navigation
         await waitFor(() => {
             expect(mockNavigate).toHaveBeenCalledWith('/thread/thread-1')
         })
     })
 
     it('does not handle shortcuts when typing in input fields', () => {
-        renderHook(() => useKeyboardShortcuts(), {
-            wrapper: createWrapper(),
-        })
+        renderHook(
+            () => {
+                useKeyboardShortcuts()
+            },
+            {
+                wrapper: createWrapper(),
+            },
+        )
 
         const input = document.createElement('input')
         document.body.appendChild(input)
         input.focus()
 
-        const event = new KeyboardEvent('keydown', { key: 'j' })
-        window.dispatchEvent(event)
+        dispatchKeydown('j')
 
         expect(useUIStore.getState().selectedThreadIndex).toBeNull()
     })

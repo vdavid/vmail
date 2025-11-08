@@ -18,7 +18,9 @@ export default function Header() {
                             type='text'
                             placeholder='Search mail...'
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={(e) => {
+                                setSearchQuery(e.target.value)
+                            }}
                             className='w-full rounded-md border border-gray-300 bg-gray-50 px-4 py-2 pl-10 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
                             aria-label='Search mail'
                         />

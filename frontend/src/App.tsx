@@ -1,10 +1,11 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import Layout from './components/Layout'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+
 import AuthWrapper from './components/AuthWrapper'
+import Layout from './components/Layout'
 import InboxPage from './pages/Inbox.page'
-import ThreadPage from './pages/Thread.page'
 import SettingsPage from './pages/Settings.page'
+import ThreadPage from './pages/Thread.page'
 
 const queryClient = new QueryClient({
     defaultOptions: {

@@ -1,9 +1,10 @@
+import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { useUIStore } from '../store/ui.store'
-import { useQuery } from '@tanstack/react-query'
-import { api } from '../lib/api'
 import { useSearchParams } from 'react-router-dom'
+
+import { api } from '../lib/api'
+import { useUIStore } from '../store/ui.store'
 
 export function useKeyboardShortcuts() {
     const navigate = useNavigate()
@@ -57,7 +58,7 @@ export function useKeyboardShortcuts() {
             if ((event.key === 'o' || event.key === 'Enter') && isInbox) {
                 event.preventDefault()
                 if (selectedThreadIndex !== null && threads && threads[selectedThreadIndex]) {
-                    navigate(`/thread/${threads[selectedThreadIndex].stable_thread_id}`)
+                    void navigate(`/thread/${threads[selectedThreadIndex].stable_thread_id}`)
                     setSelectedThreadIndex(null)
                 }
             }
@@ -65,7 +66,7 @@ export function useKeyboardShortcuts() {
             // u: Go back to inbox from thread view
             if (event.key === 'u' && isThreadView) {
                 event.preventDefault()
-                navigate('/')
+                void navigate('/')
             }
         }
 
