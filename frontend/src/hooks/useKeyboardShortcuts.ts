@@ -19,11 +19,13 @@ export function useKeyboardShortcuts() {
     } = useUIStore()
 
     // Get threads for navigation
-    const { data: threads } = useQuery({
+    const { data: threadsResponse } = useQuery({
         queryKey: ['threads', folder],
         queryFn: () => api.getThreads(folder),
         enabled: location.pathname === '/',
     })
+
+    const threads = threadsResponse?.threads ?? null
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -57,8 +59,15 @@ export function useKeyboardShortcuts() {
             // o or Enter: Open selected thread
             if ((event.key === 'o' || event.key === 'Enter') && isInbox) {
                 event.preventDefault()
-                if (selectedThreadIndex !== null && threads && threads[selectedThreadIndex]) {
-                    void navigate(`/thread/${threads[selectedThreadIndex].stable_thread_id}`)
+                if (
+                    selectedThreadIndex !== null &&
+                    threads &&
+                    selectedThreadIndex >= 0 &&
+                    selectedThreadIndex < threads.length &&
+                    threads[selectedThreadIndex]
+                ) {
+                    const selectedThread = threads[selectedThreadIndex]
+                    void navigate(`/thread/${selectedThread.stable_thread_id}`)
                     setSelectedThreadIndex(null)
                 }
             }
