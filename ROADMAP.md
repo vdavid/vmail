@@ -235,7 +235,7 @@ This plan uses **Playwright** to test the entire read-only flow, assuming the ba
 
 ### **Front end cleanup**
 
-* [ ] Do the stuff from frontend/README.md and get rid of that file.
+* [x] Do the stuff from frontend/README.md and get rid of that file.
 
 ## Milestone 3: Actions
 
@@ -756,22 +756,22 @@ This makes the app usable with large inboxes.
 
 #### **Backend**
 
-* [ ] **Update <code>GET /api/v1/threads</code> handler:**
+* [x] **Update <code>GET /api/v1/threads</code> handler:**
     * It *must* read `page` and `limit` query params (e.g., `?page=2&limit=50`). Default to `page=1, limit=100`.
     * Update your DB query for threads to use `LIMIT $1 OFFSET $2`.
     * Run a *second* DB query: `SELECT COUNT(*) FROM ...` with the same `WHERE` clause (to get the total count).
     * Change the API response to a new object: `{"threads": [...], "pagination": {"total_count": 1234, "page": 2, "per_page": 50}}`
-* [ ] **Update <code>GET /api/v1/search</code> handler:**
+* [x] **Update <code>GET /api/v1/search</code> handler:**
     * Apply the exact same `page` and `limit` logic.
     * Return the same `{"threads": [...], "pagination": {...}}` object.
 
 #### **Frontend**
 
-* [ ] **Create <code>EmailListPagination.tsx</code> component:**
+* [x] **Create <code>EmailListPagination.tsx</code> component:**
     * This component receives the `pagination` object as a prop.
     * It calculates `totalPages = total_count / per_page`.
     * It renders "Page [page] of [totalPages]" and "Next >" / "&lt; Prev" links.
-* [ ] **Update <code>Inbox.page.tsx</code> and <code>Search.page.tsx</code>:**
+* [x] **Update <code>Inbox.page.tsx</code> and <code>Search.page.tsx</code>:**
     * Read the `page` from `useSearchParams`.
     * Pass the `page` to the `useQuery` hook to fetch the correct data.
     * Get the `pagination` object from the API response.
@@ -781,8 +781,8 @@ This makes the app usable with large inboxes.
 
 #### **Testing**
 
-* [ ] **Backend Unit:** Test the `GET /api/v1/threads` handler. Assert `?page=2&limit=50` results in `LIMIT 50 OFFSET 50` in the SQL query. Assert the `pagination` object in the JSON response is correct.
-* [ ] **Frontend Integration:**
+* [x] **Backend Unit:** Test the `GET /api/v1/threads` handler. Assert `?page=2&limit=50` results in `LIMIT 50 OFFSET 50` in the SQL query. Assert the `pagination` object in the JSON response is correct.
+* [x] **Frontend Integration:**
     * Mock the API to return `{"threads": [...], "pagination": {"total_count": 300, "page": 1, "per_page": 100}}`.
     * **Assert** the pagination component renders "Page 1 of 3".
     * Mock `Maps`. Click the "Next" button.

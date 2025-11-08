@@ -101,6 +101,23 @@ func GetThreadsForFolder(ctx context.Context, pool *pgxpool.Pool, userID, folder
 	return threads, nil
 }
 
+// GetThreadCountForFolder returns the total count of threads for a specific folder.
+func GetThreadCountForFolder(ctx context.Context, pool *pgxpool.Pool, userID, folderName string) (int, error) {
+	var count int
+	err := pool.QueryRow(ctx, `
+        SELECT COUNT(DISTINCT t.id)
+        FROM threads t
+        INNER JOIN messages m ON t.id = m.thread_id
+        WHERE t.user_id = $1 AND m.imap_folder_name = $2
+    `, userID, folderName).Scan(&count)
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to get thread count: %w", err)
+	}
+
+	return count, nil
+}
+
 // GetFolderSyncTimestamp returns the timestamp when we last synced the given folder.
 // Returns nil if we've never synced it.
 func GetFolderSyncTimestamp(ctx context.Context, pool *pgxpool.Pool, userID, folderName string) (*time.Time, error) {

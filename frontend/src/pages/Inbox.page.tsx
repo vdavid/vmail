@@ -2,21 +2,23 @@ import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 
 import EmailListItem from '../components/EmailListItem'
+import EmailListPagination from '../components/EmailListPagination'
 import { api } from '../lib/api'
 import { useUIStore } from '../store/ui.store'
 
 export default function InboxPage() {
     const [searchParams] = useSearchParams()
     const folder = searchParams.get('folder') || 'INBOX'
+    const page = parseInt(searchParams.get('page') || '1', 10)
     const selectedThreadIndex = useUIStore((state) => state.selectedThreadIndex)
 
     const {
-        data: threads,
+        data: threadsResponse,
         isLoading,
         error,
     } = useQuery({
-        queryKey: ['threads', folder],
-        queryFn: () => api.getThreads(folder),
+        queryKey: ['threads', folder, page],
+        queryFn: () => api.getThreads(folder, page),
     })
 
     if (isLoading) {
@@ -49,9 +51,9 @@ export default function InboxPage() {
                 </h1>
             </div>
             <div className='flex-1 overflow-y-auto'>
-                {threads && threads.length > 0 ? (
+                {threadsResponse && threadsResponse.threads.length > 0 ? (
                     <div>
-                        {threads.map((thread, index) => (
+                        {threadsResponse.threads.map((thread, index) => (
                             <EmailListItem
                                 key={thread.id}
                                 thread={thread}
@@ -63,6 +65,9 @@ export default function InboxPage() {
                     <div className='p-6 text-center text-gray-500'>No threads found</div>
                 )}
             </div>
+            {threadsResponse?.pagination && (
+                <EmailListPagination pagination={threadsResponse.pagination} />
+            )}
         </div>
     )
 }

@@ -62,6 +62,17 @@ export interface Thread {
     messages?: Message[]
 }
 
+export interface Pagination {
+    total_count: number
+    page: number
+    per_page: number
+}
+
+export interface ThreadsResponse {
+    threads: Thread[]
+    pagination: Pagination
+}
+
 function getAuthHeaders() {
     return {
         Authorization: 'Bearer token',
@@ -123,18 +134,22 @@ export const api = {
         return (await response.json()) as Promise<Folder[]>
     },
 
-    async getThreads(folder: string): Promise<Thread[]> {
-        const response = await fetch(
-            `${API_BASE_URL}/threads?folder=${encodeURIComponent(folder)}`,
-            {
-                credentials: 'include',
-                headers: getAuthHeaders(),
-            },
-        )
+    async getThreads(folder: string, page: number = 1, limit?: number): Promise<ThreadsResponse> {
+        const params = new URLSearchParams({
+            folder,
+            page: page.toString(),
+        })
+        if (limit !== undefined) {
+            params.append('limit', limit.toString())
+        }
+        const response = await fetch(`${API_BASE_URL}/threads?${params.toString()}`, {
+            credentials: 'include',
+            headers: getAuthHeaders(),
+        })
         if (!response.ok) {
             throw new Error('Failed to fetch threads')
         }
-        return (await response.json()) as Promise<Thread[]>
+        return (await response.json()) as Promise<ThreadsResponse>
     },
 
     async getThread(threadId: string): Promise<Thread> {

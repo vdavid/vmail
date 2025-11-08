@@ -8,9 +8,11 @@ export const handlers = [
     http.get('/api/v1/threads', ({ request }) => {
         const url = new URL(request.url)
         const folder = url.searchParams.get('folder')
+        const page = parseInt(url.searchParams.get('page') || '1', 10)
+        const limit = parseInt(url.searchParams.get('limit') || '100', 10)
 
         if (folder === 'INBOX') {
-            return HttpResponse.json([
+            const threads = [
                 {
                     id: '1',
                     stable_thread_id: 'thread-1',
@@ -63,10 +65,31 @@ export const handlers = [
                         },
                     ],
                 },
-            ])
+            ]
+
+            // Paginate the threads
+            const startIndex = (page - 1) * limit
+            const endIndex = startIndex + limit
+            const paginatedThreads = threads.slice(startIndex, endIndex)
+
+            return HttpResponse.json({
+                threads: paginatedThreads,
+                pagination: {
+                    total_count: threads.length,
+                    page: page,
+                    per_page: limit,
+                },
+            })
         }
 
-        return HttpResponse.json([])
+        return HttpResponse.json({
+            threads: [],
+            pagination: {
+                total_count: 0,
+                page: 1,
+                per_page: limit,
+            },
+        })
     }),
 
     http.get('/api/v1/thread/:threadId', ({ params }) => {

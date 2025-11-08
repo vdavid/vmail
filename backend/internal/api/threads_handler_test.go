@@ -96,13 +96,23 @@ func TestThreadsHandler_GetThreads(t *testing.T) {
 			t.Errorf("Expected status 200, got %d", rr.Code)
 		}
 
-		var threads []*models.Thread
-		if err := json.NewDecoder(rr.Body).Decode(&threads); err != nil {
+		var response struct {
+			Threads    []*models.Thread `json:"threads"`
+			Pagination struct {
+				TotalCount int `json:"total_count"`
+				Page       int `json:"page"`
+				PerPage    int `json:"per_page"`
+			} `json:"pagination"`
+		}
+		if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if len(threads) != 0 {
-			t.Errorf("Expected empty threads list, got %d threads", len(threads))
+		if len(response.Threads) != 0 {
+			t.Errorf("Expected empty threads list, got %d threads", len(response.Threads))
+		}
+		if response.Pagination.TotalCount != 0 {
+			t.Errorf("Expected total_count 0, got %d", response.Pagination.TotalCount)
 		}
 	})
 
@@ -173,17 +183,27 @@ func TestThreadsHandler_GetThreads(t *testing.T) {
 			t.Errorf("Expected status 200, got %d", rr.Code)
 		}
 
-		var threads []*models.Thread
-		if err := json.NewDecoder(rr.Body).Decode(&threads); err != nil {
+		var response struct {
+			Threads    []*models.Thread `json:"threads"`
+			Pagination struct {
+				TotalCount int `json:"total_count"`
+				Page       int `json:"page"`
+				PerPage    int `json:"per_page"`
+			} `json:"pagination"`
+		}
+		if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if len(threads) != 1 {
-			t.Errorf("Expected 1 thread, got %d", len(threads))
+		if len(response.Threads) != 1 {
+			t.Errorf("Expected 1 thread, got %d", len(response.Threads))
 		}
 
-		if threads[0].StableThreadID != "test-thread-123" {
-			t.Errorf("Expected thread ID 'test-thread-123', got %s", threads[0].StableThreadID)
+		if response.Threads[0].StableThreadID != "test-thread-123" {
+			t.Errorf("Expected thread ID 'test-thread-123', got %s", response.Threads[0].StableThreadID)
+		}
+		if response.Pagination.TotalCount != 1 {
+			t.Errorf("Expected total_count 1, got %d", response.Pagination.TotalCount)
 		}
 	})
 
@@ -247,7 +267,7 @@ func TestThreadsHandler_GetThreads(t *testing.T) {
 			}
 		}
 
-		req := httptest.NewRequest("GET", "/api/v1/threads?folder=INBOX&limit=2&offset=0", nil)
+		req := httptest.NewRequest("GET", "/api/v1/threads?folder=INBOX&page=1&limit=2", nil)
 		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
 		req = req.WithContext(reqCtx)
 
@@ -258,13 +278,63 @@ func TestThreadsHandler_GetThreads(t *testing.T) {
 			t.Errorf("Expected status 200, got %d", rr.Code)
 		}
 
-		var threads []*models.Thread
-		if err := json.NewDecoder(rr.Body).Decode(&threads); err != nil {
+		var response struct {
+			Threads    []*models.Thread `json:"threads"`
+			Pagination struct {
+				TotalCount int `json:"total_count"`
+				Page       int `json:"page"`
+				PerPage    int `json:"per_page"`
+			} `json:"pagination"`
+		}
+		if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if len(threads) > 2 {
-			t.Errorf("Expected at most 2 threads with limit, got %d", len(threads))
+		if len(response.Threads) > 2 {
+			t.Errorf("Expected at most 2 threads with limit, got %d", len(response.Threads))
+		}
+		if response.Pagination.Page != 1 {
+			t.Errorf("Expected page 1, got %d", response.Pagination.Page)
+		}
+		if response.Pagination.PerPage != 2 {
+			t.Errorf("Expected per_page 2, got %d", response.Pagination.PerPage)
+		}
+		if response.Pagination.TotalCount != 3 {
+			t.Errorf("Expected total_count 3, got %d", response.Pagination.TotalCount)
+		}
+
+		// Test page 2
+		req2 := httptest.NewRequest("GET", "/api/v1/threads?folder=INBOX&page=2&limit=2", nil)
+		req2Ctx := context.WithValue(req2.Context(), auth.UserEmailKey, email)
+		req2 = req2.WithContext(req2Ctx)
+
+		rr2 := httptest.NewRecorder()
+		handler.GetThreads(rr2, req2)
+
+		if rr2.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", rr2.Code)
+		}
+
+		var response2 struct {
+			Threads    []*models.Thread `json:"threads"`
+			Pagination struct {
+				TotalCount int `json:"total_count"`
+				Page       int `json:"page"`
+				PerPage    int `json:"per_page"`
+			} `json:"pagination"`
+		}
+		if err := json.NewDecoder(rr2.Body).Decode(&response2); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+
+		if len(response2.Threads) > 1 {
+			t.Errorf("Expected at most 1 thread on page 2, got %d", len(response2.Threads))
+		}
+		if response2.Pagination.Page != 2 {
+			t.Errorf("Expected page 2, got %d", response2.Pagination.Page)
+		}
+		if response2.Pagination.TotalCount != 3 {
+			t.Errorf("Expected total_count 3, got %d", response2.Pagination.TotalCount)
 		}
 	})
 }

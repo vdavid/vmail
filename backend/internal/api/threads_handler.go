@@ -12,6 +12,7 @@ import (
 	"github.com/vdavid/vmail/backend/internal/crypto"
 	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/imap"
+	"github.com/vdavid/vmail/backend/internal/models"
 )
 
 type ThreadsHandler struct {
@@ -44,18 +45,19 @@ func (h *ThreadsHandler) GetThreads(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get pagination params
+	page := 1
 	limit := 100
-	offset := 0
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if parsed, err := strconv.Atoi(pageStr); err == nil && parsed > 0 {
+			page = parsed
+		}
+	}
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
 			limit = parsed
 		}
 	}
-	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
-		if parsed, err := strconv.Atoi(offsetStr); err == nil && parsed >= 0 {
-			offset = parsed
-		}
-	}
+	offset := (page - 1) * limit
 
 	// Check if we should sync
 	shouldSync, err := h.imapService.ShouldSyncFolder(ctx, userID, folder)
@@ -81,8 +83,31 @@ func (h *ThreadsHandler) GetThreads(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get total count for pagination
+	totalCount, err := db.GetThreadCountForFolder(ctx, h.pool, userID, folder)
+	if err != nil {
+		log.Printf("ThreadsHandler: Failed to get thread count: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Build pagination response
+	response := struct {
+		Threads    []*models.Thread `json:"threads"`
+		Pagination struct {
+			TotalCount int `json:"total_count"`
+			Page       int `json:"page"`
+			PerPage    int `json:"per_page"`
+		} `json:"pagination"`
+	}{
+		Threads: threads,
+	}
+	response.Pagination.TotalCount = totalCount
+	response.Pagination.Page = page
+	response.Pagination.PerPage = limit
+
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(threads); err != nil {
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("ThreadsHandler: Failed to encode response: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
