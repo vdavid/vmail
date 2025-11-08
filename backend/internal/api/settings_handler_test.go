@@ -111,6 +111,12 @@ func TestSettingsHandler_GetSettings(t *testing.T) {
 		if response.UndoSendDelaySeconds != 30 {
 			t.Errorf("Expected UndoSendDelaySeconds 30, got %d", response.UndoSendDelaySeconds)
 		}
+		if !response.IMAPPasswordSet {
+			t.Error("Expected IMAPPasswordSet to be true")
+		}
+		if !response.SMTPPasswordSet {
+			t.Error("Expected SMTPPasswordSet to be true")
+		}
 	})
 
 	t.Run("returns 401 when no user email in context", func(t *testing.T) {
@@ -272,6 +278,114 @@ func TestSettingsHandler_PostSettings(t *testing.T) {
 
 		if rr.Code != http.StatusUnauthorized {
 			t.Errorf("Expected status 401, got %d", rr.Code)
+		}
+	})
+
+	t.Run("updates settings without passwords when passwords are empty", func(t *testing.T) {
+		email := "updatewithoutpass@example.com"
+
+		ctx := context.Background()
+		userID, _ := db.GetOrCreateUser(ctx, pool, email)
+
+		encryptedIMAPPassword, _ := encryptor.Encrypt("original_imap_pass")
+		encryptedSMTPPassword, _ := encryptor.Encrypt("original_smtp_pass")
+
+		initialSettings := &models.UserSettings{
+			UserID:                   userID,
+			UndoSendDelaySeconds:     20,
+			PaginationThreadsPerPage: 100,
+			IMAPServerHostname:       "old.imap.com",
+			IMAPUsername:             "old_user",
+			EncryptedIMAPPassword:    encryptedIMAPPassword,
+			SMTPServerHostname:       "old.smtp.com",
+			SMTPUsername:             "old_user",
+			EncryptedSMTPPassword:    encryptedSMTPPassword,
+			ArchiveFolderName:        "Archive",
+			SentFolderName:           "Sent",
+			DraftsFolderName:         "Drafts",
+			TrashFolderName:          "Trash",
+			SpamFolderName:           "Spam",
+		}
+		err := db.SaveUserSettings(ctx, pool, initialSettings)
+		if err != nil {
+			t.Fatalf("Failed to save initial settings: %v", err)
+		}
+
+		// Update settings without providing passwords
+		reqBody := models.UserSettingsRequest{
+			UndoSendDelaySeconds:     40,
+			PaginationThreadsPerPage: 200,
+			IMAPServerHostname:       "new.imap.com",
+			IMAPUsername:             "new_user",
+			IMAPPassword:             "", // Empty password
+			SMTPServerHostname:       "new.smtp.com",
+			SMTPUsername:             "new_user",
+			SMTPPassword:             "", // Empty password
+			ArchiveFolderName:        "Archive",
+			SentFolderName:           "Sent",
+			DraftsFolderName:         "Drafts",
+			TrashFolderName:          "Trash",
+			SpamFolderName:           "Spam",
+		}
+
+		body, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest("POST", "/api/v1/settings", bytes.NewReader(body))
+		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
+		req = req.WithContext(reqCtx)
+
+		rr := httptest.NewRecorder()
+		handler.PostSettings(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", rr.Code)
+		}
+
+		updatedSettings, _ := db.GetUserSettings(context.Background(), pool, userID)
+		if updatedSettings.IMAPServerHostname != "new.imap.com" {
+			t.Error("Settings were not updated")
+		}
+
+		// Verify passwords were preserved
+		decryptedIMAPPassword, _ := encryptor.Decrypt(updatedSettings.EncryptedIMAPPassword)
+		if decryptedIMAPPassword != "original_imap_pass" {
+			t.Error("IMAP password should have been preserved but was changed")
+		}
+
+		decryptedSMTPPassword, _ := encryptor.Decrypt(updatedSettings.EncryptedSMTPPassword)
+		if decryptedSMTPPassword != "original_smtp_pass" {
+			t.Error("SMTP password should have been preserved but was changed")
+		}
+	})
+
+	t.Run("returns 400 when passwords are empty for new user", func(t *testing.T) {
+		email := "newuser@example.com"
+
+		reqBody := models.UserSettingsRequest{
+			UndoSendDelaySeconds:     25,
+			PaginationThreadsPerPage: 75,
+			IMAPServerHostname:       "imap.new.com",
+			IMAPUsername:             "new-user",
+			IMAPPassword:             "", // Empty password for new user
+			SMTPServerHostname:       "smtp.new.com",
+			SMTPUsername:             "new-user",
+			SMTPPassword:             "", // Empty password for new user
+			ArchiveFolderName:        "Archive",
+			SentFolderName:           "Sent",
+			DraftsFolderName:         "Drafts",
+			TrashFolderName:          "Trash",
+			SpamFolderName:           "Spam",
+		}
+
+		body, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest("POST", "/api/v1/settings", bytes.NewReader(body))
+		ctx := context.WithValue(req.Context(), auth.UserEmailKey, email)
+		req = req.WithContext(ctx)
+
+		rr := httptest.NewRecorder()
+		handler.PostSettings(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("Expected status 400 for empty passwords on new user, got %d", rr.Code)
 		}
 	})
 }

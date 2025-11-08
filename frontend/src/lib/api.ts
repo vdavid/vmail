@@ -9,9 +9,11 @@ export interface UserSettings {
     imap_server_hostname: string
     imap_username: string
     imap_password: string
+    imap_password_set?: boolean
     smtp_server_hostname: string
     smtp_username: string
     smtp_password: string
+    smtp_password_set?: boolean
     archive_folder_name: string
     sent_folder_name: string
     drafts_folder_name: string
@@ -69,7 +71,7 @@ export interface Pagination {
 }
 
 export interface ThreadsResponse {
-    threads: Thread[]
+    threads: Thread[] | null
     pagination: Pagination
 }
 

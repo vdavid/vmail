@@ -51,7 +51,9 @@ export default function InboxPage() {
                 </h1>
             </div>
             <div className='flex-1 overflow-y-auto'>
-                {threadsResponse && threadsResponse.threads.length > 0 ? (
+                {threadsResponse &&
+                threadsResponse.threads &&
+                threadsResponse.threads.length > 0 ? (
                     <div>
                         {threadsResponse.threads.map((thread, index) => (
                             <EmailListItem

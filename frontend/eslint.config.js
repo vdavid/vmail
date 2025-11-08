@@ -86,11 +86,8 @@ export default [
             '@typescript-eslint/require-await': 'error',
             '@typescript-eslint/no-explicit-any': 'error',
             'no-console': 'warn',
-            quotes: ['error', 'single'],
-            'jsx-quotes': ['error', 'prefer-single'],
-            indent: ['error', 4],
-            semi: ['error', 'never'],
-            'comma-dangle': ['error', 'always-multiline'],
+            // Formatting rules are handled by Prettier - removed to avoid conflicts
+            // quotes, jsx-quotes, indent, semi, and comma-dangle are all handled by Prettier
             'import/order': [
                 'error',
                 {

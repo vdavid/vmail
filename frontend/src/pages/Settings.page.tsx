@@ -158,10 +158,19 @@ export default function SettingsPage() {
                                 name='imap_password'
                                 value={formData.imap_password}
                                 onChange={handleChange}
-                                required
-                                placeholder='Enter password'
+                                placeholder={
+                                    formData.imap_password_set
+                                        ? 'Password is set (leave empty to keep current)'
+                                        : 'Enter password'
+                                }
                                 className='mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
                             />
+                            {formData.imap_password_set && (
+                                <p className='mt-1 text-sm text-gray-500'>
+                                    Password is currently set. Leave empty to keep the existing
+                                    password.
+                                </p>
+                            )}
                         </div>
                     </div>
                 </section>
@@ -218,10 +227,19 @@ export default function SettingsPage() {
                                 name='smtp_password'
                                 value={formData.smtp_password}
                                 onChange={handleChange}
-                                required
-                                placeholder='Enter password'
+                                placeholder={
+                                    formData.smtp_password_set
+                                        ? 'Password is set (leave empty to keep current)'
+                                        : 'Enter password'
+                                }
                                 className='mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
                             />
+                            {formData.smtp_password_set && (
+                                <p className='mt-1 text-sm text-gray-500'>
+                                    Password is currently set. Leave empty to keep the existing
+                                    password.
+                                </p>
+                            )}
                         </div>
                     </div>
                 </section>
@@ -352,7 +370,7 @@ export default function SettingsPage() {
                                 name='pagination_threads_per_page'
                                 value={formData.pagination_threads_per_page}
                                 onChange={handleChange}
-                                min='10'
+                                min='5'
                                 max='200'
                                 required
                                 className='mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'

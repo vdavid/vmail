@@ -50,8 +50,10 @@ func (h *SettingsHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 		PaginationThreadsPerPage: settings.PaginationThreadsPerPage,
 		IMAPServerHostname:       settings.IMAPServerHostname,
 		IMAPUsername:             settings.IMAPUsername,
+		IMAPPasswordSet:          len(settings.EncryptedIMAPPassword) > 0,
 		SMTPServerHostname:       settings.SMTPServerHostname,
 		SMTPUsername:             settings.SMTPUsername,
+		SMTPPasswordSet:          len(settings.EncryptedSMTPPassword) > 0,
 		ArchiveFolderName:        settings.ArchiveFolderName,
 		SentFolderName:           settings.SentFolderName,
 		DraftsFolderName:         settings.DraftsFolderName,
@@ -88,18 +90,53 @@ func (h *SettingsHandler) PostSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	encryptedIMAPPassword, err := h.encryptor.Encrypt(req.IMAPPassword)
-	if err != nil {
-		log.Printf("SettingsHandler: Failed to encrypt IMAP password: %v", err)
+	// Get existing settings to preserve passwords if not provided
+	existingSettings, err := db.GetUserSettings(ctx, h.pool, userID)
+	var encryptedIMAPPassword []byte
+	var encryptedSMTPPassword []byte
+
+	if err != nil && !errors.Is(err, db.ErrUserSettingsNotFound) {
+		log.Printf("SettingsHandler: Failed to get existing settings: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	encryptedSMTPPassword, err := h.encryptor.Encrypt(req.SMTPPassword)
-	if err != nil {
-		log.Printf("SettingsHandler: Failed to encrypt SMTP password: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
+	// Handle IMAP password: use existing if not provided, encrypt new one if provided
+	if req.IMAPPassword == "" {
+		if existingSettings != nil {
+			encryptedIMAPPassword = existingSettings.EncryptedIMAPPassword
+		} else {
+			// First time setup requires password
+			http.Error(w, "IMAP password is required for initial setup", http.StatusBadRequest)
+			return
+		}
+	} else {
+		var err error
+		encryptedIMAPPassword, err = h.encryptor.Encrypt(req.IMAPPassword)
+		if err != nil {
+			log.Printf("SettingsHandler: Failed to encrypt IMAP password: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Handle SMTP password: use existing if not provided, encrypt new one if provided
+	if req.SMTPPassword == "" {
+		if existingSettings != nil {
+			encryptedSMTPPassword = existingSettings.EncryptedSMTPPassword
+		} else {
+			// First time setup requires password
+			http.Error(w, "SMTP password is required for initial setup", http.StatusBadRequest)
+			return
+		}
+	} else {
+		var err error
+		encryptedSMTPPassword, err = h.encryptor.Encrypt(req.SMTPPassword)
+		if err != nil {
+			log.Printf("SettingsHandler: Failed to encrypt SMTP password: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	settings := &models.UserSettings{
@@ -134,23 +171,19 @@ func (h *SettingsHandler) PostSettings(w http.ResponseWriter, r *http.Request) {
 
 func (h *SettingsHandler) validateSettingsRequest(req *models.UserSettingsRequest) error {
 	if req.IMAPServerHostname == "" {
-		return http.ErrAbortHandler
+		return errors.New("IMAP server hostname is required")
 	}
 	if req.IMAPUsername == "" {
-		return http.ErrAbortHandler
+		return errors.New("IMAP username is required")
 	}
-	if req.IMAPPassword == "" {
-		return http.ErrAbortHandler
-	}
+	// Password validation removed - passwords are optional on update
 	if req.SMTPServerHostname == "" {
-		return http.ErrAbortHandler
+		return errors.New("SMTP server hostname is required")
 	}
 	if req.SMTPUsername == "" {
-		return http.ErrAbortHandler
+		return errors.New("SMTP username is required")
 	}
-	if req.SMTPPassword == "" {
-		return http.ErrAbortHandler
-	}
+	// Password validation removed - passwords are optional on update
 	return nil
 }
 
