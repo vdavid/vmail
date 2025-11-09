@@ -6,21 +6,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/vdavid/vmail/backend/internal/crypto"
 	"github.com/vdavid/vmail/backend/internal/db"
+	"github.com/vdavid/vmail/backend/internal/testutil"
 )
 
 // TestShouldSyncFolder tests the cache TTL logic using a real database.
 // This is an integration test that verifies the ShouldSyncFolder logic works correctly.
 func TestShouldSyncFolder(t *testing.T) {
 	// Setup: Use the test database (similar to other test files)
-	pool := setupTestPool(t)
-	if pool == nil {
-		return
-	}
+	pool := testutil.NewTestDB(t)
 	defer pool.Close()
-	defer cleanupTestPool(t, pool)
 
 	// Ensure the folder_sync_timestamps table exists (run migration if needed)
 	ctx := context.Background()
@@ -91,37 +87,6 @@ func TestShouldSyncFolder(t *testing.T) {
 			t.Error("Expected ShouldSyncFolder to return true when cache is stale (older than 5 minutes)")
 		}
 	})
-}
-
-// setupTestPool is a helper function to set up a test database pool.
-// Uses the same pattern as the api package tests.
-func setupTestPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-
-	ctx := context.Background()
-
-	connString := "postgres://vmail:vmail@localhost:5432/vmail_test?sslmode=disable"
-
-	pool, err := pgxpool.New(ctx, connString)
-	if err != nil {
-		t.Skipf("Skipping test: could not connect to test database: %v", err)
-		return nil
-	}
-
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		t.Skipf("Skipping test: could not ping test database: %v", err)
-		return nil
-	}
-
-	return pool
-}
-
-func cleanupTestPool(t *testing.T, pool *pgxpool.Pool) {
-	t.Helper()
-
-	ctx := context.Background()
-	_, _ = pool.Exec(ctx, "TRUNCATE users CASCADE")
 }
 
 func getTestEncryptor(t *testing.T) *crypto.Encryptor {

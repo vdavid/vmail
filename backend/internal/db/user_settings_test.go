@@ -6,46 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/vdavid/vmail/backend/internal/models"
+	"github.com/vdavid/vmail/backend/internal/testutil"
 )
 
-func setupTestDB(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-
-	ctx := context.Background()
-
-	connString := "postgres://vmail:vmail@localhost:5432/vmail_test?sslmode=disable"
-
-	pool, err := pgxpool.New(ctx, connString)
-	if err != nil {
-		t.Skipf("Skipping test: could not connect to test database: %v", err)
-		return nil
-	}
-
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		t.Skipf("Skipping test: could not ping test database: %v", err)
-		return nil
-	}
-
-	return pool
-}
-
-func cleanupTestDB(t *testing.T, pool *pgxpool.Pool) {
-	t.Helper()
-
-	ctx := context.Background()
-	_, _ = pool.Exec(ctx, "TRUNCATE users CASCADE")
-}
-
 func TestGetOrCreateUser(t *testing.T) {
-	pool := setupTestDB(t)
-	if pool == nil {
-		return
-	}
+	pool := testutil.NewTestDB(t)
 	defer pool.Close()
-	defer cleanupTestDB(t, pool)
 
 	ctx := context.Background()
 
@@ -82,12 +49,8 @@ func TestGetOrCreateUser(t *testing.T) {
 }
 
 func TestUserSettingsExist(t *testing.T) {
-	pool := setupTestDB(t)
-	if pool == nil {
-		return
-	}
+	pool := testutil.NewTestDB(t)
 	defer pool.Close()
-	defer cleanupTestDB(t, pool)
 
 	ctx := context.Background()
 
@@ -143,12 +106,8 @@ func TestUserSettingsExist(t *testing.T) {
 }
 
 func TestSaveAndGetUserSettings(t *testing.T) {
-	pool := setupTestDB(t)
-	if pool == nil {
-		return
-	}
+	pool := testutil.NewTestDB(t)
 	defer pool.Close()
-	defer cleanupTestDB(t, pool)
 
 	ctx := context.Background()
 
@@ -245,12 +204,8 @@ func TestSaveAndGetUserSettings(t *testing.T) {
 }
 
 func TestSaveUserSettingsUpdatesTimestamp(t *testing.T) {
-	pool := setupTestDB(t)
-	if pool == nil {
-		return
-	}
+	pool := testutil.NewTestDB(t)
 	defer pool.Close()
-	defer cleanupTestDB(t, pool)
 
 	ctx := context.Background()
 

@@ -7,15 +7,12 @@ import (
 	"time"
 
 	"github.com/vdavid/vmail/backend/internal/models"
+	"github.com/vdavid/vmail/backend/internal/testutil"
 )
 
 func TestSaveAndGetMessage(t *testing.T) {
-	pool := setupTestDB(t)
-	if pool == nil {
-		return
-	}
+	pool := testutil.NewTestDB(t)
 	defer pool.Close()
-	defer cleanupTestDB(t, pool)
 
 	ctx := context.Background()
 
@@ -121,12 +118,8 @@ func TestSaveAndGetMessage(t *testing.T) {
 }
 
 func TestGetMessagesForThread(t *testing.T) {
-	pool := setupTestDB(t)
-	if pool == nil {
-		return
-	}
+	pool := testutil.NewTestDB(t)
 	defer pool.Close()
-	defer cleanupTestDB(t, pool)
 
 	ctx := context.Background()
 
@@ -188,12 +181,8 @@ func TestGetMessagesForThread(t *testing.T) {
 }
 
 func TestSaveAndGetAttachment(t *testing.T) {
-	pool := setupTestDB(t)
-	if pool == nil {
-		return
-	}
+	pool := testutil.NewTestDB(t)
 	defer pool.Close()
-	defer cleanupTestDB(t, pool)
 
 	ctx := context.Background()
 

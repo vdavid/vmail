@@ -7,48 +7,15 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/vdavid/vmail/backend/internal/auth"
 	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/models"
+	"github.com/vdavid/vmail/backend/internal/testutil"
 )
 
-func setupTestPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-
-	ctx := context.Background()
-
-	connString := "postgres://vmail:vmail@localhost:5432/vmail_test?sslmode=disable"
-
-	pool, err := pgxpool.New(ctx, connString)
-	if err != nil {
-		t.Skipf("Skipping test: could not connect to test database: %v", err)
-		return nil
-	}
-
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		t.Skipf("Skipping test: could not ping test database: %v", err)
-		return nil
-	}
-
-	return pool
-}
-
-func cleanupTestPool(t *testing.T, pool *pgxpool.Pool) {
-	t.Helper()
-
-	ctx := context.Background()
-	_, _ = pool.Exec(ctx, "TRUNCATE users CASCADE")
-}
-
 func TestAuthHandler_GetAuthStatus(t *testing.T) {
-	pool := setupTestPool(t)
-	if pool == nil {
-		return
-	}
+	pool := testutil.NewTestDB(t)
 	defer pool.Close()
-	defer cleanupTestPool(t, pool)
 
 	handler := NewAuthHandler(pool)
 

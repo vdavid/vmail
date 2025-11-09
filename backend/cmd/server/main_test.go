@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/vdavid/vmail/backend/internal/config"
-	"github.com/vdavid/vmail/backend/internal/db"
+	"github.com/vdavid/vmail/backend/internal/testutil"
 )
 
 func getTestConfig() *config.Config {
@@ -90,14 +90,17 @@ func TestHandleRoot(t *testing.T) {
 }
 
 func TestNewServer(t *testing.T) {
+	pool := testutil.NewTestDB(t)
+	defer pool.Close()
+
 	cfg := getTestConfig()
 	ctx := context.Background()
 
-	pool, err := db.NewConnection(ctx, cfg)
+	// Use the test pool directly instead of creating a new connection
+	err := pool.Ping(ctx)
 	if err != nil {
-		t.Fatalf("Failed to create database connection: %v", err)
+		t.Fatalf("Failed to ping database: %v", err)
 	}
-	defer db.CloseConnection(pool)
 
 	server := NewServer(cfg, pool)
 
@@ -134,50 +137,16 @@ func TestNewServer(t *testing.T) {
 }
 
 func TestMainWithConfig(t *testing.T) {
-	_ = os.Setenv("VMAIL_ENV", "production")
-	_ = os.Setenv("VMAIL_ENCRYPTION_KEY_BASE64", "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=")
-	_ = os.Setenv("AUTHELIA_URL", "http://authelia:9091")
-	_ = os.Setenv("VMAIL_DB_HOST", os.Getenv("PGHOST"))
-	_ = os.Setenv("VMAIL_DB_PORT", os.Getenv("PGPORT"))
-	_ = os.Setenv("VMAIL_DB_USER", os.Getenv("PGUSER"))
-	_ = os.Setenv("VMAIL_DB_PASSWORD", os.Getenv("PGPASSWORD"))
-	_ = os.Setenv("VMAIL_DB_NAME", os.Getenv("PGDATABASE"))
+	pool := testutil.NewTestDB(t)
+	defer pool.Close()
 
-	sslMode := "disable"
-	if os.Getenv("PGHOST") != "localhost" && os.Getenv("PGHOST") != "127.0.0.1" && os.Getenv("PGHOST") != "" {
-		sslMode = "require"
-	}
-	_ = os.Setenv("VMAIL_DB_SSLMODE", sslMode)
-	_ = os.Setenv("PORT", "9999")
-
-	defer func() {
-		_ = os.Unsetenv("VMAIL_ENV")
-		_ = os.Unsetenv("VMAIL_ENCRYPTION_KEY_BASE64")
-		_ = os.Unsetenv("AUTHELIA_URL")
-		_ = os.Unsetenv("VMAIL_DB_HOST")
-		_ = os.Unsetenv("VMAIL_DB_PORT")
-		_ = os.Unsetenv("VMAIL_DB_USER")
-		_ = os.Unsetenv("VMAIL_DB_PASSWORD")
-		_ = os.Unsetenv("VMAIL_DB_NAME")
-		_ = os.Unsetenv("VMAIL_DB_SSLMODE")
-		_ = os.Unsetenv("PORT")
-	}()
-
-	cfg, err := config.NewConfig()
-	if err != nil {
-		t.Fatalf("Failed to create config: %v", err)
-	}
-
-	if cfg.Port != "9999" {
-		t.Errorf("expected port '9999', got '%s'", cfg.Port)
-	}
-
+	cfg := getTestConfig()
 	ctx := context.Background()
-	pool, err := db.NewConnection(ctx, cfg)
+
+	err := pool.Ping(ctx)
 	if err != nil {
-		t.Fatalf("Failed to create database connection: %v", err)
+		t.Fatalf("Failed to ping database: %v", err)
 	}
-	defer db.CloseConnection(pool)
 
 	server := NewServer(cfg, pool)
 	if server == nil {

@@ -13,6 +13,7 @@ import (
 	"github.com/vdavid/vmail/backend/internal/crypto"
 	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/models"
+	"github.com/vdavid/vmail/backend/internal/testutil"
 )
 
 func getTestEncryptor(t *testing.T) *crypto.Encryptor {
@@ -32,12 +33,8 @@ func getTestEncryptor(t *testing.T) *crypto.Encryptor {
 }
 
 func TestSettingsHandler_GetSettings(t *testing.T) {
-	pool := setupTestPool(t)
-	if pool == nil {
-		return
-	}
+	pool := testutil.NewTestDB(t)
 	defer pool.Close()
-	defer cleanupTestPool(t, pool)
 
 	encryptor := getTestEncryptor(t)
 	handler := NewSettingsHandler(pool, encryptor)
@@ -132,12 +129,8 @@ func TestSettingsHandler_GetSettings(t *testing.T) {
 }
 
 func TestSettingsHandler_PostSettings(t *testing.T) {
-	pool := setupTestPool(t)
-	if pool == nil {
-		return
-	}
+	pool := testutil.NewTestDB(t)
 	defer pool.Close()
-	defer cleanupTestPool(t, pool)
 
 	encryptor := getTestEncryptor(t)
 	handler := NewSettingsHandler(pool, encryptor)

@@ -12,15 +12,12 @@ import (
 	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/imap"
 	"github.com/vdavid/vmail/backend/internal/models"
+	"github.com/vdavid/vmail/backend/internal/testutil"
 )
 
 func TestThreadHandler_GetThread(t *testing.T) {
-	pool := setupTestPool(t)
-	if pool == nil {
-		return
-	}
+	pool := testutil.NewTestDB(t)
 	defer pool.Close()
-	defer cleanupTestPool(t, pool)
 
 	encryptor := getTestEncryptor(t)
 	imapService := imap.NewService(pool, encryptor)
@@ -288,12 +285,8 @@ func (m *mockIMAPServiceForThread) SyncFullMessages(_ context.Context, _ string,
 func (m *mockIMAPServiceForThread) Close() {}
 
 func TestThreadHandler_SyncsMissingBodies(t *testing.T) {
-	pool := setupTestPool(t)
-	if pool == nil {
-		return
-	}
+	pool := testutil.NewTestDB(t)
 	defer pool.Close()
-	defer cleanupTestPool(t, pool)
 
 	encryptor := getTestEncryptor(t)
 	email := "lazy-load-test@example.com"

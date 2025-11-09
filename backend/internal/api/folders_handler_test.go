@@ -14,15 +14,12 @@ import (
 	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/imap"
 	"github.com/vdavid/vmail/backend/internal/models"
+	"github.com/vdavid/vmail/backend/internal/testutil"
 )
 
 func TestFoldersHandler_GetFolders(t *testing.T) {
-	pool := setupTestPool(t)
-	if pool == nil {
-		return
-	}
+	pool := testutil.NewTestDB(t)
 	defer pool.Close()
-	defer cleanupTestPool(t, pool)
 
 	encryptor := getTestEncryptor(t)
 	imapPool := imap.NewPool()
@@ -154,12 +151,8 @@ func testRetryScenario(t *testing.T, pool *pgxpool.Pool, encryptor *crypto.Encry
 }
 
 func TestFoldersHandler_WithMocks(t *testing.T) {
-	pool := setupTestPool(t)
-	if pool == nil {
-		return
-	}
+	pool := testutil.NewTestDB(t)
 	defer pool.Close()
-	defer cleanupTestPool(t, pool)
 
 	encryptor := getTestEncryptor(t)
 	email := "folders-test@example.com"

@@ -323,7 +323,7 @@ build.
 
 ```postgresql
 -- Stores the V-Mail user.
--- Records in this table answer the question "Who is this user?".
+-- Records in this table answer the question "Who is this user?"
 -- We keep this table minimal, only storing the core identity.
 CREATE TABLE "users"
 (
@@ -364,7 +364,7 @@ CREATE TABLE "user_settings"
 
     -- These folder names map V-Mail's actions (like "Archive") to the
     -- user's actual IMAP folder names. IMAP servers can name these differently.
-    -- On first login, the backend should try to auto-detect these using
+    -- On the first login, the backend should try to auto-detect these using
     -- the IMAP SPECIAL-USE extension (RFC 6154), but the user should
     -- be able to override them in the settings.
     "archive_folder_name"         TEXT        NOT NULL DEFAULT 'Archive',

@@ -7,15 +7,12 @@ import (
 	"time"
 
 	"github.com/vdavid/vmail/backend/internal/models"
+	"github.com/vdavid/vmail/backend/internal/testutil"
 )
 
 func TestSaveAndGetThread(t *testing.T) {
-	pool := setupTestDB(t)
-	if pool == nil {
-		return
-	}
+	pool := testutil.NewTestDB(t)
 	defer pool.Close()
-	defer cleanupTestDB(t, pool)
 
 	ctx := context.Background()
 
@@ -94,12 +91,8 @@ func TestSaveAndGetThread(t *testing.T) {
 }
 
 func TestGetThreadsForFolder(t *testing.T) {
-	pool := setupTestDB(t)
-	if pool == nil {
-		return
-	}
+	pool := testutil.NewTestDB(t)
 	defer pool.Close()
-	defer cleanupTestDB(t, pool)
 
 	ctx := context.Background()
 
