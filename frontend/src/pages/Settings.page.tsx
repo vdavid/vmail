@@ -1,6 +1,6 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useEffect, useRef } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as React from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { api, type UserSettings } from '../lib/api'
 
@@ -33,6 +33,17 @@ export default function SettingsPage() {
 
     const [formData, setFormData] = useState<UserSettings>(defaultSettings)
 
+    // Store raw string values for number inputs to allow for an empty state.
+    // This hacky solution seems to be needed because otherwise, when momentarily clearing the input
+    // to set it to a new value, the input auto-inserts 0, which is awkward.
+    const [numberInputs, setNumberInputs] = useState<{
+        undo_send_delay_seconds: string
+        pagination_threads_per_page: string
+    }>({
+        undo_send_delay_seconds: '20',
+        pagination_threads_per_page: '100',
+    })
+
     // Initialize form data from query data when it first loads
     // Using a ref to ensure we only initialize once to avoid cascading renders
     useEffect(() => {
@@ -44,9 +55,17 @@ export default function SettingsPage() {
                 imap_password: '',
                 smtp_password: '',
             })
+            setNumberInputs({
+                undo_send_delay_seconds: String(data.undo_send_delay_seconds),
+                pagination_threads_per_page: String(data.pagination_threads_per_page),
+            })
         } else if (isError && !initializedRef.current) {
             initializedRef.current = true
             setFormData(defaultSettings)
+            setNumberInputs({
+                undo_send_delay_seconds: String(defaultSettings.undo_send_delay_seconds),
+                pagination_threads_per_page: String(defaultSettings.pagination_threads_per_page),
+            })
         }
     }, [data, isError])
 
@@ -72,15 +91,52 @@ export default function SettingsPage() {
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target
+        if (type === 'number') {
+            // Store raw string value for number inputs
+            setNumberInputs((prev) => ({
+                ...prev,
+                [name]: value,
+            }))
+            // Only update formData if value is a valid number
+            const numValue = value === '' ? 0 : parseInt(value, 10)
+            if (!isNaN(numValue)) {
+                setFormData((prev) => ({
+                    ...prev,
+                    [name]: numValue,
+                }))
+            }
+        } else {
+            setFormData((prev) => ({
+                ...prev,
+                [name]: value,
+            }))
+        }
+    }
+
+    const handleNumberBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+        const { name, value } = e.target
+        const numValue = value === '' ? 0 : parseInt(value, 10)
+        const finalValue = isNaN(numValue) ? 0 : numValue
+        setNumberInputs((prev) => ({
+            ...prev,
+            [name]: String(finalValue),
+        }))
         setFormData((prev) => ({
             ...prev,
-            [name]: type === 'number' ? parseInt(value) || 0 : value,
+            [name]: finalValue,
         }))
     }
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
-        saveMutation.mutate(formData)
+        // Ensure number fields are integers before submitting
+        const submitData = {
+            ...formData,
+            undo_send_delay_seconds: parseInt(numberInputs.undo_send_delay_seconds, 10) || 0,
+            pagination_threads_per_page:
+                parseInt(numberInputs.pagination_threads_per_page, 10) || 0,
+        }
+        saveMutation.mutate(submitData)
     }
 
     if (isLoading) {
@@ -351,8 +407,9 @@ export default function SettingsPage() {
                                 type='number'
                                 id='undo_send_delay_seconds'
                                 name='undo_send_delay_seconds'
-                                value={formData.undo_send_delay_seconds}
+                                value={numberInputs.undo_send_delay_seconds}
                                 onChange={handleChange}
+                                onBlur={handleNumberBlur}
                                 min='0'
                                 max='60'
                                 required
@@ -370,8 +427,9 @@ export default function SettingsPage() {
                                 type='number'
                                 id='pagination_threads_per_page'
                                 name='pagination_threads_per_page'
-                                value={formData.pagination_threads_per_page}
+                                value={numberInputs.pagination_threads_per_page}
                                 onChange={handleChange}
+                                onBlur={handleNumberBlur}
                                 min='5'
                                 max='200'
                                 required
