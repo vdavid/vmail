@@ -1,6 +1,24 @@
 import { http, HttpResponse } from 'msw'
 
 export const handlers = [
+    http.get('/api/v1/settings', () => {
+        return HttpResponse.json({
+            imap_server_hostname: 'imap.example.com',
+            imap_username: 'user@example.com',
+            imap_password: 'password',
+            smtp_server_hostname: 'smtp.example.com',
+            smtp_username: 'user@example.com',
+            smtp_password: 'password',
+            archive_folder_name: 'Archive',
+            sent_folder_name: 'Sent',
+            drafts_folder_name: 'Drafts',
+            trash_folder_name: 'Trash',
+            spam_folder_name: 'Spam',
+            undo_send_delay_seconds: 20,
+            pagination_threads_per_page: 100,
+        })
+    }),
+
     http.get('/api/v1/folders', () => {
         return HttpResponse.json([{ name: 'INBOX' }, { name: 'Sent' }, { name: 'Drafts' }])
     }),

@@ -24,10 +24,18 @@ const createWrapper = () => {
 }
 
 describe('InboxPage', () => {
-    it('should render a loading state', () => {
+    it('should render a loading state', async () => {
         window.history.pushState({}, '', '/?folder=INBOX')
         render(<InboxPage />, { wrapper: createWrapper() })
-        expect(screen.getByText('Loading...')).toBeInTheDocument()
+        // The component may show loading while settings or threads are loading
+        // Check for either loading state or wait for it to appear
+        await waitFor(
+            () => {
+                const loadingText = screen.queryByText('Loading...')
+                expect(loadingText).toBeInTheDocument()
+            },
+            { timeout: 1000 },
+        )
     })
 
     it('should read the ?folder=INBOX URL parameter and call the correct API', async () => {

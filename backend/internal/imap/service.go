@@ -34,30 +34,49 @@ func NewService(pool *pgxpool.Pool, encryptor *crypto.Encryptor) *Service {
 	}
 }
 
-// SyncThreadsForFolder syncs threads from IMAP for a specific folder.
-func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName string) error {
-	// Get user settings
+// getSettingsAndPassword gets user settings and decrypts the IMAP password.
+func (s *Service) getSettingsAndPassword(ctx context.Context, userID string) (*models.UserSettings, string, error) {
 	settings, err := db.GetUserSettings(ctx, s.pool, userID)
 	if err != nil {
-		return fmt.Errorf("failed to get user settings: %w", err)
+		return nil, "", fmt.Errorf("failed to get user settings: %w", err)
 	}
 
-	// Decrypt password
 	imapPassword, err := s.encryptor.Decrypt(settings.EncryptedIMAPPassword)
 	if err != nil {
-		return fmt.Errorf("failed to decrypt IMAP password: %w", err)
+		return nil, "", fmt.Errorf("failed to decrypt IMAP password: %w", err)
+	}
+
+	return settings, imapPassword, nil
+}
+
+// getClientAndSelectFolder gets user settings, decrypts the password, gets the IMAP client, and selects the folder.
+// Returns the client and mailbox status, or an error.
+func (s *Service) getClientAndSelectFolder(ctx context.Context, userID, folderName string) (*imapclient.Client, *imap.MailboxStatus, error) {
+	settings, imapPassword, err := s.getSettingsAndPassword(ctx, userID)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	// Get IMAP client (internal use - need concrete type)
 	client, err := s.clientPool.getClientConcrete(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
 	if err != nil {
-		return fmt.Errorf("failed to get IMAP client: %w", err)
+		return nil, nil, fmt.Errorf("failed to get IMAP client: %w", err)
 	}
 
 	// Select the folder
 	mbox, err := client.Select(folderName, false)
 	if err != nil {
-		return fmt.Errorf("failed to select folder %s: %w", folderName, err)
+		return nil, nil, fmt.Errorf("failed to select folder %s: %w", folderName, err)
+	}
+
+	return client, mbox, nil
+}
+
+// SyncThreadsForFolder syncs threads from IMAP for a specific folder.
+func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName string) error {
+	client, mbox, err := s.getClientAndSelectFolder(ctx, userID, folderName)
+	if err != nil {
+		return err
 	}
 
 	log.Printf("Selected folder %s: %d messages", folderName, mbox.Messages)
@@ -204,69 +223,16 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 
 // SyncFullMessage syncs the full message body from IMAP.
 func (s *Service) SyncFullMessage(ctx context.Context, userID, folderName string, imapUID int64) error {
-	// Get user settings
-	settings, err := db.GetUserSettings(ctx, s.pool, userID)
+	client, _, err := s.getClientAndSelectFolder(ctx, userID, folderName)
 	if err != nil {
-		return fmt.Errorf("failed to get user settings: %w", err)
+		return err
 	}
 
-	// Decrypt password
-	imapPassword, err := s.encryptor.Decrypt(settings.EncryptedIMAPPassword)
-	if err != nil {
-		return fmt.Errorf("failed to decrypt IMAP password: %w", err)
-	}
-
-	// Get IMAP client (internal use - need concrete type)
-	client, err := s.clientPool.getClientConcrete(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
-	if err != nil {
-		return fmt.Errorf("failed to get IMAP client: %w", err)
-	}
-
-	// Select the folder
-	if _, err := client.Select(folderName, false); err != nil {
-		return fmt.Errorf("failed to select folder %s: %w", folderName, err)
-	}
-
-	// Fetch the full message
-	imapMsg, err := FetchFullMessage(client, uint32(imapUID))
-	if err != nil {
-		return fmt.Errorf("failed to fetch full message: %w", err)
-	}
-
-	// Get existing message from DB
-	msg, err := db.GetMessageByUID(ctx, s.pool, userID, folderName, imapUID)
-	if err != nil {
-		return fmt.Errorf("failed to get message from DB: %w", err)
-	}
-
-	// Parse body and update message
-	parsedMsg, err := ParseMessage(imapMsg, msg.ThreadID, userID, folderName)
-	if err != nil {
-		return fmt.Errorf("failed to parse message: %w", err)
-	}
-
-	// Update message with body
-	msg.UnsafeBodyHTML = parsedMsg.UnsafeBodyHTML
-	msg.BodyText = parsedMsg.BodyText
-
-	// Save message with body
-	if err := db.SaveMessage(ctx, s.pool, msg); err != nil {
-		return fmt.Errorf("failed to save message: %w", err)
-	}
-
-	// Save attachments
-	for _, att := range parsedMsg.Attachments {
-		att.MessageID = msg.ID
-		if err := db.SaveAttachment(ctx, s.pool, &att); err != nil {
-			log.Printf("Warning: Failed to save attachment: %v", err)
-		}
-	}
-
-	return nil
+	return s.syncSingleMessage(ctx, client, userID, folderName, imapUID)
 }
 
 // SyncFullMessages syncs multiple message bodies from IMAP in a batch.
-// Messages are grouped by folder and synced efficiently to reduce network calls.
+// It groups messages by folder and syncs them efficiently to reduce network calls.
 func (s *Service) SyncFullMessages(ctx context.Context, userID string, messages []MessageToSync) error {
 	if len(messages) == 0 {
 		return nil
@@ -278,16 +244,10 @@ func (s *Service) SyncFullMessages(ctx context.Context, userID string, messages 
 		folderToUIDs[msg.FolderName] = append(folderToUIDs[msg.FolderName], msg.IMAPUID)
 	}
 
-	// Get user settings once
-	settings, err := db.GetUserSettings(ctx, s.pool, userID)
+	// Get user settings and the password once
+	settings, imapPassword, err := s.getSettingsAndPassword(ctx, userID)
 	if err != nil {
-		return fmt.Errorf("failed to get user settings: %w", err)
-	}
-
-	// Decrypt password once
-	imapPassword, err := s.encryptor.Decrypt(settings.EncryptedIMAPPassword)
-	if err != nil {
-		return fmt.Errorf("failed to decrypt IMAP password: %w", err)
+		return err
 	}
 
 	// Sync messages grouped by folder

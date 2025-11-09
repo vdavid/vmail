@@ -26,6 +26,7 @@ vi.mock('react-router-dom', async () => {
 // Mock the API
 vi.mock('../lib/api', () => ({
     api: {
+        getSettings: vi.fn(),
         getThreads: vi.fn(),
     },
 }))
@@ -53,8 +54,34 @@ type MockThread = {
 }
 
 const setupMockThreadsAndQueryClient = (mockThreads: MockThread[]) => {
+    // Mock settings first
     // eslint-disable-next-line @typescript-eslint/unbound-method
-    vi.mocked(api.api.getThreads).mockResolvedValue(mockThreads)
+    vi.mocked(api.api.getSettings).mockResolvedValue({
+        imap_server_hostname: 'imap.example.com',
+        imap_username: 'user@example.com',
+        imap_password: 'password',
+        smtp_server_hostname: 'smtp.example.com',
+        smtp_username: 'user@example.com',
+        smtp_password: 'password',
+        archive_folder_name: 'Archive',
+        sent_folder_name: 'Sent',
+        drafts_folder_name: 'Drafts',
+        trash_folder_name: 'Trash',
+        spam_folder_name: 'Spam',
+        undo_send_delay_seconds: 20,
+        pagination_threads_per_page: 100,
+    })
+
+    // Mock threads response with the correct format
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    vi.mocked(api.api.getThreads).mockResolvedValue({
+        threads: mockThreads,
+        pagination: {
+            total_count: mockThreads.length,
+            page: 1,
+            per_page: 100,
+        },
+    })
 
     return new QueryClient({
         defaultOptions: {
@@ -65,8 +92,21 @@ const setupMockThreadsAndQueryClient = (mockThreads: MockThread[]) => {
 
 const waitForQueryToResolve = async (queryClient: QueryClient, mockThreads: MockThread[]) => {
     await waitFor(() => {
-        const data = queryClient.getQueryData(['threads', 'INBOX'])
-        expect(data).toEqual(mockThreads)
+        // The query key includes folder, page, and limit
+        const data = queryClient.getQueryData(['threads', 'INBOX', 1, 100])
+        expect(data).toBeDefined()
+        if (data && typeof data === 'object' && 'threads' in data) {
+            expect((data as { threads: MockThread[] }).threads).toEqual(mockThreads)
+        } else {
+            expect(data).toEqual({
+                threads: mockThreads,
+                pagination: {
+                    total_count: mockThreads.length,
+                    page: 1,
+                    per_page: 100,
+                },
+            })
+        }
     })
 }
 
@@ -97,6 +137,24 @@ describe('useKeyboardShortcuts', () => {
     })
 
     it('adds and removes event listeners on mount/unmount', () => {
+        // Mock settings to avoid query warning
+        // eslint-disable-next-line @typescript-eslint/unbound-method
+        vi.mocked(api.api.getSettings).mockResolvedValue({
+            imap_server_hostname: 'imap.example.com',
+            imap_username: 'user@example.com',
+            imap_password: 'password',
+            smtp_server_hostname: 'smtp.example.com',
+            smtp_username: 'user@example.com',
+            smtp_password: 'password',
+            archive_folder_name: 'Archive',
+            sent_folder_name: 'Sent',
+            drafts_folder_name: 'Drafts',
+            trash_folder_name: 'Trash',
+            spam_folder_name: 'Spam',
+            undo_send_delay_seconds: 20,
+            pagination_threads_per_page: 100,
+        })
+
         const addEventListenerSpy = vi.spyOn(window, 'addEventListener')
         const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
 
@@ -166,6 +224,24 @@ describe('useKeyboardShortcuts', () => {
     })
 
     it('decrements selected index when "k" is pressed', () => {
+        // Mock settings to avoid query warning
+        // eslint-disable-next-line @typescript-eslint/unbound-method
+        vi.mocked(api.api.getSettings).mockResolvedValue({
+            imap_server_hostname: 'imap.example.com',
+            imap_username: 'user@example.com',
+            imap_password: 'password',
+            smtp_server_hostname: 'smtp.example.com',
+            smtp_username: 'user@example.com',
+            smtp_password: 'password',
+            archive_folder_name: 'Archive',
+            sent_folder_name: 'Sent',
+            drafts_folder_name: 'Drafts',
+            trash_folder_name: 'Trash',
+            spam_folder_name: 'Spam',
+            undo_send_delay_seconds: 20,
+            pagination_threads_per_page: 100,
+        })
+
         useUIStore.setState({ selectedThreadIndex: 1 })
 
         renderHook(
@@ -183,6 +259,24 @@ describe('useKeyboardShortcuts', () => {
     })
 
     it('decrements selected index when ArrowUp is pressed', () => {
+        // Mock settings to avoid query warning
+        // eslint-disable-next-line @typescript-eslint/unbound-method
+        vi.mocked(api.api.getSettings).mockResolvedValue({
+            imap_server_hostname: 'imap.example.com',
+            imap_username: 'user@example.com',
+            imap_password: 'password',
+            smtp_server_hostname: 'smtp.example.com',
+            smtp_username: 'user@example.com',
+            smtp_password: 'password',
+            archive_folder_name: 'Archive',
+            sent_folder_name: 'Sent',
+            drafts_folder_name: 'Drafts',
+            trash_folder_name: 'Trash',
+            spam_folder_name: 'Spam',
+            undo_send_delay_seconds: 20,
+            pagination_threads_per_page: 100,
+        })
+
         useUIStore.setState({ selectedThreadIndex: 1 })
 
         renderHook(
@@ -250,6 +344,24 @@ describe('useKeyboardShortcuts', () => {
     })
 
     it('does not handle shortcuts when typing in input fields', () => {
+        // Mock settings to avoid query warning
+        // eslint-disable-next-line @typescript-eslint/unbound-method
+        vi.mocked(api.api.getSettings).mockResolvedValue({
+            imap_server_hostname: 'imap.example.com',
+            imap_username: 'user@example.com',
+            imap_password: 'password',
+            smtp_server_hostname: 'smtp.example.com',
+            smtp_username: 'user@example.com',
+            smtp_password: 'password',
+            archive_folder_name: 'Archive',
+            sent_folder_name: 'Sent',
+            drafts_folder_name: 'Drafts',
+            trash_folder_name: 'Trash',
+            spam_folder_name: 'Spam',
+            undo_send_delay_seconds: 20,
+            pagination_threads_per_page: 100,
+        })
+
         renderHook(
             () => {
                 useKeyboardShortcuts()
