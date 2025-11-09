@@ -1,5 +1,7 @@
 # V-Mail
 
+![CI](https://github.com/vdavid/vmail/actions/workflows/ci.yml/badge.svg)
+
 A fast, self-hosted webmail client with a familiar, keyboard-driven UI.
 
 ## Overview
