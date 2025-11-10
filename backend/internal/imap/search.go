@@ -188,7 +188,21 @@ func tokenizeQuery(query string) []string {
 		}
 	}
 
-	return tokens
+	// Post-process: combine filter prefixes with immediately following quoted strings
+	// e.g., "from:" and "\"John Doe\"" should become "from:\"John Doe\""
+	var combinedTokens []string
+	for i := 0; i < len(tokens); i++ {
+		token := tokens[i]
+		// Check if this token ends with : and next token starts with "
+		if strings.HasSuffix(token, ":") && i+1 < len(tokens) && strings.HasPrefix(tokens[i+1], `"`) {
+			combinedTokens = append(combinedTokens, token+tokens[i+1])
+			i++ // Skip next token as we've combined it
+		} else {
+			combinedTokens = append(combinedTokens, token)
+		}
+	}
+
+	return combinedTokens
 }
 
 // unquote removes surrounding quotes from a string if present.

@@ -57,4 +57,39 @@ describe('Header', () => {
 
         expect(mockNavigate).toHaveBeenCalledWith('/search?q=test%20query')
     })
+
+    it('should show validation error for invalid query', async () => {
+        const user = userEvent.setup()
+        render(
+            <BrowserRouter>
+                <Header />
+            </BrowserRouter>,
+        )
+
+        const searchInput = screen.getByPlaceholderText('Search mail...')
+        await user.type(searchInput, 'from:')
+        await user.keyboard('{Enter}')
+
+        expect(mockNavigate).not.toHaveBeenCalled()
+        expect(screen.getByText(/empty/i, { selector: '[role="alert"]' })).toBeInTheDocument()
+    })
+
+    it('should clear validation error when user types', async () => {
+        const user = userEvent.setup()
+        render(
+            <BrowserRouter>
+                <Header />
+            </BrowserRouter>,
+        )
+
+        const searchInput = screen.getByPlaceholderText('Search mail...')
+        await user.type(searchInput, 'from:')
+        await user.keyboard('{Enter}')
+
+        expect(screen.getByText(/empty/i, { selector: '[role="alert"]' })).toBeInTheDocument()
+
+        await user.type(searchInput, 'george')
+
+        expect(screen.queryByText(/empty/i, { selector: '[role="alert"]' })).not.toBeInTheDocument()
+    })
 })
