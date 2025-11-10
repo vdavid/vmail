@@ -321,6 +321,10 @@ func (m *mockIMAPService) SyncFullMessages(context.Context, string, []imap.Messa
 	return nil
 }
 
+func (m *mockIMAPService) Search(context.Context, string, string, int, int) ([]*models.Thread, int, error) {
+	return nil, 0, nil
+}
+
 func (m *mockIMAPService) Close() {}
 
 func TestThreadsHandler_SyncsWhenStale(t *testing.T) {
