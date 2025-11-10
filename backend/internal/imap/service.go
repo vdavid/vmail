@@ -72,6 +72,137 @@ func (s *Service) getClientAndSelectFolder(ctx context.Context, userID, folderNa
 	return client, mbox, nil
 }
 
+// threadMaps contains the maps needed for thread processing.
+type threadMaps struct {
+	allUIDs           []uint32
+	uidToThreadRoot   map[uint32]uint32
+	rootUIDs          []uint32
+	uidToMessage      map[uint32]*imap.Message
+	rootUIDToStableID map[uint32]string
+}
+
+// buildThreadMaps builds all the maps needed for thread processing.
+func buildThreadMaps(threads []*sortthread.Thread) *threadMaps {
+	maps := &threadMaps{
+		allUIDs:           make([]uint32, 0),
+		uidToThreadRoot:   make(map[uint32]uint32),
+		rootUIDs:          make([]uint32, 0),
+		uidToMessage:      make(map[uint32]*imap.Message),
+		rootUIDToStableID: make(map[uint32]string),
+	}
+
+	// Recursively map all messages in a thread to their root UID
+	var mapThreadToRoot func(*sortthread.Thread, uint32)
+	mapThreadToRoot = func(thread *sortthread.Thread, rootUID uint32) {
+		if thread == nil {
+			return
+		}
+		maps.uidToThreadRoot[thread.Id] = rootUID
+		maps.allUIDs = append(maps.allUIDs, thread.Id)
+		for _, child := range thread.Children {
+			mapThreadToRoot(child, rootUID)
+		}
+	}
+
+	// Build maps: find root for each top-level thread
+	for _, thread := range threads {
+		if thread == nil {
+			continue
+		}
+		rootUID := thread.Id
+		maps.rootUIDs = append(maps.rootUIDs, rootUID)
+		mapThreadToRoot(thread, rootUID)
+	}
+
+	return maps
+}
+
+// buildUIDToMessageMap builds a map of UID to message for quick lookup.
+func buildUIDToMessageMap(messages []*imap.Message) map[uint32]*imap.Message {
+	uidToMessageMap := make(map[uint32]*imap.Message)
+	for _, msg := range messages {
+		uidToMessageMap[msg.Uid] = msg
+	}
+	return uidToMessageMap
+}
+
+// buildRootUIDToStableIDMap builds a map of root UID to stable thread ID.
+func buildRootUIDToStableIDMap(rootUIDs []uint32, uidToMessageMap map[uint32]*imap.Message) map[uint32]string {
+	rootUIDToStableID := make(map[uint32]string)
+	for _, rootUID := range rootUIDs {
+		if rootMsg, found := uidToMessageMap[rootUID]; found {
+			if rootMsg.Envelope != nil && len(rootMsg.Envelope.MessageId) > 0 {
+				rootUIDToStableID[rootUID] = rootMsg.Envelope.MessageId
+			}
+		}
+	}
+	return rootUIDToStableID
+}
+
+// getStableThreadID gets the stable thread ID for a root UID, with fallback.
+func getStableThreadID(rootUID uint32, rootUIDToStableID map[uint32]string, uidToMessageMap map[uint32]*imap.Message) string {
+	stableThreadID, ok := rootUIDToStableID[rootUID]
+	if !ok {
+		// Fallback: try to get from the root message if we have it
+		if rootMsg, found := uidToMessageMap[rootUID]; found {
+			if rootMsg.Envelope != nil && len(rootMsg.Envelope.MessageId) > 0 {
+				stableThreadID = rootMsg.Envelope.MessageId
+				rootUIDToStableID[rootUID] = stableThreadID
+			}
+		}
+	}
+	return stableThreadID
+}
+
+// getOrCreateThread gets an existing thread or creates a new one.
+func (s *Service) getOrCreateThread(ctx context.Context, userID, stableThreadID string, rootUID uint32, uidToMessageMap map[uint32]*imap.Message) (*models.Thread, error) {
+	threadModel, err := db.GetThreadByStableID(ctx, s.pool, userID, stableThreadID)
+	if err != nil {
+		if !errors.Is(err, db.ErrThreadNotFound) {
+			return nil, fmt.Errorf("failed to get thread: %w", err)
+		}
+
+		// Error IS ErrThreadNotFound, so we must create the thread.
+		subject := ""
+		if rootMsg, found := uidToMessageMap[rootUID]; found {
+			if rootMsg.Envelope != nil {
+				subject = rootMsg.Envelope.Subject
+			}
+		}
+		threadModel = &models.Thread{
+			UserID:         userID,
+			StableThreadID: stableThreadID,
+			Subject:        subject,
+		}
+
+		if err := db.SaveThread(ctx, s.pool, threadModel); err != nil {
+			return nil, fmt.Errorf("failed to save thread: %w", err)
+		}
+	}
+	return threadModel, nil
+}
+
+// processMessage processes a single message and saves it to the database.
+func (s *Service) processMessage(ctx context.Context, imapMsg *imap.Message, rootUID uint32, stableThreadID string, userID, folderName string, uidToMessageMap map[uint32]*imap.Message) error {
+	threadModel, err := s.getOrCreateThread(ctx, userID, stableThreadID, rootUID, uidToMessageMap)
+	if err != nil {
+		return err
+	}
+
+	// Parse and save the message
+	msg, err := ParseMessage(imapMsg, threadModel.ID, userID, folderName)
+	if err != nil {
+		log.Printf("Warning: Failed to parse message UID %d: %v", imapMsg.Uid, err)
+		return nil // Continue processing other messages
+	}
+
+	if err := db.SaveMessage(ctx, s.pool, msg); err != nil {
+		return fmt.Errorf("failed to save message: %w", err)
+	}
+
+	return nil
+}
+
 // SyncThreadsForFolder syncs threads from IMAP for a specific folder.
 func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName string) error {
 	client, mbox, err := s.getClientAndSelectFolder(ctx, userID, folderName)
@@ -89,126 +220,43 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 
 	log.Printf("Found %d threads in folder %s", len(threads), folderName)
 
-	// Collect all UIDs from threads (threads are recursive)
-	allUIDs := make([]uint32, 0)
-	uidToThreadRootMap := make(map[uint32]uint32) // Map message UID to root thread UID
+	// Build thread maps
+	threadMaps := buildThreadMaps(threads)
 
-	// Recursively map all messages in a thread to their root UID
-	var mapThreadToRoot func(*sortthread.Thread, uint32)
-	mapThreadToRoot = func(thread *sortthread.Thread, rootUID uint32) {
-		if thread == nil {
-			return
-		}
-		// Map this message to the root
-		uidToThreadRootMap[thread.Id] = rootUID
-		allUIDs = append(allUIDs, thread.Id)
-		// Recursively process all children
-		for _, child := range thread.Children {
-			mapThreadToRoot(child, rootUID)
-		}
-	}
-
-	// Build maps: find root for each top-level thread
-	rootUIDs := make([]uint32, 0)
-	for _, thread := range threads {
-		if thread == nil {
-			continue
-		}
-		// The root UID is the thread's own ID (top-level threads are roots)
-		rootUID := thread.Id
-		rootUIDs = append(rootUIDs, rootUID)
-		// Map all messages in this thread tree to this root
-		mapThreadToRoot(thread, rootUID)
-	}
-
-	if len(allUIDs) == 0 {
+	if len(threadMaps.allUIDs) == 0 {
 		log.Printf("No messages found in folder %s", folderName)
 		return nil
 	}
 
 	// Fetch message headers for all messages
-	messages, err := FetchMessageHeaders(client, allUIDs)
+	messages, err := FetchMessageHeaders(client, threadMaps.allUIDs)
 	if err != nil {
 		return fmt.Errorf("failed to fetch message headers: %w", err)
 	}
 
-	// Build map of UID to message for a quick lookup
-	uidToMessageMap := make(map[uint32]*imap.Message)
-	for _, msg := range messages {
-		uidToMessageMap[msg.Uid] = msg
-	}
-
-	// Build map of root UID to stable thread ID (Message-ID)
-	// We already have this data from the uidToMessageMap. No new fetch needed.
-	rootUIDToStableID := make(map[uint32]string)
-	for _, rootUID := range rootUIDs {
-		if rootMsg, found := uidToMessageMap[rootUID]; found {
-			if rootMsg.Envelope != nil && len(rootMsg.Envelope.MessageId) > 0 {
-				rootUIDToStableID[rootUID] = rootMsg.Envelope.MessageId
-			}
-		}
-	}
+	// Build maps
+	threadMaps.uidToMessage = buildUIDToMessageMap(messages)
+	threadMaps.rootUIDToStableID = buildRootUIDToStableIDMap(threadMaps.rootUIDs, threadMaps.uidToMessage)
 
 	log.Printf("Fetched %d message headers", len(messages))
 
 	// Process each message
 	for _, imapMsg := range messages {
-		rootUID, ok := uidToThreadRootMap[imapMsg.Uid]
+		rootUID, ok := threadMaps.uidToThreadRoot[imapMsg.Uid]
 		if !ok {
 			log.Printf("Warning: No root thread found for UID %d", imapMsg.Uid)
 			continue
 		}
 
 		// Get stable thread ID from the root message's Message-ID
-		stableThreadID, ok := rootUIDToStableID[rootUID]
-		if !ok {
-			// Fallback: try to get from the root message if we have it
-			if rootMsg, found := uidToMessageMap[rootUID]; found {
-				if rootMsg.Envelope != nil && len(rootMsg.Envelope.MessageId) > 0 {
-					stableThreadID = rootMsg.Envelope.MessageId
-					rootUIDToStableID[rootUID] = stableThreadID
-				}
-			}
-			if stableThreadID == "" {
-				log.Printf("Warning: No Message-ID found for root UID %d", rootUID)
-				continue
-			}
-		}
-
-		// Get or create the thread
-		threadModel, err := db.GetThreadByStableID(ctx, s.pool, userID, stableThreadID)
-		if err != nil {
-			if !errors.Is(err, db.ErrThreadNotFound) {
-				return fmt.Errorf("failed to get thread: %w", err)
-			}
-
-			// Error IS ErrThreadNotFound, so we must create the thread.
-			subject := ""
-			if rootMsg, found := uidToMessageMap[rootUID]; found {
-				if rootMsg.Envelope != nil {
-					subject = rootMsg.Envelope.Subject
-				}
-			}
-			threadModel = &models.Thread{
-				UserID:         userID,
-				StableThreadID: stableThreadID,
-				Subject:        subject,
-			}
-
-			if err := db.SaveThread(ctx, s.pool, threadModel); err != nil {
-				return fmt.Errorf("failed to save thread: %w", err)
-			}
-		}
-
-		// Parse and save the message
-		msg, err := ParseMessage(imapMsg, threadModel.ID, userID, folderName)
-		if err != nil {
-			log.Printf("Warning: Failed to parse message UID %d: %v", imapMsg.Uid, err)
+		stableThreadID := getStableThreadID(rootUID, threadMaps.rootUIDToStableID, threadMaps.uidToMessage)
+		if stableThreadID == "" {
+			log.Printf("Warning: No Message-ID found for root UID %d", rootUID)
 			continue
 		}
 
-		if err := db.SaveMessage(ctx, s.pool, msg); err != nil {
-			return fmt.Errorf("failed to save message: %w", err)
+		if err := s.processMessage(ctx, imapMsg, rootUID, stableThreadID, userID, folderName, threadMaps.uidToMessage); err != nil {
+			return err
 		}
 	}
 

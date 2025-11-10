@@ -115,9 +115,10 @@ func TestIMAPSeqSetCreation(t *testing.T) {
 		testUID := uint32(42)
 		seqSet.AddNum(testUID)
 
-		// Verify the seq set is not nil
-		if seqSet == nil {
-			t.Error("Expected non-nil sequence set")
+		// Verify it contains the UID by checking the string representation
+		seqSetStr := seqSet.String()
+		if seqSetStr == "" {
+			t.Error("Expected sequence set to contain the UID")
 		}
 	})
 
@@ -125,9 +126,10 @@ func TestIMAPSeqSetCreation(t *testing.T) {
 		seqSet := new(imap.SeqSet)
 		seqSet.AddRange(1, 10)
 
-		// Verify the seq set is not nil
-		if seqSet == nil {
-			t.Error("Expected non-nil sequence set")
+		// Verify it contains the range by checking the string representation
+		seqSetStr := seqSet.String()
+		if seqSetStr == "" {
+			t.Error("Expected sequence set to contain the range")
 		}
 	})
 }

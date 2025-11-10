@@ -16,12 +16,14 @@ import (
 	"github.com/vdavid/vmail/backend/internal/models"
 )
 
+// FoldersHandler handles IMAP folder-related API requests.
 type FoldersHandler struct {
 	pool      *pgxpool.Pool
 	encryptor *crypto.Encryptor
 	imapPool  imap.IMAPPool
 }
 
+// NewFoldersHandler creates a new FoldersHandler instance.
 func NewFoldersHandler(pool *pgxpool.Pool, encryptor *crypto.Encryptor, imapPool imap.IMAPPool) *FoldersHandler {
 	return &FoldersHandler{
 		pool:      pool,
@@ -30,6 +32,7 @@ func NewFoldersHandler(pool *pgxpool.Pool, encryptor *crypto.Encryptor, imapPool
 	}
 }
 
+// GetFolders returns the list of IMAP folders for the current user.
 func (h *FoldersHandler) GetFolders(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

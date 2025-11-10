@@ -9,6 +9,7 @@ import (
 	"io"
 )
 
+// Encryptor provides encryption and decryption functionality using AES-GCM.
 type Encryptor struct {
 	key []byte
 }

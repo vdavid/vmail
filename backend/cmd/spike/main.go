@@ -10,50 +10,107 @@ import (
 	"github.com/emersion/go-imap/client"
 )
 
+// getIMAPCredentials gets IMAP credentials from environment variables.
+func getIMAPCredentials() (server, user, password string, err error) {
+	server = os.Getenv("IMAP_SERVER")
+	user = os.Getenv("IMAP_USER")
+	password = os.Getenv("IMAP_PASSWORD")
+
+	if server == "" || user == "" || password == "" {
+		return "", "", "", fmt.Errorf("IMAP_SERVER, IMAP_USER, and IMAP_PASSWORD environment variables are required")
+	}
+
+	return server, user, password, nil
+}
+
+// setupIMAPConnection connects and logs in to the IMAP server.
+func setupIMAPConnection(server, user, password string) (*client.Client, error) {
+	c, err := connectToIMAP(server)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect: %w", err)
+	}
+
+	if err := login(c, user, password); err != nil {
+		err := c.Logout()
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("failed to log in: %w", err)
+	}
+
+	return c, nil
+}
+
+// performIMAPChecks performs capability checks and inbox selection.
+func performIMAPChecks(c *client.Client) (*imap.MailboxStatus, error) {
+	if err := checkCapabilities(c); err != nil {
+		return nil, fmt.Errorf("failed to check capabilities: %w", err)
+	}
+
+	mbox, err := selectInbox(c)
+	if err != nil {
+		return nil, fmt.Errorf("failed to select inbox: %w", err)
+	}
+
+	return mbox, nil
+}
+
+// fetchUnseenOrFirstMessage fetches an unseen message or falls back to the first message.
+func fetchUnseenOrFirstMessage(c *client.Client) error {
+	uids, err := runSearchCommand(c, "UNSEEN")
+	if err != nil {
+		return fmt.Errorf("failed to run SEARCH command: %w", err)
+	}
+
+	if len(uids) > 0 {
+		return fetchMessage(c, uids[0])
+	}
+
+	// Fallback: search for all messages
+	log.Println("No unseen messages found - searching for all messages instead")
+	allCriteria := imap.NewSearchCriteria()
+	allUIDs, err := c.UidSearch(allCriteria)
+	if err != nil {
+		return fmt.Errorf("failed to search for all messages: %w", err)
+	}
+
+	if len(allUIDs) > 0 {
+		log.Printf("Found %d total messages, fetching first one\n", len(allUIDs))
+		return fetchMessage(c, allUIDs[0])
+	}
+
+	log.Println("No messages in inbox to fetch")
+	return nil
+}
+
 func main() {
 	log.Println("Starting IMAP spike...")
 
-	// Get credentials from environment variables
-	imapServer := os.Getenv("IMAP_SERVER")
-	imapUser := os.Getenv("IMAP_USER")
-	imapPassword := os.Getenv("IMAP_PASSWORD")
-
-	if imapServer == "" || imapUser == "" || imapPassword == "" {
-		log.Fatal("Error: IMAP_SERVER, IMAP_USER, and IMAP_PASSWORD environment variables are required")
+	// Get credentials
+	imapServer, imapUser, imapPassword, err := getIMAPCredentials()
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	// Connect to the server
-	c, err := connectToIMAP(imapServer)
+	// Connect and login
+	c, err := setupIMAPConnection(imapServer, imapUser, imapPassword)
 	if err != nil {
-		log.Fatalf("Failed to connect: %v", err)
+		log.Fatal(err)
 	}
 	defer func(c *client.Client) {
-		err := c.Logout()
-		if err != nil {
+		if err := c.Logout(); err != nil {
 			log.Printf("Failed to log out: %v", err)
 		}
 	}(c)
 
 	log.Println("Connected to IMAP server")
-
-	// Log in
-	if err := login(c, imapUser, imapPassword); err != nil {
-		log.Fatalf("Failed to log in: %v", err)
-	}
-
 	log.Println("Logged in successfully")
 
-	// Check capabilities
-	if err := checkCapabilities(c); err != nil {
-		log.Fatalf("Failed to check capabilities: %v", err)
-	}
-
-	// Select inbox
-	mbox, err := selectInbox(c)
+	// Perform checks and select the inbox
+	mbox, err := performIMAPChecks(c)
 	if err != nil {
-		log.Fatalf("Failed to select inbox: %v", err)
+		log.Fatal(err)
 	}
-
 	log.Printf("Inbox selected: %d messages\n", mbox.Messages)
 
 	// Run THREAD command
@@ -61,33 +118,9 @@ func main() {
 		log.Fatalf("Failed to run THREAD command: %v\n", err)
 	}
 
-	// Run SEARCH command
-	uids, err := runSearchCommand(c, "UNSEEN")
-	if err != nil {
-		log.Fatalf("Failed to run SEARCH command: %v\n", err)
-	}
-
-	if len(uids) > 0 {
-		// Fetch a message if we found any
-		if err := fetchMessage(c, uids[0]); err != nil {
-			log.Fatalf("Failed to fetch message: %v\n", err)
-		}
-	} else {
-		log.Println("No unseen messages found - searching for all messages instead")
-		// Try searching for all messages
-		allCriteria := imap.NewSearchCriteria()
-		allUIDs, err := c.UidSearch(allCriteria)
-		if err != nil {
-			log.Fatalf("Failed to search for all messages: %v\n", err)
-		}
-		if len(allUIDs) > 0 {
-			log.Printf("Found %d total messages, fetching first one\n", len(allUIDs))
-			if err := fetchMessage(c, allUIDs[0]); err != nil {
-				log.Fatalf("Failed to fetch message: %v\n", err)
-			}
-		} else {
-			log.Println("No messages in inbox to fetch")
-		}
+	// Fetch messages
+	if err := fetchUnseenOrFirstMessage(c); err != nil {
+		log.Fatalf("Failed to fetch message: %v\n", err)
 	}
 
 	log.Println("IMAP spike completed successfully")

@@ -7,6 +7,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Config holds the application configuration loaded from environment variables.
 type Config struct {
 	Environment         string
 	EncryptionKeyBase64 string
@@ -21,6 +22,7 @@ type Config struct {
 	Timezone            string
 }
 
+// NewConfig loads and returns a new Config instance from environment variables.
 func NewConfig() (*Config, error) {
 	env := os.Getenv("VMAIL_ENV")
 	if env == "" {
@@ -54,6 +56,7 @@ func NewConfig() (*Config, error) {
 	return config, nil
 }
 
+// Validate checks that all required configuration values are set.
 func (c *Config) Validate() error {
 	if c.EncryptionKeyBase64 == "" {
 		return fmt.Errorf("VMAIL_ENCRYPTION_KEY_BASE64 is required")
@@ -70,6 +73,7 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// GetDatabaseURL returns a PostgreSQL connection string built from the configuration.
 func (c *Config) GetDatabaseURL() string {
 	return fmt.Sprintf(
 		"postgres://%s:%s@%s:%s/%s?sslmode=%s",

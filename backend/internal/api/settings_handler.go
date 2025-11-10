@@ -14,11 +14,13 @@ import (
 	"github.com/vdavid/vmail/backend/internal/models"
 )
 
+// SettingsHandler handles user settings-related API requests.
 type SettingsHandler struct {
 	pool      *pgxpool.Pool
 	encryptor *crypto.Encryptor
 }
 
+// NewSettingsHandler creates a new SettingsHandler instance.
 func NewSettingsHandler(pool *pgxpool.Pool, encryptor *crypto.Encryptor) *SettingsHandler {
 	return &SettingsHandler{
 		pool:      pool,
@@ -26,6 +28,7 @@ func NewSettingsHandler(pool *pgxpool.Pool, encryptor *crypto.Encryptor) *Settin
 	}
 }
 
+// GetSettings returns the user settings for the current user.
 func (h *SettingsHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -69,6 +72,7 @@ func (h *SettingsHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// PostSettings saves or updates the user settings for the current user.
 func (h *SettingsHandler) PostSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

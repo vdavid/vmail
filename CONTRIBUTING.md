@@ -1,4 +1,6 @@
-## Developing and debugging
+## Development
+
+### Local setup
 
 This setup lets you run the Go backend or the React frontend (or both) locally on your machine for easier debugging,
 while still using Docker to manage the database.
@@ -21,6 +23,22 @@ while still using Docker to manage the database.
     - Follow [Authelia's docs](https://www.authelia.com/docs/getting-started/installation/) to run it locally.
     - Set your `.env` file so that it points to the local Authelia instance.
       TODO Complete this
+
+### Running checks locally
+
+Before committing, ensure all checks pass locally to avoid CI failures.
+
+To run all checks at once, use: `./scripts/check.sh`
+
+This script runs all formatting, linting, and tests for both backend and frontend.
+It exits with a non-zero code if any check fails.
+
+### Commit messages
+
+The first line is max 50 characters. Examples: "Add new feature X", "Frontend: Fix Save button size on the Settings page"
+
+Then a blank line. Then a more detailed description if needed, as a form of a concise bulleted list, or free text with
+meaningful extra details on what the commit does.
 
 ## Architecture
 

@@ -12,14 +12,17 @@ import (
 	"github.com/vdavid/vmail/backend/internal/models"
 )
 
+// AuthHandler handles authentication-related API requests.
 type AuthHandler struct {
 	pool *pgxpool.Pool
 }
 
+// NewAuthHandler creates a new AuthHandler instance.
 func NewAuthHandler(pool *pgxpool.Pool) *AuthHandler {
 	return &AuthHandler{pool: pool}
 }
 
+// GetAuthStatus returns the authentication and setup status for the current user.
 func (h *AuthHandler) GetAuthStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

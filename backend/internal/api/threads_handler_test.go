@@ -9,12 +9,55 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/vdavid/vmail/backend/internal/auth"
+	"github.com/vdavid/vmail/backend/internal/crypto"
 	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/imap"
 	"github.com/vdavid/vmail/backend/internal/models"
 	"github.com/vdavid/vmail/backend/internal/testutil"
 )
+
+// setupTestUserAndSettings creates a test user and saves their settings.
+func setupTestUserAndSettings(t *testing.T, pool *pgxpool.Pool, encryptor *crypto.Encryptor, email string) string {
+	t.Helper()
+	ctx := context.Background()
+	userID, err := db.GetOrCreateUser(ctx, pool, email)
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	encryptedIMAPPassword, _ := encryptor.Encrypt("imap_pass")
+	encryptedSMTPPassword, _ := encryptor.Encrypt("smtp_pass")
+
+	settings := &models.UserSettings{
+		UserID:                   userID,
+		UndoSendDelaySeconds:     20,
+		PaginationThreadsPerPage: 100,
+		IMAPServerHostname:       "imap.test.com",
+		IMAPUsername:             "user",
+		EncryptedIMAPPassword:    encryptedIMAPPassword,
+		SMTPServerHostname:       "smtp.test.com",
+		SMTPUsername:             "user",
+		EncryptedSMTPPassword:    encryptedSMTPPassword,
+		ArchiveFolderName:        "Archive",
+		SentFolderName:           "Sent",
+		DraftsFolderName:         "Drafts",
+		TrashFolderName:          "Trash",
+		SpamFolderName:           "Spam",
+	}
+	if err := db.SaveUserSettings(ctx, pool, settings); err != nil {
+		t.Fatalf("Failed to save settings: %v", err)
+	}
+	return userID
+}
+
+// createRequestWithUser creates an HTTP request with user email in context.
+func createRequestWithUser(method, url, email string) *http.Request {
+	req := httptest.NewRequest(method, url, nil)
+	ctx := context.WithValue(req.Context(), auth.UserEmailKey, email)
+	return req.WithContext(ctx)
+}
 
 func TestThreadsHandler_GetThreads(t *testing.T) {
 	pool := testutil.NewTestDB(t)
@@ -52,40 +95,9 @@ func TestThreadsHandler_GetThreads(t *testing.T) {
 
 	t.Run("returns empty list when no threads exist", func(t *testing.T) {
 		email := "user@example.com"
+		setupTestUserAndSettings(t, pool, encryptor, email)
 
-		ctx := context.Background()
-		userID, err := db.GetOrCreateUser(ctx, pool, email)
-		if err != nil {
-			t.Fatalf("Failed to create user: %v", err)
-		}
-
-		encryptedIMAPPassword, _ := encryptor.Encrypt("imap_pass")
-		encryptedSMTPPassword, _ := encryptor.Encrypt("smtp_pass")
-
-		settings := &models.UserSettings{
-			UserID:                   userID,
-			UndoSendDelaySeconds:     20,
-			PaginationThreadsPerPage: 100,
-			IMAPServerHostname:       "imap.test.com",
-			IMAPUsername:             "user",
-			EncryptedIMAPPassword:    encryptedIMAPPassword,
-			SMTPServerHostname:       "smtp.test.com",
-			SMTPUsername:             "user",
-			EncryptedSMTPPassword:    encryptedSMTPPassword,
-			ArchiveFolderName:        "Archive",
-			SentFolderName:           "Sent",
-			DraftsFolderName:         "Drafts",
-			TrashFolderName:          "Trash",
-			SpamFolderName:           "Spam",
-		}
-		if err := db.SaveUserSettings(ctx, pool, settings); err != nil {
-			t.Fatalf("Failed to save settings: %v", err)
-		}
-
-		req := httptest.NewRequest("GET", "/api/v1/threads?folder=INBOX", nil)
-		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
-		req = req.WithContext(reqCtx)
-
+		req := createRequestWithUser("GET", "/api/v1/threads?folder=INBOX", email)
 		rr := httptest.NewRecorder()
 		handler.GetThreads(rr, req)
 
@@ -115,35 +127,8 @@ func TestThreadsHandler_GetThreads(t *testing.T) {
 
 	t.Run("returns threads from database", func(t *testing.T) {
 		email := "threaduser@example.com"
-
 		ctx := context.Background()
-		userID, err := db.GetOrCreateUser(ctx, pool, email)
-		if err != nil {
-			t.Fatalf("Failed to create user: %v", err)
-		}
-
-		encryptedIMAPPassword, _ := encryptor.Encrypt("imap_pass")
-		encryptedSMTPPassword, _ := encryptor.Encrypt("smtp_pass")
-
-		settings := &models.UserSettings{
-			UserID:                   userID,
-			UndoSendDelaySeconds:     20,
-			PaginationThreadsPerPage: 100,
-			IMAPServerHostname:       "imap.test.com",
-			IMAPUsername:             "user",
-			EncryptedIMAPPassword:    encryptedIMAPPassword,
-			SMTPServerHostname:       "smtp.test.com",
-			SMTPUsername:             "user",
-			EncryptedSMTPPassword:    encryptedSMTPPassword,
-			ArchiveFolderName:        "Archive",
-			SentFolderName:           "Sent",
-			DraftsFolderName:         "Drafts",
-			TrashFolderName:          "Trash",
-			SpamFolderName:           "Spam",
-		}
-		if err := db.SaveUserSettings(ctx, pool, settings); err != nil {
-			t.Fatalf("Failed to save settings: %v", err)
-		}
+		userID := setupTestUserAndSettings(t, pool, encryptor, email)
 
 		// Create a thread with messages
 		thread := &models.Thread{
@@ -206,35 +191,8 @@ func TestThreadsHandler_GetThreads(t *testing.T) {
 
 	t.Run("respects pagination parameters", func(t *testing.T) {
 		email := "paginationuser@example.com"
-
 		ctx := context.Background()
-		userID, err := db.GetOrCreateUser(ctx, pool, email)
-		if err != nil {
-			t.Fatalf("Failed to create user: %v", err)
-		}
-
-		encryptedIMAPPassword, _ := encryptor.Encrypt("imap_pass")
-		encryptedSMTPPassword, _ := encryptor.Encrypt("smtp_pass")
-
-		settings := &models.UserSettings{
-			UserID:                   userID,
-			UndoSendDelaySeconds:     20,
-			PaginationThreadsPerPage: 100,
-			IMAPServerHostname:       "imap.test.com",
-			IMAPUsername:             "user",
-			EncryptedIMAPPassword:    encryptedIMAPPassword,
-			SMTPServerHostname:       "smtp.test.com",
-			SMTPUsername:             "user",
-			EncryptedSMTPPassword:    encryptedSMTPPassword,
-			ArchiveFolderName:        "Archive",
-			SentFolderName:           "Sent",
-			DraftsFolderName:         "Drafts",
-			TrashFolderName:          "Trash",
-			SpamFolderName:           "Spam",
-		}
-		if err := db.SaveUserSettings(ctx, pool, settings); err != nil {
-			t.Fatalf("Failed to save settings: %v", err)
-		}
+		userID := setupTestUserAndSettings(t, pool, encryptor, email)
 
 		// Create multiple threads
 		for i := 0; i < 3; i++ {
@@ -264,9 +222,7 @@ func TestThreadsHandler_GetThreads(t *testing.T) {
 			}
 		}
 
-		req := httptest.NewRequest("GET", "/api/v1/threads?folder=INBOX&page=1&limit=2", nil)
-		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
-		req = req.WithContext(reqCtx)
+		req := createRequestWithUser("GET", "/api/v1/threads?folder=INBOX&page=1&limit=2", email)
 
 		rr := httptest.NewRecorder()
 		handler.GetThreads(rr, req)
@@ -301,9 +257,7 @@ func TestThreadsHandler_GetThreads(t *testing.T) {
 		}
 
 		// Test page 2
-		req2 := httptest.NewRequest("GET", "/api/v1/threads?folder=INBOX&page=2&limit=2", nil)
-		req2Ctx := context.WithValue(req2.Context(), auth.UserEmailKey, email)
-		req2 = req2.WithContext(req2Ctx)
+		req2 := createRequestWithUser("GET", "/api/v1/threads?folder=INBOX&page=2&limit=2", email)
 
 		rr2 := httptest.NewRecorder()
 		handler.GetThreads(rr2, req2)
@@ -375,35 +329,7 @@ func TestThreadsHandler_SyncsWhenStale(t *testing.T) {
 
 	encryptor := getTestEncryptor(t)
 	email := "sync-test@example.com"
-
-	ctx := context.Background()
-	userID, err := db.GetOrCreateUser(ctx, pool, email)
-	if err != nil {
-		t.Fatalf("Failed to create user: %v", err)
-	}
-
-	encryptedIMAPPassword, _ := encryptor.Encrypt("imap_pass")
-	encryptedSMTPPassword, _ := encryptor.Encrypt("smtp_pass")
-
-	settings := &models.UserSettings{
-		UserID:                   userID,
-		UndoSendDelaySeconds:     20,
-		PaginationThreadsPerPage: 100,
-		IMAPServerHostname:       "imap.test.com",
-		IMAPUsername:             "user",
-		EncryptedIMAPPassword:    encryptedIMAPPassword,
-		SMTPServerHostname:       "smtp.test.com",
-		SMTPUsername:             "user",
-		EncryptedSMTPPassword:    encryptedSMTPPassword,
-		ArchiveFolderName:        "Archive",
-		SentFolderName:           "Sent",
-		DraftsFolderName:         "Drafts",
-		TrashFolderName:          "Trash",
-		SpamFolderName:           "Spam",
-	}
-	if err := db.SaveUserSettings(ctx, pool, settings); err != nil {
-		t.Fatalf("Failed to save settings: %v", err)
-	}
+	userID := setupTestUserAndSettings(t, pool, encryptor, email)
 
 	t.Run("calls SyncThreadsForFolder when cache is stale", func(t *testing.T) {
 		mockIMAP := &mockIMAPService{
@@ -413,10 +339,7 @@ func TestThreadsHandler_SyncsWhenStale(t *testing.T) {
 		}
 
 		handler := NewThreadsHandler(pool, encryptor, mockIMAP)
-
-		req := httptest.NewRequest("GET", "/api/v1/threads?folder=INBOX", nil)
-		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
-		req = req.WithContext(reqCtx)
+		req := createRequestWithUser("GET", "/api/v1/threads?folder=INBOX", email)
 
 		rr := httptest.NewRecorder()
 		handler.GetThreads(rr, req)
@@ -452,10 +375,7 @@ func TestThreadsHandler_SyncsWhenStale(t *testing.T) {
 		}
 
 		handler := NewThreadsHandler(pool, encryptor, mockIMAP)
-
-		req := httptest.NewRequest("GET", "/api/v1/threads?folder=INBOX", nil)
-		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
-		req = req.WithContext(reqCtx)
+		req := createRequestWithUser("GET", "/api/v1/threads?folder=INBOX", email)
 
 		rr := httptest.NewRecorder()
 		handler.GetThreads(rr, req)
@@ -483,10 +403,7 @@ func TestThreadsHandler_SyncsWhenStale(t *testing.T) {
 		}
 
 		handler := NewThreadsHandler(pool, encryptor, mockIMAP)
-
-		req := httptest.NewRequest("GET", "/api/v1/threads?folder=INBOX", nil)
-		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
-		req = req.WithContext(reqCtx)
+		req := createRequestWithUser("GET", "/api/v1/threads?folder=INBOX", email)
 
 		rr := httptest.NewRecorder()
 		handler.GetThreads(rr, req)

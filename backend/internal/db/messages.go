@@ -10,6 +10,7 @@ import (
 	"github.com/vdavid/vmail/backend/internal/models"
 )
 
+// ErrMessageNotFound is returned when a requested message cannot be found.
 var ErrMessageNotFound = errors.New("message not found")
 
 // SaveMessage saves or updates a message in the database.

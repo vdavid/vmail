@@ -11,6 +11,7 @@ import (
 	"github.com/vdavid/vmail/backend/internal/models"
 )
 
+// ErrThreadNotFound is returned when a requested thread cannot be found.
 var ErrThreadNotFound = errors.New("thread not found")
 
 // SaveThread saves or updates a thread in the database.

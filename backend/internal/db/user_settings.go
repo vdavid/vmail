@@ -10,6 +10,7 @@ import (
 	"github.com/vdavid/vmail/backend/internal/models"
 )
 
+// ErrUserSettingsNotFound is returned when user settings cannot be found.
 var ErrUserSettingsNotFound = errors.New("user settings not found")
 
 // GetOrCreateUser returns the user's id for the given email.

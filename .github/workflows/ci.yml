@@ -44,6 +44,31 @@ jobs:
             exit 1
           fi
 
+      - name: Install linting tools
+        run: |
+          go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+          go install github.com/gordonklaus/ineffassign@latest
+          go install github.com/client9/misspell/cmd/misspell@latest
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run staticcheck
+        run: staticcheck ./...
+
+      - name: Run gocyclo (check complexity)
+        run: |
+          gocyclo -over 15 . || true
+          echo "Functions with complexity > 15 (non-blocking):"
+          gocyclo -over 15 .
+
+      - name: Run ineffassign
+        run: ineffassign ./...
+
+      - name: Run misspell
+        run: misspell -error .
+
       - name: Run Go tests
         run: go test -v ./...
 

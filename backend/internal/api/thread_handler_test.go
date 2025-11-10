@@ -290,35 +290,8 @@ func TestThreadHandler_SyncsMissingBodies(t *testing.T) {
 
 	encryptor := getTestEncryptor(t)
 	email := "lazy-load-test@example.com"
-
 	ctx := context.Background()
-	userID, err := db.GetOrCreateUser(ctx, pool, email)
-	if err != nil {
-		t.Fatalf("Failed to create user: %v", err)
-	}
-
-	encryptedIMAPPassword, _ := encryptor.Encrypt("imap_pass")
-	encryptedSMTPPassword, _ := encryptor.Encrypt("smtp_pass")
-
-	settings := &models.UserSettings{
-		UserID:                   userID,
-		UndoSendDelaySeconds:     20,
-		PaginationThreadsPerPage: 100,
-		IMAPServerHostname:       "imap.test.com",
-		IMAPUsername:             "user",
-		EncryptedIMAPPassword:    encryptedIMAPPassword,
-		SMTPServerHostname:       "smtp.test.com",
-		SMTPUsername:             "user",
-		EncryptedSMTPPassword:    encryptedSMTPPassword,
-		ArchiveFolderName:        "Archive",
-		SentFolderName:           "Sent",
-		DraftsFolderName:         "Drafts",
-		TrashFolderName:          "Trash",
-		SpamFolderName:           "Spam",
-	}
-	if err := db.SaveUserSettings(ctx, pool, settings); err != nil {
-		t.Fatalf("Failed to save settings: %v", err)
-	}
+	userID := setupTestUserAndSettings(t, pool, encryptor, email)
 
 	thread := &models.Thread{
 		UserID:         userID,

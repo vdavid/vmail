@@ -9,6 +9,7 @@ import (
 	"github.com/vdavid/vmail/backend/internal/config"
 )
 
+// NewConnection creates a new PostgreSQL connection pool with the given configuration.
 func NewConnection(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
 	dbURL := cfg.GetDatabaseURL()
 
@@ -36,6 +37,7 @@ func NewConnection(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, erro
 	return pool, nil
 }
 
+// CloseConnection closes the given database connection pool.
 func CloseConnection(pool *pgxpool.Pool) {
 	if pool != nil {
 		pool.Close()

@@ -4,6 +4,7 @@ import (
 	"time"
 )
 
+// User represents a V-Mail user.
 type User struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`
@@ -11,6 +12,7 @@ type User struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// UserSettings holds user-specific application settings and encrypted credentials.
 type UserSettings struct {
 	UserID                   string    `json:"user_id"`
 	UndoSendDelaySeconds     int       `json:"undo_send_delay_seconds"`
@@ -30,6 +32,7 @@ type UserSettings struct {
 	UpdatedAt                time.Time `json:"updated_at"`
 }
 
+// UserSettingsRequest represents the request payload for saving user settings.
 type UserSettingsRequest struct {
 	UndoSendDelaySeconds     int    `json:"undo_send_delay_seconds"`
 	PaginationThreadsPerPage int    `json:"pagination_threads_per_page"`
@@ -46,6 +49,7 @@ type UserSettingsRequest struct {
 	SpamFolderName           string `json:"spam_folder_name"`
 }
 
+// UserSettingsResponse represents the response payload for user settings (passwords are never included).
 type UserSettingsResponse struct {
 	UndoSendDelaySeconds     int    `json:"undo_send_delay_seconds"`
 	PaginationThreadsPerPage int    `json:"pagination_threads_per_page"`
@@ -62,6 +66,7 @@ type UserSettingsResponse struct {
 	SpamFolderName           string `json:"spam_folder_name"`
 }
 
+// AuthStatusResponse represents the authentication and setup status of a user.
 type AuthStatusResponse struct {
 	IsAuthenticated bool `json:"isAuthenticated"`
 	IsSetupComplete bool `json:"isSetupComplete"`

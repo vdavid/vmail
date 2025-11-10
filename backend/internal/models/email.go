@@ -2,10 +2,12 @@ package models
 
 import "time"
 
+// Folder represents an IMAP folder.
 type Folder struct {
 	Name string `json:"name"`
 }
 
+// Thread represents an email thread containing multiple messages.
 type Thread struct {
 	ID             string    `json:"id"`
 	StableThreadID string    `json:"stable_thread_id"`
@@ -14,6 +16,7 @@ type Thread struct {
 	Messages       []Message `json:"messages,omitempty"`
 }
 
+// Message represents a single email message.
 type Message struct {
 	ID              string       `json:"id"`
 	ThreadID        string       `json:"thread_id"`
@@ -33,6 +36,7 @@ type Message struct {
 	Attachments     []Attachment `json:"attachments,omitempty"`
 }
 
+// Attachment represents an email attachment.
 type Attachment struct {
 	ID        string `json:"id"`
 	MessageID string `json:"message_id"`

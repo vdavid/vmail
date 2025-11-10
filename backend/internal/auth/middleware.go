@@ -10,6 +10,7 @@ import (
 
 type contextKey string
 
+// UserEmailKey is the context key used to store the authenticated user's email.
 const UserEmailKey contextKey = "user_email"
 
 // RequireAuth middleware checks for a valid bearer token in the Authorization header.
