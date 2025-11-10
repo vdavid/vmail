@@ -104,3 +104,42 @@ func FetchFullMessage(c *client.Client, uid uint32) (*imap.Message, error) {
 
 	return msg, nil
 }
+
+// SearchUIDsSince searches for all UIDs greater than or equal to the given UID.
+// This is used for incremental sync to find only new messages.
+func SearchUIDsSince(c *client.Client, minUID uint32) ([]uint32, error) {
+	if c == nil {
+		return nil, fmt.Errorf("client is nil")
+	}
+
+	// Create a SeqSet with the range minUID:*
+	// This represents all UIDs from minUID to the highest UID
+	seqSet := new(imap.SeqSet)
+	seqSet.AddRange(minUID, 0) // 0 means "highest UID"
+
+	// Use SEARCH to find UIDs in this range
+	// We'll use a simple approach: fetch UIDs for all messages in the range
+	// Actually, IMAP SEARCH doesn't work with SeqSet directly for UID ranges
+	// Instead, we need to use the SEARCH command with UID criteria
+
+	// The go-imap library's UidSearch doesn't directly support UID ranges,
+	// but we can fetch all UIDs and filter them, or use a different approach.
+	// For now, let's fetch all UIDs and filter - this is still efficient
+	// because we're only getting UID numbers, not message content.
+
+	searchCriteria := imap.NewSearchCriteria()
+	uids, err := c.UidSearch(searchCriteria)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search for UIDs: %w", err)
+	}
+
+	// Filter to only UIDs >= minUID
+	var filteredUIDs []uint32
+	for _, uid := range uids {
+		if uid >= minUID {
+			filteredUIDs = append(filteredUIDs, uid)
+		}
+	}
+
+	return filteredUIDs, nil
+}

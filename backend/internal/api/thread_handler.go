@@ -147,6 +147,11 @@ func (h *ThreadHandler) GetThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Ensure messages is not nil (defensive check for static analysis)
+	if messages == nil {
+		messages = []*models.Message{}
+	}
+
 	// Collect all message IDs for batch attachment fetching
 	messageIDs := make([]string, 0, len(messages))
 	for _, msg := range messages {

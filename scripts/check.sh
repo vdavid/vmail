@@ -19,9 +19,18 @@ command_exists() {
 install_linting_tools() {
     local tools_missing=0
     
+    # Add GOPATH/bin to PATH if not already there (needed for command_exists to work)
+    if [ -n "$(go env GOPATH)" ]; then
+        local gopath_bin="$(go env GOPATH)/bin"
+        if [[ ":$PATH:" != *":$gopath_bin:"* ]]; then
+            export PATH="$PATH:$gopath_bin"
+        fi
+    fi
+    
     # Use automatic toolchain selection to ensure tools are built with the correct Go version
     export GOTOOLCHAIN=auto
     
+    # Install staticcheck if it doesn't exist
     if ! command_exists staticcheck; then
         echo -e "${YELLOW}Installing staticcheck...${NC}"
         go install honnef.co/go/tools/cmd/staticcheck@latest
@@ -52,11 +61,10 @@ install_linting_tools() {
         tools_missing=1
     fi
     
-    if [ $tools_missing -eq 1 ]; then
-        echo -e "${YELLOW}Note: Make sure $(go env GOPATH)/bin is in your PATH${NC}"
-        echo -e "${YELLOW}Add this to your ~/.zshrc or ~/.bashrc:${NC}"
-        echo -e "${YELLOW}  export PATH=\$PATH:\$(go env GOPATH)/bin${NC}"
-        echo ""
+    if ! command_exists nilaway; then
+        echo -e "${YELLOW}Installing nilaway...${NC}"
+        go install go.uber.org/nilaway/cmd/nilaway@latest
+        tools_missing=1
     fi
 }
 
@@ -149,12 +157,29 @@ run_backend_staticcheck() {
         echo "    staticcheck not found. Run: go install honnef.co/go/tools/cmd/staticcheck@latest"
         echo "    Then ensure $(go env GOPATH)/bin is in your PATH"
         FAILED=1
-    elif ! staticcheck ./... > /dev/null 2>&1; then
-        echo -e "${RED}FAILED${NC}"
-        staticcheck ./...
-        FAILED=1
     else
-        echo -e "${GREEN}OK${NC}"
+        # Check if staticcheck might need reinstalling due to Go version mismatch
+        # We do this by trying to run it on a single file first (faster than ./...)
+        # If it fails with version error, reinstall before running full check
+        local test_file
+        test_file=$(find . -name "*.go" ! -name "*_test.go" | head -1)
+        if [ -n "$test_file" ]; then
+            local test_output
+            test_output=$(staticcheck "$test_file" 2>&1)
+            if echo "$test_output" | grep -q "was built with go"; then
+                echo -e "${YELLOW}Reinstalling staticcheck (built with wrong Go version)...${NC}"
+                GOTOOLCHAIN=auto go install honnef.co/go/tools/cmd/staticcheck@latest
+            fi
+        fi
+        
+        # Now run the actual check
+        if ! staticcheck ./... > /dev/null 2>&1; then
+            echo -e "${RED}FAILED${NC}"
+            staticcheck ./...
+            FAILED=1
+        else
+            echo -e "${GREEN}OK${NC}"
+        fi
     fi
 }
 
@@ -204,6 +229,19 @@ run_backend_gocyclo() {
         else
             echo -e "${GREEN}OK${NC}"
         fi
+    fi
+}
+
+run_backend_nilaway() {
+    echo -n "  • nilaway... "
+    if ! command_exists nilaway; then
+        echo -e "${YELLOW}SKIP${NC} (nilaway not found)"
+    elif ! nilaway ./... > /tmp/nilaway.out 2>&1; then
+        echo -e "${RED}FAILED${NC}"
+        cat /tmp/nilaway.out | sed 's/^/      /'
+        FAILED=1
+    else
+        echo -e "${GREEN}OK${NC}"
     fi
 }
 
@@ -268,6 +306,7 @@ run_all_backend_checks() {
     run_backend_ineffassign
     run_backend_misspell
     run_backend_gocyclo
+    run_backend_nilaway
     run_backend_tests
     
     cd ..
@@ -305,7 +344,7 @@ If no options are provided, runs all checks (backend and frontend).
 
 Available check names:
   Backend: gofmt, go-mod-tidy, govulncheck, go-vet, staticcheck, 
-           ineffassign, misspell, gocyclo, backend-tests
+           ineffassign, misspell, gocyclo, nilaway, backend-tests
   Frontend: prettier, eslint, frontend-tests
 
 EXAMPLES:
@@ -323,18 +362,15 @@ run_single_check() {
     
     # Setup for backend checks
     case "$check_name" in
-        gofmt|go-mod-tidy|govulncheck|go-vet|staticcheck|ineffassign|misspell|gocyclo|backend-tests)
+        gofmt|go-mod-tidy|govulncheck|go-vet|staticcheck|ineffassign|misspell|gocyclo|nilaway|backend-tests)
             # Backend check - need to be in backend directory
             cd backend
             export GOTOOLCHAIN=auto
             
             # Install tools if needed (only for checks that need them)
             case "$check_name" in
-                staticcheck|ineffassign|misspell|gocyclo|govulncheck)
+                staticcheck|ineffassign|misspell|gocyclo|govulncheck|nilaway)
                     install_linting_tools
-                    if [ -n "$(go env GOPATH)" ]; then
-                        export PATH="$PATH:$(go env GOPATH)/bin"
-                    fi
                     ;;
             esac
             ;;
@@ -374,6 +410,9 @@ run_single_check() {
             ;;
         gocyclo)
             run_backend_gocyclo
+            ;;
+        nilaway)
+            run_backend_nilaway
             ;;
         tests)
             # This should be called as backend-tests or frontend-tests
@@ -455,11 +494,6 @@ main() {
     # Ensure linting tools are installed (only needed for backend)
     if [ "$run_backend" = true ]; then
         install_linting_tools
-        
-        # Add GOPATH/bin to PATH if not already there
-        if [ -n "$(go env GOPATH)" ]; then
-            export PATH="$PATH:$(go env GOPATH)/bin"
-        fi
     fi
     
     # Run checks

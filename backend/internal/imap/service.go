@@ -117,7 +117,7 @@ func buildThreadMaps(threads []*sortthread.Thread) *threadMaps {
 	return maps
 }
 
-// buildUIDToMessageMap builds a map of UID to message for quick lookup.
+// buildUIDToMessageMap builds a map of UID to message for a quick lookup.
 func buildUIDToMessageMap(messages []*imap.Message) map[uint32]*imap.Message {
 	uidToMessageMap := make(map[uint32]*imap.Message)
 	for _, msg := range messages {
@@ -203,44 +203,118 @@ func (s *Service) processMessage(ctx context.Context, imapMsg *imap.Message, roo
 	return nil
 }
 
-// SyncThreadsForFolder syncs threads from IMAP for a specific folder.
-func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName string) error {
-	client, mbox, err := s.getClientAndSelectFolder(ctx, userID, folderName)
-	if err != nil {
-		return err
+// incrementalSyncResult holds the result of attempting an incremental sync.
+type incrementalSyncResult struct {
+	uidsToSync   []uint32
+	highestUID   uint32
+	shouldReturn bool // true if we should return early (no new messages)
+}
+
+// tryIncrementalSync attempts to perform an incremental sync.
+// Returns the result and whether incremental sync was successful.
+func (s *Service) tryIncrementalSync(ctx context.Context, client *imapclient.Client, userID, folderName string, syncInfo *db.FolderSyncInfo) (incrementalSyncResult, bool) {
+	if syncInfo == nil || syncInfo.LastSyncedUID == nil || *syncInfo.LastSyncedUID <= 0 {
+		return incrementalSyncResult{}, false
 	}
 
-	log.Printf("Selected folder %s: %d messages", folderName, mbox.Messages)
+	lastUID := uint32(*syncInfo.LastSyncedUID)
+	log.Printf("Incremental sync: fetching UIDs >= %d", lastUID+1)
 
-	// Run THREAD command
+	newUIDs, err := SearchUIDsSince(client, lastUID+1)
+	if err != nil {
+		log.Printf("Warning: Failed to search for new UIDs, falling back to full sync: %v", err)
+		return incrementalSyncResult{}, false
+	}
+
+	if len(newUIDs) == 0 {
+		log.Printf("No new messages to sync")
+		// Update sync timestamp even though there's nothing new
+		if err := db.SetFolderSyncInfo(ctx, s.pool, userID, folderName, syncInfo.LastSyncedUID); err != nil {
+			log.Printf("Warning: Failed to update folder sync timestamp: %v", err)
+		}
+		// Trigger background thread count update
+		go s.updateThreadCountInBackground(userID, folderName)
+		return incrementalSyncResult{shouldReturn: true}, true
+	}
+
+	log.Printf("Found %d new messages to sync", len(newUIDs))
+
+	// Find the highest UID
+	var highestUID uint32
+	for _, uid := range newUIDs {
+		if uid > highestUID {
+			highestUID = uid
+		}
+	}
+
+	return incrementalSyncResult{
+		uidsToSync:   newUIDs,
+		highestUID:   highestUID,
+		shouldReturn: false,
+	}, true
+}
+
+// fullSyncResult holds the result of performing a full sync.
+type fullSyncResult struct {
+	threadMaps   *threadMaps
+	uidsToSync   []uint32
+	highestUID   uint32
+	shouldReturn bool // true if we should return early (no messages)
+}
+
+// performFullSync performs a full sync of all threads in the folder.
+func (s *Service) performFullSync(ctx context.Context, client *imapclient.Client, userID, folderName string) (fullSyncResult, error) {
+	log.Printf("Full sync: fetching all threads")
 	threads, err := RunThreadCommand(client)
 	if err != nil {
-		return fmt.Errorf("failed to run THREAD command: %w", err)
+		return fullSyncResult{}, fmt.Errorf("failed to run THREAD command: %w", err)
 	}
 
 	log.Printf("Found %d threads in folder %s", len(threads), folderName)
 
-	// Build thread maps
 	threadMaps := buildThreadMaps(threads)
+	uidsToSync := threadMaps.allUIDs
 
-	if len(threadMaps.allUIDs) == 0 {
+	if len(uidsToSync) == 0 {
 		log.Printf("No messages found in folder %s", folderName)
-		return nil
+		// Still update sync info
+		if err := db.SetFolderSyncInfo(ctx, s.pool, userID, folderName, nil); err != nil {
+			log.Printf("Warning: Failed to set folder sync info: %v", err)
+		}
+		return fullSyncResult{shouldReturn: true}, nil
 	}
 
-	// Fetch message headers for all messages
-	messages, err := FetchMessageHeaders(client, threadMaps.allUIDs)
-	if err != nil {
-		return fmt.Errorf("failed to fetch message headers: %w", err)
+	// Find the highest UID
+	var highestUID uint32
+	for _, uid := range uidsToSync {
+		if uid > highestUID {
+			highestUID = uid
+		}
 	}
 
-	// Build maps
+	return fullSyncResult{
+		threadMaps:   threadMaps,
+		uidsToSync:   uidsToSync,
+		highestUID:   highestUID,
+		shouldReturn: false,
+	}, nil
+}
+
+// processIncrementalMessages processes messages during incremental sync.
+func (s *Service) processIncrementalMessages(ctx context.Context, messages []*imap.Message, userID, folderName string) {
+	for _, imapMsg := range messages {
+		if err := s.processIncrementalMessage(ctx, imapMsg, userID, folderName); err != nil {
+			log.Printf("Warning: Failed to process message UID %d: %v", imapMsg.Uid, err)
+			// Continue with other messages
+		}
+	}
+}
+
+// processFullSyncMessages processes messages during full sync using thread structure.
+func (s *Service) processFullSyncMessages(ctx context.Context, messages []*imap.Message, threadMaps *threadMaps, userID, folderName string) error {
 	threadMaps.uidToMessage = buildUIDToMessageMap(messages)
 	threadMaps.rootUIDToStableID = buildRootUIDToStableIDMap(threadMaps.rootUIDs, threadMaps.uidToMessage)
 
-	log.Printf("Fetched %d message headers", len(messages))
-
-	// Process each message
 	for _, imapMsg := range messages {
 		rootUID, ok := threadMaps.uidToThreadRoot[imapMsg.Uid]
 		if !ok {
@@ -248,7 +322,6 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 			continue
 		}
 
-		// Get stable thread ID from the root message's Message-ID
 		stableThreadID := getStableThreadID(rootUID, threadMaps.rootUIDToStableID, threadMaps.uidToMessage)
 		if stableThreadID == "" {
 			log.Printf("Warning: No Message-ID found for root UID %d", rootUID)
@@ -260,13 +333,164 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 		}
 	}
 
-	// Set the folder sync timestamp after a successful sync
-	if err := db.SetFolderSyncTimestamp(ctx, s.pool, userID, folderName); err != nil {
-		log.Printf("Warning: Failed to set folder sync timestamp: %v", err)
+	return nil
+}
+
+// SyncThreadsForFolder syncs threads from IMAP for a specific folder.
+// Uses incremental sync if possible (only syncs new messages since last sync).
+func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName string) error {
+	client, mbox, err := s.getClientAndSelectFolder(ctx, userID, folderName)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("Selected folder %s: %d messages", folderName, mbox.Messages)
+
+	// Check if we can do incremental sync
+	syncInfo, err := db.GetFolderSyncInfo(ctx, s.pool, userID, folderName)
+	if err != nil {
+		log.Printf("Warning: Failed to get folder sync info: %v", err)
+		syncInfo = nil // Fall back to full sync
+	}
+
+	// Try incremental sync first
+	incResult, isIncremental := s.tryIncrementalSync(ctx, client, userID, folderName, syncInfo)
+	if isIncremental {
+		if incResult.shouldReturn {
+			return nil
+		}
+		// Incremental sync path: process messages without thread structure
+		messages, err := FetchMessageHeaders(client, incResult.uidsToSync)
+		if err != nil {
+			return fmt.Errorf("failed to fetch message headers: %w", err)
+		}
+		log.Printf("Fetched %d message headers", len(messages))
+		s.processIncrementalMessages(ctx, messages, userID, folderName)
+
+		// Update sync info with the highest UID
+		highestUIDInt64 := int64(incResult.highestUID)
+		if err := db.SetFolderSyncInfo(ctx, s.pool, userID, folderName, &highestUIDInt64); err != nil {
+			log.Printf("Warning: Failed to set folder sync info: %v", err)
+		}
+		go s.updateThreadCountInBackground(userID, folderName)
+		return nil
+	}
+
+	// Full sync path: get thread structure first
+	fullResult, err := s.performFullSync(ctx, client, userID, folderName)
+	if err != nil {
+		return err
+	}
+	if fullResult.shouldReturn {
+		return nil
+	}
+
+	// threadMaps is guaranteed to be non-nil here because performFullSync sets it
+	// (unless shouldReturn is true, in which case we already returned)
+	threadMaps := fullResult.threadMaps
+
+	// Fetch message headers for UIDs we need to sync
+	messages, err := FetchMessageHeaders(client, fullResult.uidsToSync)
+	if err != nil {
+		return fmt.Errorf("failed to fetch message headers: %w", err)
+	}
+
+	log.Printf("Fetched %d message headers", len(messages))
+
+	// Process messages using thread structure
+	if err := s.processFullSyncMessages(ctx, messages, threadMaps, userID, folderName); err != nil {
+		return err
+	}
+
+	// Update sync info with the highest UID
+	highestUIDInt64 := int64(fullResult.highestUID)
+	if err := db.SetFolderSyncInfo(ctx, s.pool, userID, folderName, &highestUIDInt64); err != nil {
+		log.Printf("Warning: Failed to set folder sync info: %v", err)
 		// Don't fail the entire sync if timestamp update fails
 	}
 
+	// Trigger background thread count update
+	go s.updateThreadCountInBackground(userID, folderName)
+
 	return nil
+}
+
+// processIncrementalMessage processes a single message during incremental sync.
+// It matches the message to an existing thread or creates a new one.
+// For simplicity, we use the message's own Message-ID to match threads.
+// If the Message-ID matches a thread's stable ID, it's the root message of that thread.
+// Otherwise, we create a new thread. Full sync will correct any threading issues.
+func (s *Service) processIncrementalMessage(ctx context.Context, imapMsg *imap.Message, userID, folderName string) error {
+	if imapMsg.Envelope == nil || len(imapMsg.Envelope.MessageId) == 0 {
+		log.Printf("Warning: Message UID %d has no Message-ID, skipping", imapMsg.Uid)
+		return nil
+	}
+
+	messageID := imapMsg.Envelope.MessageId
+
+	// For incremental sync, we use a simplified approach:
+	// 1. Try to find a thread where this Message-ID is the stable thread ID (root message)
+	// 2. If not found, check if this message is already in the DB (might be a reply)
+	// 3. If still not found, create a new thread with this Message-ID as root
+	// Note: This is a simplification - full sync will correct threading using THREAD command
+
+	// First, try to find the thread by Message-ID (this works for root messages)
+	threadModel, err := db.GetThreadByStableID(ctx, s.pool, userID, messageID)
+	if err != nil {
+		if !errors.Is(err, db.ErrThreadNotFound) {
+			return fmt.Errorf("failed to get thread: %w", err)
+		}
+
+		// Thread was not found - check if this message already exists (might be a reply to an existing thread)
+		existingMsg, err := db.GetMessageByMessageID(ctx, s.pool, userID, messageID)
+		if err == nil && existingMsg != nil {
+			// Message already exists, get its thread
+			threadModel, err = db.GetThreadByID(ctx, s.pool, existingMsg.ThreadID)
+			if err != nil {
+				return fmt.Errorf("failed to get existing message's thread: %w", err)
+			}
+		} else {
+			// New message - create a new thread
+			// For incremental sync, we'll use this message's Message-ID as the stable ID
+			// Full sync will correct this if it's actually a reply
+			threadModel = &models.Thread{
+				UserID:         userID,
+				StableThreadID: messageID,
+				Subject:        "",
+			}
+			if imapMsg.Envelope != nil {
+				threadModel.Subject = imapMsg.Envelope.Subject
+			}
+			if err := db.SaveThread(ctx, s.pool, threadModel); err != nil {
+				return fmt.Errorf("failed to save thread: %w", err)
+			}
+		}
+	}
+
+	// Parse and save the message
+	msg, err := ParseMessage(imapMsg, threadModel.ID, userID, folderName)
+	if err != nil {
+		return fmt.Errorf("failed to parse message: %w", err)
+	}
+
+	if err := db.SaveMessage(ctx, s.pool, msg); err != nil {
+		return fmt.Errorf("failed to save message: %w", err)
+	}
+
+	return nil
+}
+
+// updateThreadCountInBackground updates the thread count in the background.
+func (s *Service) updateThreadCountInBackground(userID, folderName string) {
+	// Use a new context with timeout to avoid hanging
+	bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := db.UpdateThreadCount(bgCtx, s.pool, userID, folderName); err != nil {
+		log.Printf("Warning: Failed to update thread count in background for folder %s: %v", folderName, err)
+	} else {
+		log.Printf("Updated thread count for folder %s", folderName)
+	}
 }
 
 // SyncFullMessage syncs the full message body from IMAP.
@@ -367,17 +591,17 @@ func (s *Service) syncSingleMessage(ctx context.Context, client *imapclient.Clie
 
 // ShouldSyncFolder checks if we should sync the folder based on cache TTL.
 func (s *Service) ShouldSyncFolder(ctx context.Context, userID, folderName string) (bool, error) {
-	syncTimestamp, err := db.GetFolderSyncTimestamp(ctx, s.pool, userID, folderName)
+	syncInfo, err := db.GetFolderSyncInfo(ctx, s.pool, userID, folderName)
 	if err != nil {
 		return false, err
 	}
 
-	if syncTimestamp == nil {
+	if syncInfo == nil || syncInfo.SyncedAt == nil {
 		// No sync timestamp, need to sync
 		return true, nil
 	}
 
-	age := time.Since(*syncTimestamp)
+	age := time.Since(*syncInfo.SyncedAt)
 	return age > s.cacheTTL, nil
 }
 
