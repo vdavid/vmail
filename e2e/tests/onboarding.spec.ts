@@ -20,15 +20,26 @@ import {
  */
 test.describe('New User Onboarding', () => {
     test('redirects to settings and completes onboarding', async ({ page }) => {
-        // Setup auth (currently a no-op since backend accepts any token)
-        await setupAuth(page, defaultTestUser.email)
+        // Use a different email for new user test (test server creates settings for test@example.com)
+        const newUserEmail = 'newuser@example.com'
+        await setupAuth(page, newUserEmail)
 
         // Navigate to root - should redirect to /settings for new user
         await navigateAndWait(page, '/')
 
+        // Wait for redirect to settings page
+        await page.waitForURL(/.*\/settings/, { timeout: 10000 })
+        
+        // Wait for settings page to load (it loads asynchronously)
+        await page.waitForSelector('h1:has-text("Settings")', { timeout: 10000 })
+
         // Verify we're on the settings page
         await expect(page).toHaveURL(/.*\/settings/)
-        await expect(page.locator('h1')).toContainText('Settings')
+        // Use main content area to avoid sidebar h1
+        await expect(page.locator('main h1, [role="main"] h1').first()).toContainText('Settings')
+
+        // Wait for form to be ready
+        await page.waitForSelector('input[name="imap_server_hostname"]', { timeout: 10000 })
 
         // Fill in IMAP settings
         // Note: These values need to match your test IMAP server
@@ -47,23 +58,46 @@ test.describe('New User Onboarding', () => {
 
         // Verify we're redirected to the inbox
         await expect(page).toHaveURL(/.*\/$/)
-        await waitForAppReady(page)
+        
+        // Wait for inbox to load
+        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
 
         // Verify we're no longer on the settings page
-        await expect(page.locator('h1')).not.toContainText('Settings')
+        // Use main content area to avoid sidebar h1
+        await expect(page.locator('main h1, [role="main"] h1').first()).not.toContainText('Settings')
     })
 
     test('shows validation errors for empty required fields', async ({ page }) => {
-        await setupAuth(page, defaultTestUser.email)
+        // Use a different email for new user test
+        const newUserEmail = 'newuser2@example.com'
+        await setupAuth(page, newUserEmail)
         await navigateAndWait(page, '/settings')
 
+        // Wait for form to be ready
+        await page.waitForSelector('input[name="imap_server_hostname"]', { timeout: 10000 })
+
         // Try to submit without filling required fields
-        await page.click('button[type="submit"]')
+        // First, ensure the form is empty (clear any default values)
+        await page.fill('input[name="imap_server_hostname"]', '')
+        await page.fill('input[name="imap_username"]', '')
+        await page.fill('input[name="smtp_server_hostname"]', '')
+        await page.fill('input[name="smtp_username"]', '')
+
+        // Try to submit
+        const submitButton = page.locator('button[type="submit"]')
+        await submitButton.click()
 
         // HTML5 validation should prevent submission
         // Check that required fields are marked as invalid
+        // Note: HTML5 validation might not set :invalid immediately, so we check the form validity
         const imapServerInput = page.locator('input[name="imap_server_hostname"]')
-        await expect(imapServerInput).toBeInvalid()
+        
+        // Wait a bit for validation to trigger
+        await page.waitForTimeout(100)
+        
+        // Check if the input is invalid (HTML5 validation)
+        const isInvalid = await imapServerInput.evaluate((el: HTMLInputElement) => !el.validity.valid)
+        expect(isInvalid).toBeTruthy()
     })
 })
 

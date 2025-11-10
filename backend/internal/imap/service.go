@@ -263,11 +263,43 @@ type fullSyncResult struct {
 }
 
 // performFullSync performs a full sync of all threads in the folder.
+// Falls back to fetching all UIDs using SEARCH if THREAD command is not supported.
 func (s *Service) performFullSync(ctx context.Context, client *imapclient.Client, userID, folderName string) (fullSyncResult, error) {
 	log.Printf("Full sync: fetching all threads")
 	threads, err := RunThreadCommand(client)
 	if err != nil {
-		return fullSyncResult{}, fmt.Errorf("failed to run THREAD command: %w", err)
+		// THREAD command not supported (e.g., by test IMAP server) - fall back to SEARCH
+		log.Printf("THREAD command not supported, falling back to SEARCH: %v", err)
+		// Fetch all UIDs using SEARCH (starting from UID 1)
+		uidsToSync, err := SearchUIDsSince(client, 1)
+		if err != nil {
+			return fullSyncResult{}, fmt.Errorf("failed to search for all UIDs: %w", err)
+		}
+
+		if len(uidsToSync) == 0 {
+			log.Printf("No messages found in folder %s", folderName)
+			// Still update sync info
+			if err := db.SetFolderSyncInfo(ctx, s.pool, userID, folderName, nil); err != nil {
+				log.Printf("Warning: Failed to set folder sync info: %v", err)
+			}
+			return fullSyncResult{shouldReturn: true}, nil
+		}
+
+		// Find the highest UID
+		var highestUID uint32
+		for _, uid := range uidsToSync {
+			if uid > highestUID {
+				highestUID = uid
+			}
+		}
+
+		// Return without threadMaps (will be nil) - messages will be processed without threading
+		return fullSyncResult{
+			threadMaps:   nil, // No thread structure available
+			uidsToSync:   uidsToSync,
+			highestUID:   highestUID,
+			shouldReturn: false,
+		}, nil
 	}
 
 	log.Printf("Found %d threads in folder %s", len(threads), folderName)
@@ -385,10 +417,6 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 		return nil
 	}
 
-	// threadMaps is guaranteed to be non-nil here because performFullSync sets it
-	// (unless shouldReturn is true, in which case we already returned)
-	threadMaps := fullResult.threadMaps
-
 	// Fetch message headers for UIDs we need to sync
 	messages, err := FetchMessageHeaders(client, fullResult.uidsToSync)
 	if err != nil {
@@ -397,9 +425,17 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 
 	log.Printf("Fetched %d message headers", len(messages))
 
-	// Process messages using thread structure
-	if err := s.processFullSyncMessages(ctx, messages, threadMaps, userID, folderName); err != nil {
-		return err
+	// Process messages: use thread structure if available, otherwise use incremental processing
+	threadMaps := fullResult.threadMaps
+	if threadMaps == nil {
+		// THREAD command not supported - process messages without thread structure
+		// (same as incremental sync)
+		s.processIncrementalMessages(ctx, messages, userID, folderName)
+	} else {
+		// Process messages using thread structure
+		if err := s.processFullSyncMessages(ctx, messages, threadMaps, userID, folderName); err != nil {
+			return err
+		}
 	}
 
 	// Update sync info with the highest UID

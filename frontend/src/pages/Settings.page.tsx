@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as React from 'react'
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { api, type UserSettings } from '../lib/api'
 
@@ -22,8 +23,10 @@ const defaultSettings: UserSettings = {
 
 export default function SettingsPage() {
     const queryClient = useQueryClient()
+    const navigate = useNavigate()
     const [saveMessage, setSaveMessage] = useState<string | null>(null)
     const initializedRef = useRef(false)
+    const wasNewUserRef = useRef(false)
 
     const { data, isLoading, isError } = useQuery<UserSettings>({
         queryKey: ['settings'],
@@ -61,6 +64,7 @@ export default function SettingsPage() {
             })
         } else if (isError && !initializedRef.current) {
             initializedRef.current = true
+            wasNewUserRef.current = true // This is a new user (no settings exist)
             setFormData(defaultSettings)
             setNumberInputs({
                 undo_send_delay_seconds: String(defaultSettings.undo_send_delay_seconds),
@@ -77,9 +81,18 @@ export default function SettingsPage() {
             // Invalidate threads queries so they refetch with new pagination limit
             void queryClient.invalidateQueries({ queryKey: ['threads'] })
             setSaveMessage('Settings saved successfully')
-            setTimeout(() => {
-                setSaveMessage(null)
-            }, 3_000)
+
+            // If this was a new user completing onboarding, redirect to inbox
+            if (wasNewUserRef.current) {
+                // Wait a bit for authStatus to update, then redirect
+                setTimeout(() => {
+                    void navigate('/', { replace: true })
+                }, 500)
+            } else {
+                setTimeout(() => {
+                    setSaveMessage(null)
+                }, 3_000)
+            }
         },
         onError: (error: Error) => {
             setSaveMessage(`Error: ${error.message}`)
@@ -97,7 +110,7 @@ export default function SettingsPage() {
                 ...prev,
                 [name]: value,
             }))
-            // Only update formData if value is a valid number
+            // Only update formData if the value is a valid number
             const numValue = value === '' ? 0 : parseInt(value, 10)
             if (!isNaN(numValue)) {
                 setFormData((prev) => ({

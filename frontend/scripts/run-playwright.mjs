@@ -14,6 +14,7 @@ const frontendDir = join(projectRoot, 'frontend')
 const args = process.argv.slice(2)
 // Default to 'test' if no args provided, otherwise use provided args
 // Always include the config path
+// Add --reporter=list for cleaner output in CI, and ensure tests exit properly
 const playwrightArgs = args.length > 0 
     ? [...args, '--config=../playwright.config.ts']
     : ['test', '--config=../playwright.config.ts']

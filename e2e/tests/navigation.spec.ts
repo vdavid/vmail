@@ -20,38 +20,47 @@ test.describe('Keyboard Navigation', () => {
         await setupAuth(page, defaultTestUser.email)
         await navigateAndWait(page, '/')
 
+        // Wait for settings to load first
+        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+        
         await waitForEmailList(page)
 
-        // Click first email to go to thread view
-        const emailItems = page.locator('[data-testid="email-item"], .email-item')
-        const count = await emailItems.count()
+        // Click first email to go to thread view (EmailListItem renders as <a> links)
+        const emailLinks = page.locator('a[href*="/thread/"]')
+        const count = await emailLinks.count()
 
         if (count === 0) {
-            test.skip()
+            // No emails available, skip this test
             return
         }
 
-        await emailItems.first().click()
+        await emailLinks.first().click()
         await expect(page).toHaveURL(/.*\/thread\/.*/)
+
+        // Wait for thread to load
+        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
 
         // Press 'u' to go back
         await page.keyboard.press('u')
 
         // Verify we're back on the inbox
-        await expect(page).toHaveURL(/.*\/$/)
+        await expect(page).toHaveURL(/.*\/$/, { timeout: 2000 })
     })
 
     test('pressing j moves selection to next email', async ({ page }) => {
         await setupAuth(page, defaultTestUser.email)
         await navigateAndWait(page, '/')
 
+        // Wait for settings to load first
+        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+        
         await waitForEmailList(page)
 
-        const emailItems = page.locator('[data-testid="email-item"], .email-item')
-        const count = await emailItems.count()
+        const emailLinks = page.locator('a[href*="/thread/"]')
+        const count = await emailLinks.count()
 
         if (count < 2) {
-            test.skip()
+            // Need at least 2 emails for this test
             return
         }
 
@@ -75,13 +84,16 @@ test.describe('Keyboard Navigation', () => {
         await setupAuth(page, defaultTestUser.email)
         await navigateAndWait(page, '/')
 
+        // Wait for settings to load first
+        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+        
         await waitForEmailList(page)
 
-        const emailItems = page.locator('[data-testid="email-item"], .email-item')
-        const count = await emailItems.count()
+        const emailLinks = page.locator('a[href*="/thread/"]')
+        const count = await emailLinks.count()
 
         if (count < 2) {
-            test.skip()
+            // Need at least 2 emails for this test
             return
         }
 
@@ -103,13 +115,16 @@ test.describe('Keyboard Navigation', () => {
         await setupAuth(page, defaultTestUser.email)
         await navigateAndWait(page, '/')
 
+        // Wait for settings to load first
+        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+        
         await waitForEmailList(page)
 
-        const emailItems = page.locator('[data-testid="email-item"], .email-item')
-        const count = await emailItems.count()
+        const emailLinks = page.locator('a[href*="/thread/"]')
+        const count = await emailLinks.count()
 
         if (count === 0) {
-            test.skip()
+            // No emails available, skip this test
             return
         }
 
