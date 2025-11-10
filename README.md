@@ -7,16 +7,17 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/vdavid/vmail/backend)](https://goreportcard.com/report/github.com/vdavid/vmail/backend)
 ![License](https://img.shields.io/github/license/vdavid/vmail)
 
-A fast, self-hosted webmail client with a familiar, keyboard-driven UI.
+A fast, self-hosted webmail client for those who love Gmail's layout and its keyboard shortcuts.
 
 ## Overview
 
 V-Mail is a self-hosted, web-based email client designed for personal use.
 It uses the layout and keyboard shortcuts of Gmail to make it immediately familiar for ex-Gmail users.
-It connects to an IMAP server (tested with mailcow) and provides the web UI to read and send email.
+It connects to an IMAP server and provides the web UI to read and send email.
 
-I built V-Mail with the explicit legal constraint to **not** use any of Google's proprietary assets (fonts, icons, logos)
-or aesthetic design. The focus is on **functional parity**, not visual imitation, to avoid any brand confusion.
+I built V-Mail with the explicit legal constraint to **not** use any of Google's proprietary assets (fonts, icons,
+logos) or aesthetic design. The focus is on **functional parity** while avoiding visual imitation, to avoid any brand
+confusion.
 
 ## Running
 
@@ -45,20 +46,20 @@ Compared to Gmail, this project does **not** include:
 
 ## Tech stack
 
-V-Mail uses a **Go** back end, a **REST** API, and a **React** front end with **TypeScript**.
-It uses a **Postgres** database for caching, drafts, and settings.
-V-Mail does **not** handle authentication. A separate, self-hosted [Authelia](https://www.authelia.com) instance is responsible for that.
+V-Mail uses a **Postgres** database, a **Go** back end, a **REST** API, and a **React** front end with **TypeScript**.
+V-Mail needs a separate, self-hosted [Authelia](https://www.authelia.com) instance for authentication.
 
 ### IMAP server
 
-V-Mail works with modern IMAP servers, **mailcow** (using Dovecot under the hood) being the primary target.
+V-Mail works with modern IMAP servers, **[mailcow](https://mailcow.email/)** (using Dovecot under the hood) being the
+primary target.
 It has two **hard requirements** for the IMAP server:
 
-1.  **`THREAD` Extension ([RFC 5256](https://datatracker.ietf.org/doc/html/rfc5256)):** Server-side threading is mandatory.
-    V-Mail will not implement client-side threading.
-2.  **Full-Text Search (FTS):** The server must support fast, server-side `SEARCH` commands.
-    Standard IMAP `SEARCH` is part of the core protocol, but V-Mail's performance relies on the server's FTS capabilities,
-    like those in Dovecot.
+1. **`THREAD` Extension ([RFC 5256](https://datatracker.ietf.org/doc/html/rfc5256)):** Server-side threading is
+   mandatory. V-Mail will not implement client-side threading.
+2. **Full-Text Search (FTS):** The server must support fast, server-side `SEARCH` commands.
+   Standard IMAP `SEARCH` is part of the core protocol, but V-Mail's performance relies on the server's FTS
+   capabilities, like those in Dovecot.
 
 ### Authelia
 
@@ -72,13 +73,13 @@ The back end validates the token before processing requests.
 
 ## Security
 
-We designed the project with security in mind.
+I designed the project with security in mind.
 However, you are responsible for regularly backing up the database to avoid data loss. The emails themselves
 live on the IMAP server, but offline drafts and settings are in the database.
 
 ## Keyboard shortcuts
 
-We designed the app to be fully usable via a subset of Gmail's shortcuts.
+The app provides a subset of Gmail's shortcuts:
 
 * **Navigation:**
     * `j` / `↓`: Move cursor to next email in list / next message in thread.
@@ -108,3 +109,13 @@ We designed the app to be fully usable via a subset of Gmail's shortcuts.
     * `*` then `s`: Select starred.
     * `*` then `t`: Select unstarred.
 
+## Contributing
+
+Contributions are welcome!
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+Report issues and feature requests in the [issue tracker](https://github.com/vdavid/vmail/issues).
+
+Happy emailing!
+
+David

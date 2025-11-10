@@ -1,3 +1,11 @@
+## Contributing
+
+Thanks for your interest in contributing to V-Mail! You're most welcome to do so.
+The easiest way to contribute is to fork the repo, make your changes, and submit a PR.
+This doc is here to help you get started.
+
+(This doc is a WIP. If you have questions, please .)
+
 ## Development
 
 ### Local setup
@@ -28,13 +36,16 @@ while still using Docker to manage the database.
 
 Before committing, ensure all checks pass locally to avoid CI failures.
 
-- The `./scripts/check.sh` script runs all formatting, linting, and tests. It exits with a non-zero code if any check fails.
+- The `./scripts/check.sh` script runs all formatting, linting, and tests. It exits with a non-zero code if any check
+  fails. This is what you should use most of the time.
 - You can also use `./scripts/check.sh --backend` and `./scripts/check.sh --frontend`.
-- To run a specific check, use `./scripts/check.sh --check <check-name>` –see `./scripts/check.sh --help` for the list of checks. This is mostly for CI, though.
+- To run a specific check, use `./scripts/check.sh --check <check-name>` –see `./scripts/check.sh --help` for the list
+  of checks. This is mostly for CI, though.
 
 **What the script checks:**
 
 Backend (Go):
+
 - `gofmt` - Code formatting
 - `go mod tidy` - Module file tidiness
 - `govulncheck` - Security vulnerability scanning
@@ -46,52 +57,28 @@ Backend (Go):
 - `go test` - Unit and integration tests
 
 Frontend (TypeScript):
+
 - `Prettier` - Code formatting
 - `ESLint` - Linting
 - `pnpm test` - Unit tests
 
-The script automatically installs missing linting tools and uses the Go version specified in `go.mod` (via `GOTOOLCHAIN=auto`).
-
-### Setting up GitHub branch protection and required checks
-
-To ensure all pull requests pass checks before merging, set up branch protection rules on GitHub:
-
-1. **Navigate to repository settings:**
-   - Go to your repository on GitHub
-   - Click **Settings** → **Branches**
-
-2. **Add a branch protection rule:**
-   - Click **Add rule** or edit an existing rule for `main`
-   - Under **Branch name pattern**, enter: `main`
-
-3. **Enable required status checks:**
-   - Check the box **Require status checks to pass before merging**
-   - Check **Require branches to be up to date before merging**
-   - In the search box, select these required checks:
-     - `Backend (Go)` - Backend checks job
-     - `Frontend (TypeScript)` - Frontend checks job
-
-4. **Additional recommended settings:**
-   - ✅ **Require pull request reviews before merging** (optional, but recommended)
-   - ✅ **Do not allow bypassing the above settings** (recommended for main branch)
-
-5. **Save the rule:**
-   - Click **Create** or **Save changes**
-
-**Note:** The check names in branch protection should match the job names in the CI workflow:
-- `Backend (Go)` - The backend-checks job
-- `Frontend (TypeScript)` - The frontend-checks job
-
-Each job contains multiple individual check steps (gofmt, govulncheck, etc.) that will appear in the GitHub Actions UI. If you change the job names in `.github/workflows/ci.yml`, update the branch protection rule accordingly.
-
-After setting this up, pull requests to `main` will show a check status, and merging will be blocked until both checks pass.
+The script automatically installs missing linting tools and uses the Go version specified in `go.mod` (via
+`GOTOOLCHAIN=auto`).
 
 ### Commit messages
 
-The first line is max 50 characters. Examples: "Add new feature X", "Frontend: Fix Save button size on the Settings page"
+The first line is max 50 characters. Examples: "Add new feature X", "Frontend: Fix Save button size on the Settings
+page"
 
 Then a blank line. Then a more detailed description if needed, as a form of a concise bulleted list, or free text with
 meaningful extra details on what the commit does.
+
+### DB
+
+When creating tables or columns, always add meaningful comments on each table and column. Store them in the DB (using
+`COMMENT ON...` statements in your migrations) and with the Go models (see, for example,
+`/backend/internal/models/user.go` for examples).
+If a field can be NULL, explain what NULL means. Don't state the obvious, actually try to help the next developer.
 
 ## Architecture
 
@@ -128,6 +115,29 @@ graph TD
     FE -- " 11. Render UI " --> User
 ```
 
+#### Directory structure
+
+```
+/backend
+├── /cmd/
+│   └── /server/
+│       └── main.go           # Main entry point
+├── /internal/
+│   ├── /api/                 # HTTP Handlers & routing
+│   ├── /auth/                # Middleware for validating Authelia JWTs
+│   ├── /config/              # Config loading (env vars, etc.)
+│   ├── /crypto/              # Encryption/decryption logic
+│   ├── /db/                  # Postgres access
+│   ├── /imap/                # Core IMAP service logic
+│   ├── /models/              # Core structs (Thread, Message, User)
+│   └── /sync/                # Logic for background jobs, action_queue
+│   └── /testutil/            # Test utilities and mocks
+├── /migrations/              # DB migrations
+├── go.mod
+├── go.sum
+└── Dockerfile
+```
+
 ## Back end
 
 The back end is a **Go** application providing a **REST API** for the front end.
@@ -158,7 +168,7 @@ It communicates with the IMAP and the SMTP server and uses a **Postgres** databa
 ### DB design
 
 We chose **Postgres** for its robustness, reliability, and excellent support for `JSONB`,
-which is useful for flexible payloads (like our action queue).
+which is useful for flexible payloads like our action queue.
 
 The DB's role is **not** to be a full, permanent copy of the mailbox. Its primary roles are:
 
@@ -207,6 +217,53 @@ The DB's role is **not** to be a full, permanent copy of the mailbox. Its primar
     * Use `testcontainers-go` to spin up a **real Postgres DB** for tests.
     * Test the full flow: `api handler -> db package -> test postgres DB`.
     * Example: "Call the draft saving endpoint and then query the test DB to ensure the draft was written correctly."
+
+
+### APIs
+
+### REST API
+
+**Base path:** `/api/v1`
+
+**Thread ID:** The `thread_id` we use in the API (e.g., `/api/v1/thread/{thread_id}`) is a stable,
+unique identifier, such as the `Message-ID` header of the root/first message in the thread.
+
+* [x] `GET /auth/status`: Checks the Authelia token and tells the front end if the user is authenticated, and has
+  completed the setup/onboarding.
+    * Response: `{"isAuthenticated": true, "isSetupComplete": false}`.
+    * `isSetupComplete: false` tells the React app to redirect to the `/settings` page for onboarding.
+* [ ] `GET /folders`: List all IMAP folders (Inbox, Sent, etc.).
+* [ ] `GET /threads?folder=Inbox&page=1&limit=100`: Get paginated threads for a folder.
+* [ ] `GET /threads/search?q=from:george&page=1`: Get paginated search results.
+* [ ] `GET /thread/{thread_id}`: Get all messages and content for one thread.
+* [ ] `GET /message/{message_id}/attachment/{attachment_id}`: Download an attachment.
+* [x] `GET /settings`: Get user settings.
+    * Response: `{"imap_server_hostname": "mail.example.com", "archive_folder_name": "Archive", ...}`
+    * It should **not** return the encrypted passwords.
+* [ ] `POST /send`: Send a new email (places in `action_queue` for "Undo Send").
+* [ ] `POST /drafts`: Create or update a draft.
+* [ ] `POST /actions`: Perform bulk actions.
+    * Body: `{"action": "archive", "thread_ids": ["id1", "id2"]}`
+    * Body: `{"action": "mark_read", "message_ids": ["id3"]}`
+    * Body: `{"action": "star", "thread_ids": ["id1"]}`
+* [ ] `POST /undo`: Undo the last `send` action.
+* [x] `POST /settings`: Save settings.
+    * Body:
+      `{"imap_server_hostname": "imap.example.com", "imap_username": "user", "imap_password": "pass", "smtp_server_hostname": "smtp.example.com", "smtp_username": "user", "smtp_password": "pass", "undo_send_delay_seconds": 20, "pagination_threads_per_page": 100}`
+    * Response: `200 OK`
+* [ ] `DELETE /threads`: Move threads to trash.
+    * Body: `{"thread_ids": ["id1", "id2"]}`
+
+### Real-time API (WebSockets)
+
+For real-time updates (like new emails), the front end will open a WebSocket connection.
+
+* `GET /api/v1/ws`: Upgrades the HTTP connection to a WebSocket.
+  The server uses this connection to push updates to the client.
+    * **Server-to-client message example:**
+        ```json
+        {"type": "new_message", "folder": "INBOX"}
+        ```
 
 ## Front end
 
@@ -294,10 +351,6 @@ The DB's role is **not** to be a full, permanent copy of the mailbox. Its primar
     * "User can log in (mocking Authelia), see the inbox, click an email, click 'Reply', type 'Test', click 'Send',
       and then find that email in the 'Sent' folder."
 
-## Deployment
-
-With Docker.
-
 ## Style guide
 
 Writing and code styles.
@@ -319,7 +372,7 @@ Writing and code styles.
       "allowlist/denylist" over "whitelist/blacklist".
     - **Be mindful of user expertise**: Avoid jargon. Link to definitions and explain concepts when necessary.
     - **Avoid latinisms**: For example, use "for example" instead of "e.g.".
-    - **Avoid abbreviations**: Very common acronyms like "URL" are okay.
+    - **Avoid abbreviations**: Very common acronyms like "URL" are okay. Also, use "docs" rather than "documentation".
 - Punctuation, capitalization, numbers
     - **Use sentence case in titles**: Regardless whether visible on the UI or dev only.
     - **Use sentence case in labels**: Applies to buttons, labels, and similar. But omit periods on short microcopy.
@@ -334,304 +387,7 @@ Writing and code styles.
     - **Give examples in placeholder text**: Use "Example: 2025-01-01" or "name@example.com" rather than an instruction
       like "Enter your email".
 
-### TypeScript
+### Code
 
-Prettier config used:
-`{"tabWidth": 4,"useTabs": false,"semi": false,"singleQuote": true,"quoteProps": "as-needed","jsxSingleQuote": false,"trailingComma": "all","bracketSpacing": true,"bracketSameLine": false,"arrowParens": "always","endOfLine": "lf","printWidth": 100,"proseWrap": "always"}`.
-
-## Designs
-
-This section contains design pieces. They are temporary artifacts for building the projects, will be removed as we
-build.
-
-### Deployment
-
-#### High-level folder structure
-
-```
-/
-├── backend/
-│   ├── cmd/server/main.go
-│   ├── internal/
-│   └── go.mod
-├── frontend/
-│   ├── src/
-│   ├── package.json
-│   └── pnpm-lock.yaml
-└── Dockerfile
-```
-
-### Back end
-
-#### Directory structure
-
-```
-/backend
-├── /cmd/
-│   └── /server/
-│       └── main.go           # Main entry point
-├── /internal/
-│   ├── /api/                 # HTTP Handlers & routing
-│   │   ├── routes.go
-│   │   ├── middleware.go
-│   │   └── thread_handler.go
-│   ├── /auth/                # Middleware for validating Authelia JWTs
-│   ├── /config/              # Config loading (env vars, etc.)
-│   ├── /db/                  # Postgres logic (pgx)
-│   ├── /imap/                # Core IMAP service logic
-│   │   ├── client.go         # Wrapper around go-imap
-│   │   ├── thread.go         # Logic for THREAD command
-│   │   └── search.go         # Logic for SEARCH command
-│   ├── /models/              # Core structs (Thread, Message, User)
-│   └── /sync/                # Logic for background jobs, action_queue
-├── /pkg/                     # (Optional) Any code you might share
-├── go.mod
-├── go.sum
-└── Dockerfile
-```
-
-#### DB Schema
-
-```postgresql
--- Stores the V-Mail user.
--- Records in this table answer the question "Who is this user?"
--- We keep this table minimal, only storing the core identity.
-CREATE TABLE "users"
-(
-    "id"         UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
-
-    -- The user's login email, which we get from Authelia after a successful login.
-    "email"      TEXT        NOT NULL UNIQUE,
-
-    "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
-    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Stores user-specific settings and credentials for the V-Mail app.
--- This is a 1:1 relationship with the "users" table.
--- We keep it separate to follow a clear "separation of concerns":
--- "users" handles *identity*, while "user_settings" handles *application data*.
-CREATE TABLE "user_settings"
-(
-    "user_id"                     UUID PRIMARY KEY REFERENCES "users" ("id") ON DELETE CASCADE,
-
-    "undo_send_delay_seconds"     INT         NOT NULL DEFAULT 20,
-    "pagination_threads_per_page" INT         NOT NULL DEFAULT 100,
-
-    -- We store IMAP and SMTP credentials so the Go backend can connect
-    -- to the mail server on the user's behalf to send/receive email.
-    "imap_server_hostname"        TEXT        NOT NULL,
-    "imap_username"               TEXT        NOT NULL,
-
-    -- This *must* be encrypted. We use AES-GCM, with the master encryption key
-    -- provided to the backend as an environment variable.
-    "encrypted_imap_password"     BYTEA       NOT NULL,
-
-    "smtp_server_hostname"        TEXT        NOT NULL,
-    "smtp_username"               TEXT        NOT NULL,
-
-    -- This *must* also be encrypted, using the same method.
-    "encrypted_smtp_password"     BYTEA       NOT NULL,
-
-    -- These folder names map V-Mail's actions (like "Archive") to the
-    -- user's actual IMAP folder names. IMAP servers can name these differently.
-    -- On the first login, the backend should try to auto-detect these using
-    -- the IMAP SPECIAL-USE extension (RFC 6154), but the user should
-    -- be able to override them in the settings.
-    "archive_folder_name"         TEXT        NOT NULL DEFAULT 'Archive',
-    "sent_folder_name"            TEXT        NOT NULL DEFAULT 'Sent',
-    "drafts_folder_name"          TEXT        NOT NULL DEFAULT 'Drafts',
-    "trash_folder_name"           TEXT        NOT NULL DEFAULT 'Trash',
-    "spam_folder_name"            TEXT        NOT NULL DEFAULT 'Spam',
-
-    "created_at"                  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    "updated_at"                  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Caches the "anchor" for a thread.
--- A thread is a folder-agnostic container. This table just proves
--- a thread exists and links it to a subject line.
-CREATE TABLE "threads"
-(
-    "id"               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-
-    "user_id"          UUID NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
-
-    -- This is the `Message-ID` header of the thread's root (first) message.
-    -- It's our stable, unique key for the whole conversation.
-    -- Using this ID allows us to group messages from different folders
-    -- (e.g., 'INBOX' and 'Sent') into a single thread.
-    "stable_thread_id" TEXT NOT NULL,
-
-    -- The subject from the root message, used for display in the list.
-    "subject"          TEXT,
-
-    -- A user can only have one thread with a given stable ID.
-    UNIQUE ("user_id", "stable_thread_id")
-);
-
--- Caches individual messages.
--- This is our main workhorse table.
-CREATE TABLE "messages"
-(
-    "id"                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-
-    "thread_id"         UUID    NOT NULL REFERENCES "threads" ("id") ON DELETE CASCADE,
-
-    -- This is a denormalized field (it's redundant).
-    -- We include it for performance, so we can query messages
-    -- by user without needing to JOIN against the "threads" table.
-    "user_id"           UUID    NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
-
-    -- The IMAP Unique ID. This is a number that's only unique
-    -- *within* a specific "imap_folder_name".
-    "imap_uid"          BIGINT  NOT NULL,
-
-    -- The IMAP folder (e.g., "INBOX", "Sent") where this specific message lives.
-    -- Messages within the same thread will often be in different folders.
-    "imap_folder_name"  TEXT    NOT NULL,
-
-    -- The globally unique "<...@...>" header.
-    -- This is what IMAP's THREAD command uses to group messages.
-    "message_id_header" TEXT    NOT NULL,
-
-    "from_address"      TEXT,
-    "to_addresses"      TEXT[],
-    "cc_addresses"      TEXT[],
-    "sent_at"           TIMESTAMPTZ,
-    "subject"           TEXT,
-
-    -- The raw, unsanitized HTML from the email.
-    -- The front end *must* sanitize this with DOMPurify before rendering it.
-    "unsafe_body_html"  TEXT,
-    "body_text"         TEXT,
-
-    -- This boolean mirrors the IMAP `\Seen` flag for this message.
-    "is_read"           BOOLEAN NOT NULL DEFAULT false,
-
-    -- This boolean mirrors the IMAP `\Flagged` flag for this message.
-    "is_starred"        BOOLEAN NOT NULL DEFAULT false,
-
-    -- A message (identified by its UID) can only exist once per folder per user.
-    UNIQUE ("user_id", "imap_folder_name", "imap_uid")
-);
-
--- Stores metadata about attachments.
-CREATE TABLE "attachments"
-(
-    "id"         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-
-    "message_id" UUID    NOT NULL REFERENCES "messages" ("id") ON DELETE CASCADE,
-
-    "filename"   TEXT    NOT NULL,
-    "mime_type"  TEXT    NOT NULL,
-    "size_bytes" BIGINT  NOT NULL,
-
-    -- True if this attachment is meant to be shown inside the email body
-    -- (e.g., a signature image). False if it's a downloadable file.
-    "is_inline"  BOOLEAN NOT NULL DEFAULT false,
-
-    -- The "<Content-ID>" header value.
-    -- This is used to match an inline attachment to an <img src="cid:...">
-    -- tag in the "unsafe_body_html" field of the message.
-    "content_id" TEXT
-);
-
--- For auto-saving drafts.
--- This table provides a fast, responsive auto-save experience.
--- The Go backend saves the draft here *first* (for speed),
--- then syncs the draft to the IMAP "drafts_folder_name" in the background.
-CREATE TABLE "drafts"
-(
-    "id"                     UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
-
-    "user_id"                UUID        NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
-
-    -- The "message_id_header" of the email being replied to.
-    -- This is *not* a foreign key to our "messages" table. It's the
-    -- globally unique header string.
-    "in_reply_to_message_id" TEXT,
-
-    "to_addresses"           TEXT[],
-    "cc_addresses"           TEXT[],
-    "bcc_addresses"          TEXT[],
-    "subject"                TEXT,
-    "body_html"              TEXT,
-    "last_saved_at"          TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- A queue for actions that need to be delayed or run reliably.
--- This enables "Undo Send" and a robust "offline mode" for simple actions.
-CREATE TABLE "action_queue"
-(
-    "id"          UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
-
-    "user_id"     UUID        NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
-
-    -- The type of action to perform.
-    -- Examples: 'send_email', 'star_thread', 'mark_read', 'move_thread'
-    "action_type" TEXT        NOT NULL,
-
-    -- A JSON blob with the data needed to perform the action.
-    -- For 'send_email': {"to_addresses": [...], "subject": "..."}
-    -- For 'star_thread': {"thread_stable_id": "...", "star_status": true}
-    -- For 'mark_read': {"thread_stable_id": "...", "read_status": true}
-    "payload"     JSONB       NOT NULL,
-
-    "created_at"  TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    -- The time when the action should run.
-    -- For 'send_email', this is `NOW() + undo_send_delay_seconds`.
-    -- For other actions, it's just `NOW()`.
-    -- A background worker in Go polls this table for actions
-    -- where `process_at <= NOW()`.
-    "process_at"  TIMESTAMPTZ NOT NULL
-);
-```
-
-#### APIs
-
-##### REST API
-
-**Base path:** `/api/v1`
-
-**Thread ID:** The `thread_id` we use in the API (e.g., `/api/v1/thread/{thread_id}`) is a stable,
-unique identifier, such as the `Message-ID` header of the root/first message in the thread.
-
-* [x] `GET /auth/status`: Checks the Authelia token and tells the front end if the user is 1) Authenticated, and 2) Has completed the setup/onboarding.
-  * Response: `{"isAuthenticated": true, "isSetupComplete": false}`. 
-  * `isSetupComplete: false` tells the React app to redirect to the `/settings` page for onboarding.
-* [ ] `GET /folders`: List all IMAP folders (Inbox, Sent, etc.).
-* [ ] `GET /threads?folder=Inbox&page=1&limit=100`: Get paginated threads for a folder.
-* [ ] `GET /threads/search?q=from:george&page=1`: Get paginated search results.
-* [ ] `GET /thread/{thread_id}`: Get all messages and content for one thread.
-* [ ] `GET /message/{message_id}/attachment/{attachment_id}`: Download an attachment.
-* [x] `GET /settings`: Get user settings.
-  * Response: `{"imap_server_hostname": "mail.example.com", "archive_folder_name": "Archive", ...}`
-  * It should **not** return the encrypted passwords.
-* [ ] `POST /send`: Send a new email (places in `action_queue` for "Undo Send").
-* [ ] `POST /drafts`: Create or update a draft.
-* [ ] `POST /actions`: Perform bulk actions.
-    * Body: `{"action": "archive", "thread_ids": ["id1", "id2"]}`
-    * Body: `{"action": "mark_read", "message_ids": ["id3"]}`
-    * Body: `{"action": "star", "thread_ids": ["id1"]}`
-* [ ] `POST /undo`: Undo the last `send` action.
-* [x] `POST /settings`: Save settings.
-    * Body:
-      `{"imap_server_hostname": "imap.example.com", "imap_username": "user", "imap_password": "pass", "smtp_server_hostname": "smtp.example.com", "smtp_username": "user", "smtp_password": "pass", "undo_send_delay_seconds": 20, "pagination_threads_per_page": 100}`
-    * Response: `200 OK`
-* [ ] `DELETE /threads`: Move threads to trash.
-    * Body: `{"thread_ids": ["id1", "id2"]}`
-
-##### Real-time API (WebSockets)
-
-For real-time updates (like new emails), the front end will open a WebSocket connection.
-
-* `GET /api/v1/ws`: Upgrades the HTTP connection to a WebSocket.
-  The server uses this connection to push updates to the client.
-    * **Server-to-client message example:**
-        ```json
-        {"type": "new_message", "folder": "INBOX"}
-        ```
-
-### Front end
+- Add meaningful comments for public go functions, methods, and types to help the next dev.
+- Don't use classes in TypeScript, use only modules.

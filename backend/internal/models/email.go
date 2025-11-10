@@ -8,6 +8,9 @@ type Folder struct {
 }
 
 // Thread represents an email thread containing multiple messages.
+// A thread is a folder-agnostic container that groups related messages together.
+// The StableThreadID is the Message-ID header of the root message, which allows
+// us to group messages from different folders (e.g., 'INBOX' and 'Sent') into a single thread.
 type Thread struct {
 	ID             string    `json:"id"`
 	StableThreadID string    `json:"stable_thread_id"`
@@ -17,6 +20,9 @@ type Thread struct {
 }
 
 // Message represents a single email message.
+// Messages are cached in the database for fast UI rendering.
+// The user_id field is denormalized for performance (avoids JOINs when querying by user).
+// The imap_uid is only unique within a specific imap_folder_name.
 type Message struct {
 	ID              string       `json:"id"`
 	ThreadID        string       `json:"thread_id"`
@@ -37,6 +43,9 @@ type Message struct {
 }
 
 // Attachment represents an email attachment.
+// If IsInline is true, the attachment is meant to be shown inside the email body
+// (e.g., a signature image). The ContentID is used to match inline attachments
+// to <img src="cid:..."> tags in the email HTML.
 type Attachment struct {
 	ID        string `json:"id"`
 	MessageID string `json:"message_id"`

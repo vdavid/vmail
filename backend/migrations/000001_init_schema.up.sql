@@ -195,3 +195,36 @@ CREATE TABLE "action_queue"
     -- where `process_at <= NOW()`.
     "process_at"  TIMESTAMPTZ NOT NULL
 );
+
+-- Add table and column comments for documentation
+COMMENT ON TABLE "users" IS 'Stores the V-Mail user. Records in this table answer the question "Who is this user?". We keep this table minimal, only storing the core identity.';
+COMMENT ON COLUMN "users"."email" IS 'The user''s login email, which we get from Authelia after a successful login.';
+
+COMMENT ON TABLE "user_settings" IS 'Stores user-specific settings and credentials for the V-Mail app. This is a 1:1 relationship with the "users" table. We keep it separate to follow a clear "separation of concerns": "users" handles *identity*, while "user_settings" handles *application data*.';
+COMMENT ON COLUMN "user_settings"."encrypted_imap_password" IS 'This *must* be encrypted. We use AES-GCM, with the master encryption key provided to the backend as an environment variable.';
+COMMENT ON COLUMN "user_settings"."encrypted_smtp_password" IS 'This *must* also be encrypted, using the same method.';
+COMMENT ON COLUMN "user_settings"."archive_folder_name" IS 'These folder names map V-Mail''s actions (like "Archive") to the user''s actual IMAP folder names. IMAP servers can name these differently. On the first login, the backend should try to auto-detect these using the IMAP SPECIAL-USE extension (RFC 6154), but the user should be able to override them in the settings.';
+
+COMMENT ON TABLE "threads" IS 'Caches the "anchor" for a thread. A thread is a folder-agnostic container. This table just proves a thread exists and links it to a subject line.';
+COMMENT ON COLUMN "threads"."stable_thread_id" IS 'This is the `Message-ID` header of the thread''s root (first) message. It''s our stable, unique key for the whole conversation. Using this ID allows us to group messages from different folders (e.g., ''INBOX'' and ''Sent'') into a single thread.';
+
+COMMENT ON TABLE "messages" IS 'Caches individual messages. This is our main workhorse table.';
+COMMENT ON COLUMN "messages"."user_id" IS 'This is a denormalized field (it''s redundant). We include it for performance, so we can query messages by user without needing to JOIN against the "threads" table.';
+COMMENT ON COLUMN "messages"."imap_uid" IS 'The IMAP Unique ID. This is a number that''s only unique *within* a specific "imap_folder_name".';
+COMMENT ON COLUMN "messages"."imap_folder_name" IS 'The IMAP folder (e.g., "INBOX", "Sent") where this specific message lives. Messages within the same thread will often be in different folders.';
+COMMENT ON COLUMN "messages"."message_id_header" IS 'The globally unique "<...@...>" header. This is what IMAP''s THREAD command uses to group messages.';
+COMMENT ON COLUMN "messages"."unsafe_body_html" IS 'The raw, unsanitized HTML from the email. The front end *must* sanitize this with DOMPurify before rendering it.';
+COMMENT ON COLUMN "messages"."is_read" IS 'This boolean mirrors the IMAP `\Seen` flag for this message.';
+COMMENT ON COLUMN "messages"."is_starred" IS 'This boolean mirrors the IMAP `\Flagged` flag for this message.';
+
+COMMENT ON TABLE "attachments" IS 'Stores metadata about attachments.';
+COMMENT ON COLUMN "attachments"."is_inline" IS 'True if this attachment is meant to be shown inside the email body (e.g., a signature image). False if it''s a downloadable file.';
+COMMENT ON COLUMN "attachments"."content_id" IS 'The "<Content-ID>" header value. This is used to match an inline attachment to an <img src="cid:..."> tag in the "unsafe_body_html" field of the message.';
+
+COMMENT ON TABLE "drafts" IS 'For auto-saving drafts. This table provides a fast, responsive auto-save experience. The Go backend saves the draft here *first* (for speed), then syncs the draft to the IMAP "drafts_folder_name" in the background.';
+COMMENT ON COLUMN "drafts"."in_reply_to_message_id" IS 'The "message_id_header" of the email being replied to. This is *not* a foreign key to our "messages" table. It''s the globally unique header string.';
+
+COMMENT ON TABLE "action_queue" IS 'A queue for actions that need to be delayed or run reliably. This enables "Undo Send" and a robust "offline mode" for simple actions.';
+COMMENT ON COLUMN "action_queue"."action_type" IS 'The type of action to perform. Examples: ''send_email'', ''star_thread'', ''mark_read'', ''move_thread''.';
+COMMENT ON COLUMN "action_queue"."payload" IS 'A JSON blob with the data needed to perform the action. For ''send_email'': {"to_addresses": [...], "subject": "..."}. For ''star_thread'': {"thread_stable_id": "...", "star_status": true}. For ''mark_read'': {"thread_stable_id": "...", "read_status": true}.';
+COMMENT ON COLUMN "action_queue"."process_at" IS 'The time when the action should run. For ''send_email'', this is `NOW() + undo_send_delay_seconds`. For other actions, it''s just `NOW()`. A background worker in Go polls this table for actions where `process_at <= NOW()`.';

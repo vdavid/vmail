@@ -11,3 +11,4 @@ CREATE TABLE "folder_sync_timestamps"
 
 CREATE INDEX idx_folder_sync_timestamps_user_id ON "folder_sync_timestamps" ("user_id");
 
+COMMENT ON TABLE "folder_sync_timestamps" IS 'Table to track when we synced each folder for each user. This enables efficient cache TTL checking without scanning all messages.';

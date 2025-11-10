@@ -5,6 +5,8 @@ import (
 )
 
 // User represents a V-Mail user.
+// This is the core identity table, storing minimal user information.
+// The user's email comes from Authelia after successful authentication.
 type User struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`
@@ -13,6 +15,9 @@ type User struct {
 }
 
 // UserSettings holds user-specific application settings and encrypted credentials.
+// This table has a 1:1 relationship with the users table, following a clear
+// separation of concerns: users handles identity, while user_settings handles
+// application data including IMAP/SMTP credentials (which are encrypted using AES-GCM).
 type UserSettings struct {
 	UserID                   string    `json:"user_id"`
 	UndoSendDelaySeconds     int       `json:"undo_send_delay_seconds"`
