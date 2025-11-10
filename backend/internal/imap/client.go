@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -45,7 +46,8 @@ func (p *Pool) getClientConcrete(userID, server, username, password string) (*cl
 	}
 
 	// Create a new connection (use TLS in production, non-TLS for tests)
-	useTLS := true // Production default
+	// Check environment variable for test mode
+	useTLS := os.Getenv("VMAIL_TEST_MODE") != "true"
 	c, err := ConnectToIMAP(server, useTLS)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect: %w", err)
