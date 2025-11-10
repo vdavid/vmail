@@ -401,56 +401,181 @@ These are identical, just with a different destination. We'll build them as a ge
 
 ### **3/4. 🔎 Feature: Search**
 
-This is a read-only feature, so it doesn't use the action queue.
+This is a read-only feature, so it doesn't use the action queue. We'll implement it in two phases:
+- **Phase 1:** Basic text search (plain text queries)
+- **Phase 2:** Gmail-like syntax parsing (`from:`, `to:`, `subject:`, etc.)
 
-#### **Backend (Search)**
+#### **Phase 1: Basic Text Search**
 
-* [ ] **Create the "Search" IMAP logic:**
-    * In `/backend/internal/imap/read.go` (or a new `search.go`), create: `func (s *Service) Search(ctx context.Context, userID string, query string) ([]Thread, error)`.
+##### **Backend (Basic Search)**
+
+* [x] **Create the "Search" IMAP logic:**
+    * Create a new file `/backend/internal/imap/search.go`.
+    * Create: `func (s *Service) Search(ctx context.Context, userID string, query string, page, limit int) ([]*models.Thread, int, error)`.
     * This function needs to:
-        1. Get user settings and IMAP connection.
-        2. `c.Select("INBOX", ...)` (Keep it simple: only search `INBOX` for now).
-        3. Build IMAP criteria: `criteria := imap.NewSearchCriteria()` -> `criteria.Text = []string{query}`.
+        1. Get user settings and IMAP connection using `s.getClientAndSelectFolder()`.
+        2. **Folder selection:** If the query contains `folder:` (parse it first), use that folder. Otherwise, default to `"INBOX"`.
+        3. Build IMAP criteria: `criteria := imap.NewSearchCriteria()` -> `criteria.Text = []string{query}` (for Phase 1, treat the entire query as plain text).
         4. Run `uids, err := c.UidSearch(criteria)`.
-        5. **This is the hard part:** You now have UIDs, but the frontend needs *threads*.
-        6. You'll have to `FETCH` the headers for these UIDs, find their `Message-ID`s, and then group them by `stable_thread_id` (similar to your `threads` endpoint logic, but based on a `SEARCH` result, not a `THREAD` result).
-* [ ] **Create the <code>search</code> API endpoint:**
-    * In `routes.go`, add: `router.Get("/api/v1/search", app.searchHandler)`.
-    * Create `api/search_handler.go`.
+        5. If no UIDs are found, return an empty slice and count 0.
+        6. **Threading logic:**
+            * Fetch headers for matching UIDs using `FetchMessageHeaders(client, uids)`.
+            * For each message:
+                * Extract `Message-ID` from `Envelope.MessageId`.
+                * Look up the message in DB: `db.GetMessageByMessageID(ctx, pool, userID, messageID)`.
+                * If found, get its `thread_id`, then get the thread: `db.GetThreadByID(ctx, pool, threadID)`.
+                * If not found in DB, this is a new message — we'll need to create/sync it. For now, skip it (or trigger a sync — see note below).
+            * Collect all unique threads (deduplicate by `stable_thread_id`).
+            * **Note:** Messages not in DB should ideally trigger a sync, but for MVP we can skip them or do a lightweight sync. Consider calling `s.SyncThreadsForFolder()` for the search folder if many messages are missing.
+        7. **Pagination:** Apply pagination to the deduplicated thread list (sort by most recent message `sent_at`, then apply `LIMIT` and `OFFSET`).
+        8. Get the total count of unique threads (before pagination).
+        9. Return threads and total count.
+* [x] **Create the <code>search</code> API endpoint:**
+    * In `routes.go` (or wherever routes are defined), add: `router.Get("/api/v1/search", app.searchHandler)`.
+    * Create `/backend/internal/api/search_handler.go`.
     * The `searchHandler` should:
-        1. Get the query: `q := r.URL.Query().Get("q")`.
-        2. Call your new `imapService.Search(...)`.
-        3. Return the resulting list of threads (in the *same JSON format* as `GET /api/v1/threads`).
+        1. Get the query: `q := r.URL.Query().Get("q")`. If empty, treat as "return all emails".
+        2. Get pagination params: Use `parsePaginationParams(r, 100)` (reuse from `threads_handler.go`).
+        3. Get user ID from context (reuse `getUserIDFromContext` pattern from other handlers).
+        4. Call `imapService.Search(ctx, userID, q, page, limit)`.
+        5. Return the same JSON format as `GET /api/v1/threads`: on {"threads": [...], "pagination": { "total_count": 123, "page": 1, "per_page": 100 } }
+        6. **Error handling:**
+           * Empty query (`q == ""`): Return all emails (paginated).
+           * Invalid query: Return `400 Bad Request` with an error message.
+           * IMAP errors: Return `500 Internal Server Error` with a generic message (log details server-side).
+           * No results: Return `200 OK` with empty `threads` array.
 
-#### **Frontend (Search)**
+##### **Frontend (Basic Search)**
 
-* [ ] **Create the search results page:**
+* [x] **Create the search results page:**
     * Create a new page: `pages/Search.page.tsx`.
-    * Add the route in `App.tsx`: `&lt;Route path="/search" element={&lt;SearchPage />} />`.
-* [ ] **Hook up the search bar:**
-    * In `Header.tsx`, make the search input a controlled component.
-    * On form submit (or `Enter` key), use `useNavigate` from `react-router-dom` to navigate: `Maps(`/search?q=${query}`)`.
-* [ ] **Fetch and display results:**
-    * In `Search.page.tsx`, use the `useSearchParams` hook to get the `q` param from the URL.
-    * Use `TanStack Query`'s `useQuery` to fetch from the backend: `useQuery({ queryKey: ['search', q], queryFn: () => fetchSearchResults(q) })`.
-    * **Re-use your component:** The page should just map over the results and render your existing `EmailListItem.tsx` component for each thread.
+    * Add the route in `App.tsx`: `<Route path="/search" element={<SearchPage />} />`.
+* [x] **Hook up the search bar:**
+    * In `Header.tsx`, make the search input a controlled component (use `useState`).
+    * On form submit (or `Enter` key), use `useNavigate` from `react-router-dom` to navigate: `navigate(`/search?q=${encodeURIComponent(query)}`)`.
+    * **Basic validation:** Check that the query is not empty (or allow empty to show all emails).
+* [x] **Fetch and display results:**
+    * In `Search.page.tsx`, use `useSearchParams` hook to get the `q` param from the URL.
+    * Use `TanStack Query`'s `useQuery` to fetch from the backend:
 
-#### **Testing**
+      useQuery({
+      queryKey: ['search', q, page],
+      queryFn: () => fetchSearchResults(q, page, limit)
+      })
+      * **Re-use existing components:** The page should map over the results and render your existing `EmailListItem.tsx` component for each thread.
+    * **Pagination:** Re-use `EmailListPagination.tsx` component (from milestone 5/3).
+    * Handle loading and error states.
 
-* [ ] **Backend Unit (Go):**
-    * **<code>search_handler</code>:** Test that a `GET /api/v1/search?q=test` call correctly calls `imapService.Search("test")`.
-    * **<code>imapService</code>:** Test the `Search` function. Mock the DB and IMAP client.
-        * **Assert** the IMAP client's `UidSearch` method is called with the correct criteria.
-        * **Assert** the logic for fetching/grouping UIDs into threads works.
-* [ ] **Frontend Integration (RTL + <code>msw</code>):**
+##### **Testing (Phase 1)**
+
+* [x] **Backend Unit (Go):**
+    * **<code>search_handler</code>:**
+        * Test that `GET /api/v1/search?q=test` correctly calls `imapService.Search("test", ...)`.
+        * Test that empty query (`q=`) calls search with empty string.
+        * Test pagination params are passed correctly.
+        * Test error handling (400 for invalid, 500 for IMAP errors).
+    * **<code>imapService.Search</code>:**
+        * Mock the DB and IMAP client.
+        * Test that `UidSearch` is called with correct criteria.
+        * Test that we look up messages in DB by Message-ID.
+        * Test that threads are deduplicated correctly.
+        * Test pagination logic.
+        * Test empty results case.
+* [x] **Frontend Integration (RTL + <code>msw</code>):**
     * **<code>Header.tsx</code>:**
         * Mock `react-router`'s `useNavigate` hook.
         * Simulate typing "hello" into the search input and pressing "Enter".
-        * **Assert** `Maps` was called with `/search?q=hello`.
+        * Assert `navigate` was called with `/search?q=hello`.
     * **<code>Search.page.tsx</code>:**
         * Mock `useSearchParams` to return `q=hello`.
-        * Mock the `GET /api/v1/search?q=hello` API.
-        * **Assert** the page calls the API and renders the list of `EmailListItem` components from the mock response.
+        * Mock the `GET /api/v1/search?q=hello&page=1&limit=100` API.
+        * Assert the page calls the API and renders the list of `EmailListItem` components from the mock response.
+        * Test pagination navigation.
+        * Test empty results display.
+
+#### **Phase 2: Gmail-like Syntax Parsing**
+
+##### **Backend (Query Parser)**
+
+* [x] **Create search query parser:**
+    * In `/backend/internal/imap/search.go`, create: `func ParseSearchQuery(query string) (*imap.SearchCriteria, string, error)`.
+    * Returns: parsed `SearchCriteria`, extracted `folder` name (or empty string), and error.
+    * **Supported syntax:**
+        * `from:george` → `criteria.From = []string{"george"}`
+        * `to:alice` → `criteria.To = []string{"alice"}`
+        * `subject:meeting` → `criteria.Subject = []string{"meeting"}`
+        * `after:2025-01-01` → `criteria.Since = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)`
+        * `before:2025-12-31` → `criteria.Before = time.Date(2025, 12, 31, 23, 59, 59, 999999999, time.UTC)`
+        * `folder:Inbox` or `label:Inbox` → extract folder name, return it separately (don't set in criteria)
+        * Plain text (no prefix) → `criteria.Text = []string{text}`
+        * **Combinations:** `from:george after:2025-01-01 cabbage` → combine multiple criteria
+    * **Parsing rules:**
+        * Split query by spaces, but respect quoted strings: `from:"John Doe"` should keep "John Doe" together.
+        * Handle multiple filters: `from:george to:alice subject:meeting`.
+        * If both `folder:` and `label:` are present, `folder:` takes precedence.
+        * Date parsing: Support `YYYY-MM-DD` format. Return error for invalid dates.
+        * If no filters match, treat the entire query as plain text search.
+    * **Error handling:**
+        * Invalid date format → return error.
+        * Empty filter value (e.g., `from:`) → treat as invalid, return error.
+* [x] **Update <code>Search</code> function:**
+    * Modify `Search()` to call `ParseSearchQuery(query)` first.
+    * Use the returned `folder` to select the IMAP folder (or default to `"INBOX"`).
+    * Use the parsed `SearchCriteria` instead of `criteria.Text = []string{query}`.
+    * Handle parser errors by returning `400 Bad Request`.
+
+##### **Frontend (Query Validation)**
+
+* [x] **Add basic query validation:**
+    * In `Header.tsx` or a new utility file, create a function to validate search queries before submission.
+    * **Basic checks:**
+        * Empty filter values: `from:` → show warning, don't submit.
+        * Invalid date format: `after:2025-13-45` → show warning.
+        * (Optional) Syntax highlighting or autocomplete for filter names.
+    * **Note:** Frontend validation is for UX only. Backend must still validate fully.
+
+##### **Testing (Phase 2)**
+
+* [x] **Backend Unit (Go):**
+    * **<code>ParseSearchQuery</code>:**
+        * Test `"from:george"` → asserts `criteria.From = []string{"george"}`.
+        * Test `"from:george after:2025-01-01"` → asserts both fields are set.
+        * Test `"folder:Inbox from:george"` → asserts folder extracted and criteria set.
+        * Test `"cabbage"` (plain text) → asserts `criteria.Text = []string{"cabbage"}`.
+        * Test `"from: to:alice"` → asserts error (empty `from:` value).
+        * Test `"after:invalid-date"` → asserts error.
+        * Test quoted strings: `from:"John Doe"` → keeps name together.
+        * Test `label:` alias works same as `folder:`.
+    * **<code>imapService.Search</code> with parser:**
+        * Test that parsed criteria are passed to `UidSearch` correctly.
+        * Test that folder from parser is used for `Select()`.
+* [x] **Frontend Integration (RTL):**
+    * Test that invalid queries show validation warnings.
+    * Test that valid queries navigate correctly.
+
+#### **Implementation Notes**
+
+* **Threading:** When a search result matches message #33 in a 50-message thread, we return the entire thread. This is handled by looking up the message's `thread_id` in the DB, then fetching all messages for that thread.
+* **Database vs IMAP:** Always search IMAP directly (not the DB cache) for real-time results. The DB may be stale if the user made changes via another email client.
+* **Empty query:** An empty `q` parameter should return all emails (paginated), equivalent to browsing the folder.
+* **Folder support:** Phase 1 defaults to `INBOX`. Phase 2 adds `folder:` filter to search any folder. If no `folder:` specified, default to `INBOX`.
+* **Pagination:** Reuse the existing pagination implementation from milestone 5/3. Search results should be paginated just like folder views.
+* **Error handling:**
+    * `400 Bad Request` for invalid query syntax or malformed dates.
+    * `500 Internal Server Error` for IMAP connection/search errors (log details, return a generic message).
+    * `200 OK` with empty array for no results.
+* **Performance:** For large result sets, consider:
+    * Limiting max search results (e.g., 10,000 UIDs) to avoid memory issues.
+    * Batching UID fetches if needed.
+    * Caching parsed queries (optional optimization).
+
+#### **Future Enhancements (Not in this milestone)**
+
+* [ ] Search across all folders (not just one at a time).
+* [ ] `has:attachment` filter.
+* [ ] `is:read` / `is:unread` / `is:starred` filters.
+* [ ] Search result caching.
+* [ ] Hybrid DB/IMAP search for better performance.
 
 ### **3/5. 🧪 Test plan: Milestone 3 (end-to-end)**
 

@@ -2,6 +2,8 @@ package imap
 
 import (
 	"context"
+
+	"github.com/vdavid/vmail/backend/internal/models"
 )
 
 // MessageToSync represents a message that needs to be synced.
@@ -28,6 +30,10 @@ type IMAPService interface {
 	// SyncFullMessages syncs multiple message bodies from IMAP in a batch.
 	// Messages are grouped by folder and synced efficiently.
 	SyncFullMessages(ctx context.Context, userID string, messages []MessageToSync) error
+
+	// Search searches for threads matching the query.
+	// Returns threads, total count, and error.
+	Search(ctx context.Context, userID string, query string, page, limit int) ([]*models.Thread, int, error)
 
 	// Close closes the service and cleans up connections.
 	Close()

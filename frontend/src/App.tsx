@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import AuthWrapper from './components/AuthWrapper'
 import Layout from './components/Layout'
 import InboxPage from './pages/Inbox.page'
+import SearchPage from './pages/Search.page'
 import SettingsPage from './pages/Settings.page'
 import ThreadPage from './pages/Thread.page'
 
@@ -24,6 +25,7 @@ export default function App() {
                     <Layout>
                         <Routes>
                             <Route path='/' element={<InboxPage />} />
+                            <Route path='/search' element={<SearchPage />} />
                             <Route path='/thread/:threadId' element={<ThreadPage />} />
                             <Route path='/settings' element={<SettingsPage />} />
                         </Routes>

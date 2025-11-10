@@ -164,4 +164,22 @@ export const api = {
         }
         return (await response.json()) as Promise<Thread>
     },
+
+    async search(query: string, page: number = 1, limit?: number): Promise<ThreadsResponse> {
+        const params = new URLSearchParams({
+            q: query,
+            page: page.toString(),
+        })
+        if (limit !== undefined) {
+            params.append('limit', limit.toString())
+        }
+        const response = await fetch(`${API_BASE_URL}/search?${params.toString()}`, {
+            credentials: 'include',
+            headers: getAuthHeaders(),
+        })
+        if (!response.ok) {
+            throw new Error('Failed to search')
+        }
+        return (await response.json()) as Promise<ThreadsResponse>
+    },
 }

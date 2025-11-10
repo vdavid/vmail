@@ -56,6 +56,7 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool) http.Handler {
 	foldersHandler := api.NewFoldersHandler(pool, encryptor, imapPool)
 	threadsHandler := api.NewThreadsHandler(pool, encryptor, imapService)
 	threadHandler := api.NewThreadHandler(pool, encryptor, imapService)
+	searchHandler := api.NewSearchHandler(pool, encryptor, imapService)
 
 	mux := http.NewServeMux()
 
@@ -74,6 +75,7 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool) http.Handler {
 	})))
 	mux.Handle("/api/v1/folders", auth.RequireAuth(http.HandlerFunc(foldersHandler.GetFolders)))
 	mux.Handle("/api/v1/threads", auth.RequireAuth(http.HandlerFunc(threadsHandler.GetThreads)))
+	mux.Handle("/api/v1/search", auth.RequireAuth(http.HandlerFunc(searchHandler.Search)))
 
 	// Handle /api/v1/thread/{thread_id} pattern
 	mux.Handle("/api/v1/thread/", auth.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

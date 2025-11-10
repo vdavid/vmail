@@ -282,6 +282,10 @@ func (m *mockIMAPServiceForThread) SyncFullMessages(_ context.Context, _ string,
 	return m.syncFullMessagesErr
 }
 
+func (m *mockIMAPServiceForThread) Search(context.Context, string, string, int, int) ([]*models.Thread, int, error) {
+	return nil, 0, nil
+}
+
 func (m *mockIMAPServiceForThread) Close() {}
 
 func TestThreadHandler_SyncsMissingBodies(t *testing.T) {

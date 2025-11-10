@@ -14,7 +14,9 @@ export default function EmailListPagination({ pagination }: EmailListPaginationP
     const handlePageChange = (newPage: number) => {
         const params = new URLSearchParams(searchParams)
         params.set('page', newPage.toString())
-        void navigate(`/?${params.toString()}`)
+        // Determine the base path based on whether we're on search or inbox
+        const basePath = params.has('q') ? '/search' : '/'
+        void navigate(`${basePath}?${params.toString()}`)
     }
 
     if (totalPages <= 1) {
