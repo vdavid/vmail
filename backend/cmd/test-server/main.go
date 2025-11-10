@@ -23,7 +23,11 @@ import (
 
 func main() {
 	// Set test mode environment variable
-	os.Setenv("VMAIL_TEST_MODE", "true")
+	err := os.Setenv("VMAIL_TEST_MODE", "true")
+	if err != nil {
+		log.Printf("Failed to set VMAIL_TEST_MODE: %v", err)
+		return
+	}
 
 	// Start test IMAP server
 	log.Println("Starting test IMAP server...")
@@ -52,7 +56,11 @@ func main() {
 
 	// Set Authelia URL to a mock (tests don't need real Authelia)
 	// Must be set before NewConfig() because validation requires it
-	os.Setenv("AUTHELIA_URL", "http://localhost:9091")
+	err = os.Setenv("AUTHELIA_URL", "http://localhost:9091")
+	if err != nil {
+		log.Printf("Failed to set AUTHELIA_URL: %v", err)
+		return
+	}
 
 	// Load config (will use .env file if in development mode)
 	cfg, err := config.NewConfig()

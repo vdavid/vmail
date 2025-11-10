@@ -27,8 +27,8 @@ export const defaultTestUser: TestUser = {
     imapUsername: 'username',
     imapPassword: 'password',
     smtpServer: 'localhost:1025', // Will be set by test server
-    smtpUsername: 'testuser',
-    smtpPassword: 'testpass',
+    smtpUsername: 'test-user',
+    smtpPassword: 'test-pass',
 }
 
 export const sampleMessages: TestMessage[] = [
@@ -46,7 +46,7 @@ export const sampleMessages: TestMessage[] = [
         from: 'colleague@example.com',
         to: 'test@example.com',
         body: 'Don\'t forget about the meeting tomorrow at 2 PM.',
-        sentAt: new Date(Date.now() - 1 * 60 * 60 * 1000), // 1 hour ago
+        sentAt: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
     },
     {
         messageId: '<msg3@test>',

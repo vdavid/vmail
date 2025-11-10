@@ -2,208 +2,37 @@ package imap
 
 import (
 	"context"
-	"fmt"
-	"net"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/emersion/go-imap"
-	"github.com/emersion/go-imap/backend/memory"
-	imapclient "github.com/emersion/go-imap/client"
-	"github.com/emersion/go-imap/server"
 	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/models"
 	"github.com/vdavid/vmail/backend/internal/testutil"
 )
 
-// setupTestIMAPServer creates a test IMAP server with an in-memory backend.
-// Returns the server, connection address, backend, and cleanup function.
-func setupTestIMAPServer(t *testing.T) (*server.Server, string, *memory.Backend, func()) {
-	t.Helper()
-
-	// Create an in-memory backend
-	be := memory.New()
-
-	// Create server
-	s := server.New(be)
-	s.AllowInsecureAuth = true
-
-	// Start server on random port
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("Failed to listen: %v", err)
-	}
-
-	addr := listener.Addr().String()
-
-	// Start server in goroutine
-	go func() {
-		if err := s.Serve(listener); err != nil {
-			t.Logf("IMAP server error: %v", err)
-		}
-	}()
-
-	// Give server time to start
-	time.Sleep(100 * time.Millisecond)
-
-	cleanup := func() {
-		err := s.Close()
-		if err != nil {
-			return
-		}
-	}
-
-	return s, addr, be, cleanup
-}
-
-// createTestIMAPUser creates a user in the memory backend.
-// The memory backend creates a default user with username "username" and password "password".
-// For testing, we'll use the default user that's already created, or we can log in
-// with any credentials, and the backend will accept them if we create the user properly.
-// Since we can't easily create new users (fields are unexported), we'll use
-// unsafe reflection or just use the default user. For simplicity, let's use
-// the default credentials that the memory backend provides.
-func createTestIMAPUser(t *testing.T, be *memory.Backend, username, password string) {
-	t.Helper()
-
-	// The memory backend creates a default user with username "username" and password "password"
-	// For our tests, we'll use those default credentials instead of trying to create new users
-	// This is a limitation of the memory backend - it doesn't provide a public API to create users
-
-	// Try to log in - if it fails, we'll use the default user
-	user, err := be.Login(nil, username, password)
-	if err != nil {
-		// If login fails, try with default credentials
-		// But actually, we want to use our specified username/password.
-		// So we need to create the user. Since reflection doesn't work with unexported fields,
-		// we'll use unsafe pointer arithmetic (not recommended but necessary here)
-		// Actually, let's just document this limitation and use the default user for now
-		t.Logf("Note: Memory backend doesn't support creating custom users easily. " +
-			"Using default user (username: username, password: password) for testing.")
-
-		// Use default credentials
-		user, err = be.Login(nil, "username", "password")
-		if err != nil {
-			t.Fatalf("Failed to login with default credentials: %v", err)
-		}
-	}
-
-	// Create INBOX for the user if it doesn't exist
-	_, err = user.GetMailbox("INBOX")
-	if err != nil {
-		err = user.CreateMailbox("INBOX")
-		if err != nil {
-			t.Fatalf("Failed to create INBOX: %v", err)
-		}
-	}
-}
-
-// addTestMessage adds a test message to the IMAP server.
-func addTestMessage(t *testing.T, client *imapclient.Client, folderName, messageID, subject, from, to string, sentAt time.Time) uint32 {
-	t.Helper()
-
-	// Select the folder
-	_, err := client.Select(folderName, false)
-	if err != nil {
-		t.Fatalf("Failed to select folder: %v", err)
-	}
-
-	// Create a simple RFC 822 message
-	messageBody := fmt.Sprintf(`Message-ID: %s
-Date: %s
-From: %s
-To: %s
-Subject: %s
-Content-Type: text/plain; charset=utf-8
-
-Test message body.
-`, messageID, sentAt.Format(time.RFC1123Z), from, to, subject)
-
-	// Append the message to the folder
-	flags := []string{imap.SeenFlag}
-	now := time.Now()
-	err = client.Append(folderName, flags, now, strings.NewReader(messageBody))
-	if err != nil {
-		t.Fatalf("Failed to append message: %v", err)
-	}
-
-	// Search for the message we just added to get its UID
-	criteria := imap.NewSearchCriteria()
-	criteria.Header.Add("Message-ID", messageID)
-	uids, err := client.UidSearch(criteria)
-	if err != nil {
-		t.Fatalf("Failed to search for message: %v", err)
-	}
-
-	if len(uids) == 0 {
-		t.Fatalf("Message not found after append")
-	}
-
-	return uids[0]
-}
-
-// connectToTestServer connects to the test IMAP server.
-func connectToTestServer(t *testing.T, addr, username, password string) (*imapclient.Client, func()) {
-	t.Helper()
-
-	client, err := imapclient.Dial(addr)
-	if err != nil {
-		t.Fatalf("Failed to connect to test server: %v", err)
-	}
-
-	if err := client.Login(username, password); err != nil {
-		err := client.Logout()
-		if err != nil {
-			return nil, nil
-		}
-		t.Fatalf("Failed to login: %v", err)
-	}
-
-	cleanup := func() {
-		err := client.Logout()
-		if err != nil {
-			return
-		}
-	}
-
-	return client, cleanup
-}
-
 func TestSearchUIDsSince(t *testing.T) {
-	_, addr, be, cleanup := setupTestIMAPServer(t)
-	defer cleanup()
+	server := testutil.NewTestIMAPServer(t)
+	defer server.Close()
 
-	// Memory backend creates a default user with these credentials
-	username := "username"
-	password := "password"
-
-	// Ensure the user exists (memory backend creates it by default, but let's verify)
-	createTestIMAPUser(t, be, username, password)
-
-	// Create user and connect
-	client, clientCleanup := connectToTestServer(t, addr, username, password)
-	defer clientCleanup()
-
-	// Create the INBOX folder
-	_, err := client.Select("INBOX", false)
-	if err != nil {
-		// Create INBOX if it doesn't exist
-		err = client.Create("INBOX")
-		if err != nil {
-			t.Fatalf("Failed to create INBOX: %v", err)
-		}
-		_, err = client.Select("INBOX", false)
-		if err != nil {
-			t.Fatalf("Failed to select INBOX: %v", err)
-		}
-	}
+	// Ensure INBOX exists
+	server.EnsureINBOX(t)
 
 	// Add test messages
 	now := time.Now()
-	uid1 := addTestMessage(t, client, "INBOX", "<msg1@test>", "Subject 1", "from@test.com", "to@test.com", now.Add(-2*time.Hour))
-	uid2 := addTestMessage(t, client, "INBOX", "<msg2@test>", "Subject 2", "from@test.com", "to@test.com", now.Add(-1*time.Hour))
-	uid3 := addTestMessage(t, client, "INBOX", "<msg3@test>", "Subject 3", "from@test.com", "to@test.com", now)
+	uid1 := server.AddMessage(t, "INBOX", "<msg1@test>", "Subject 1", "from@test.com", "to@test.com", now.Add(-2*time.Hour))
+	uid2 := server.AddMessage(t, "INBOX", "<msg2@test>", "Subject 2", "from@test.com", "to@test.com", now.Add(-1*time.Hour))
+	uid3 := server.AddMessage(t, "INBOX", "<msg3@test>", "Subject 3", "from@test.com", "to@test.com", now)
+
+	// Connect to get client for SearchUIDsSince
+	client, clientCleanup := server.Connect(t)
+	defer clientCleanup()
+
+	// Select INBOX before searching
+	_, err := client.Select("INBOX", false)
+	if err != nil {
+		t.Fatalf("Failed to select INBOX: %v", err)
+	}
 
 	t.Run("finds all UIDs when minUID is 1", func(t *testing.T) {
 		uids, err := SearchUIDsSince(client, 1)
@@ -266,32 +95,15 @@ func TestTryIncrementalSync(t *testing.T) {
 	}
 
 	// Setup test IMAP server
-	_, addr, be, cleanup := setupTestIMAPServer(t)
-	defer cleanup()
+	server := testutil.NewTestIMAPServer(t)
+	defer server.Close()
 
-	// Memory backend creates a default user with these credentials
-	username := "username"
-	password := "password"
+	// Ensure INBOX exists
+	server.EnsureINBOX(t)
 
-	// Ensure user exists
-	createTestIMAPUser(t, be, username, password)
-
-	// Create user and connect
-	client, clientCleanup := connectToTestServer(t, addr, username, password)
+	// Connect to get client
+	client, clientCleanup := server.Connect(t)
 	defer clientCleanup()
-
-	// Create the INBOX folder
-	_, err = client.Select("INBOX", false)
-	if err != nil {
-		err = client.Create("INBOX")
-		if err != nil {
-			t.Fatalf("Failed to create INBOX: %v", err)
-		}
-		_, err = client.Select("INBOX", false)
-		if err != nil {
-			t.Fatalf("Failed to select INBOX: %v", err)
-		}
-	}
 
 	encryptor := getTestEncryptor(t)
 	service := NewService(pool, encryptor)
@@ -303,6 +115,7 @@ func TestTryIncrementalSync(t *testing.T) {
 	}
 
 	// Save user settings with the test IMAP server
+	password := server.Password()
 	encryptedPassword, err := encryptor.Encrypt(password)
 	if err != nil {
 		t.Fatalf("Failed to encrypt password: %v", err)
@@ -316,8 +129,8 @@ func TestTryIncrementalSync(t *testing.T) {
 
 	settings := &models.UserSettings{
 		UserID:                userID,
-		IMAPServerHostname:    addr,
-		IMAPUsername:          username,
+		IMAPServerHostname:    server.Address,
+		IMAPUsername:          server.Username(),
 		EncryptedIMAPPassword: encryptedPassword,
 		EncryptedSMTPPassword: encryptedSMTPPassword,
 	}
@@ -330,8 +143,8 @@ func TestTryIncrementalSync(t *testing.T) {
 
 	// Add initial messages
 	now := time.Now()
-	_ = addTestMessage(t, client, folderName, "<initial1@test>", "Initial 1", "from@test.com", "to@test.com", now.Add(-2*time.Hour))
-	uid2 := addTestMessage(t, client, folderName, "<initial2@test>", "Initial 2", "from@test.com", "to@test.com", now.Add(-1*time.Hour))
+	_ = server.AddMessage(t, folderName, "<initial1@test>", "Initial 1", "from@test.com", "to@test.com", now.Add(-2*time.Hour))
+	uid2 := server.AddMessage(t, folderName, "<initial2@test>", "Initial 2", "from@test.com", "to@test.com", now.Add(-1*time.Hour))
 
 	// Set sync info to uid2 (we've synced up to uid2)
 	lastUID := int64(uid2)
@@ -369,14 +182,12 @@ func TestTryIncrementalSync(t *testing.T) {
 
 	t.Run("finds new messages after last synced UID", func(t *testing.T) {
 		// Add a new message
-		uid3 := addTestMessage(t, client, folderName, "<new1@test>", "New Message", "from@test.com", "to@test.com", now)
+		uid3 := server.AddMessage(t, folderName, "<new1@test>", "New Message", "from@test.com", "to@test.com", now)
 
 		// Reconnect to get the fresh client (needed for memory backend)
-		err := client.Close()
-		if err != nil {
-			return
-		}
-		client, _ = connectToTestServer(t, addr, username, password)
+		clientCleanup()
+		client, clientCleanup = server.Connect(t)
+		defer clientCleanup()
 		_, _ = client.Select(folderName, false)
 
 		result, ok := service.tryIncrementalSync(ctx, client, userID, folderName, syncInfo)
@@ -399,11 +210,9 @@ func TestTryIncrementalSync(t *testing.T) {
 
 	t.Run("returns shouldReturn=true when no new messages", func(t *testing.T) {
 		// Reconnect
-		err := client.Close()
-		if err != nil {
-			return
-		}
-		client, _ = connectToTestServer(t, addr, username, password)
+		clientCleanup()
+		client, clientCleanup = server.Connect(t)
+		defer clientCleanup()
 		_, _ = client.Select(folderName, false)
 
 		// Get the highest UID from the server

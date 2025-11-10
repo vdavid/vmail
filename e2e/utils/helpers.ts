@@ -1,4 +1,4 @@
-import { Page, expect } from '@playwright/test'
+import { Page } from '@playwright/test'
 
 /**
  * Waits for the page to be fully loaded and ready.
@@ -50,12 +50,12 @@ export async function fillSettingsForm(
 export async function submitSettingsForm(page: Page) {
     await page.click('button[type="submit"]')
     
-    // Wait for navigation away from settings page (indicates success)
+    // Wait for navigation away from the settings page (indicates success)
     await page.waitForURL('**/', { timeout: 5000 })
 }
 
 /**
- * Waits for email list to load.
+ * Waits for the email list to load.
  */
 export async function waitForEmailList(page: Page) {
     // Wait for either the email list or "no emails" message
@@ -64,17 +64,6 @@ export async function waitForEmailList(page: Page) {
         page.waitForSelector('text=No results found', { timeout: 5000 }).catch(() => null),
         page.waitForSelector('text=Enter a search query', { timeout: 5000 }).catch(() => null),
     ])
-}
-
-/**
- * Gets the text content of the first email in the list.
- */
-export async function getFirstEmailSubject(page: Page): Promise<string | null> {
-    const firstEmail = page.locator('[data-testid="email-item"]').first()
-    if (await firstEmail.count() === 0) {
-        return null
-    }
-    return await firstEmail.textContent()
 }
 
 /**

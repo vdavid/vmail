@@ -216,7 +216,7 @@ func TestGetThreadCountForFolder(t *testing.T) {
 
 	folderName := "INBOX"
 
-	// Ensure folder_sync_timestamps table exists with new columns
+	// Ensure the `folder_sync_timestamps` table exists with new columns
 	_, err = pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS folder_sync_timestamps (
 			user_id        UUID        NOT NULL REFERENCES users (id) ON DELETE CASCADE,
@@ -799,15 +799,8 @@ func TestGetThreadsForFolder_DeepPagination(t *testing.T) {
 			t.Errorf("Page %d query took %v, expected < 3s", page, duration)
 		}
 
-		// Correctness check: should return threadsPerPage threads (or fewer if near the end)
+		// Correctness check: should return threadsPerPage threads
 		expectedCount := threadsPerPage
-		if offset >= totalThreads {
-			// Offset is beyond all threads, should return 0
-			expectedCount = 0
-		} else if offset+threadsPerPage > totalThreads {
-			// Near the end, return remaining threads
-			expectedCount = totalThreads - offset
-		}
 		if len(threads) != expectedCount {
 			t.Errorf("Expected %d threads on page %d (OFFSET %d, total %d), got %d", expectedCount, page, offset, totalThreads, len(threads))
 		}

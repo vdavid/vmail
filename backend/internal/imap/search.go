@@ -143,7 +143,7 @@ func ParseSearchQuery(query string) (*imap.SearchCriteria, string, error) {
 
 	// Track if we've seen folder: or label:
 	folderFound := false
-	plainTextParts := []string{}
+	var plainTextParts []string
 
 	for _, token := range tokens {
 		handled, extractedFolder, err := parseFilterToken(token, criteria, &folderFound)

@@ -110,7 +110,7 @@ The test server (`backend/cmd/test-server`) automatically:
 **Test server credentials:**
 
 - IMAP: `username` / `password` on `localhost:1143`
-- SMTP: `testuser` / `testpass` on `localhost:1025`
+- SMTP: `test-user` / `test-pass` on `localhost:1025`
 
 These match the values in `e2e/fixtures/test-data.ts`.
 

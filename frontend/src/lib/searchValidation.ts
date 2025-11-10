@@ -14,7 +14,7 @@ export function validateSearchQuery(query: string): string | null {
     }
 
     // Check for invalid date formats in after: and before: filters
-    const dateFilterPattern = /\b(after|before):([^\s]+)/gi
+    const dateFilterPattern = /\b(after|before):(\S+)/gi
     let match
     while ((match = dateFilterPattern.exec(query)) !== null) {
         const filterType = match[1].toLowerCase()
@@ -26,8 +26,8 @@ export function validateSearchQuery(query: string): string | null {
             return `Invalid date format for ${filterType}:. Expected YYYY-MM-DD (e.g., 2025-01-01)`
         }
 
-        // Parse and validate date components before creating Date object
-        // (JavaScript Date is lenient and will auto-correct invalid dates)
+        // Parse and validate date components before creating a Date object
+        // (JavaScript Date is lenient and will autocorrect invalid dates)
         const parts = dateValue.split('-')
         if (parts.length !== 3) {
             return `Invalid date format for ${filterType}: "${dateValue}"`
@@ -49,7 +49,7 @@ export function validateSearchQuery(query: string): string | null {
             return `Invalid day in date: ${dateValue}`
         }
 
-        // Validate the date is actually valid (check if Date constructor creates correct date)
+        // Validate the date is actually valid (check if Date constructor creates the correct date)
         const date = new Date(year, month - 1, day)
         if (
             date.getFullYear() !== year ||

@@ -11,8 +11,8 @@ import (
 	"github.com/emersion/go-smtp"
 )
 
-// memoryBackend is a simple in-memory SMTP backend for testing.
-type memoryBackend struct {
+// MemoryBackend is a simple in-memory SMTP backend for testing.
+type MemoryBackend struct {
 	mu       sync.Mutex
 	messages []*memoryMessage
 }
@@ -24,33 +24,33 @@ type memoryMessage struct {
 }
 
 // NewMemoryBackend creates a new in-memory SMTP backend.
-func NewMemoryBackend() *memoryBackend {
-	return &memoryBackend{
+func NewMemoryBackend() *MemoryBackend {
+	return &MemoryBackend{
 		messages: make([]*memoryMessage, 0),
 	}
 }
 
 // NewSession creates a new SMTP session.
-func (b *memoryBackend) NewSession(c *smtp.Conn) (smtp.Session, error) {
+func (b *MemoryBackend) NewSession(*smtp.Conn) (smtp.Session, error) {
 	return &memorySession{backend: b}, nil
 }
 
 // GetMessages returns all received messages.
-func (b *memoryBackend) GetMessages() []*memoryMessage {
+func (b *MemoryBackend) GetMessages() []*memoryMessage {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.messages
 }
 
 // ClearMessages clears all stored messages.
-func (b *memoryBackend) ClearMessages() {
+func (b *MemoryBackend) ClearMessages() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.messages = make([]*memoryMessage, 0)
 }
 
 type memorySession struct {
-	backend *memoryBackend
+	backend *MemoryBackend
 	from    string
 	to      []string
 }
@@ -105,7 +105,7 @@ func (s *memorySession) Logout() error {
 type TestSMTPServer struct {
 	Server   *smtp.Server
 	Address  string
-	Backend  *memoryBackend
+	Backend  *MemoryBackend
 	cleanup  func()
 	username string
 	password string
@@ -152,8 +152,8 @@ func NewTestSMTPServer(t *testing.T) *TestSMTPServer {
 	}
 
 	// Memory backend accepts any credentials for testing
-	username := "testuser"
-	password := "testpass"
+	username := "test-user"
+	password := "test-pass"
 
 	return &TestSMTPServer{
 		Server:   s,
@@ -228,8 +228,8 @@ func NewTestSMTPServerForE2E() (*TestSMTPServer, error) {
 	}
 
 	// Memory backend accepts any credentials for testing
-	username := "testuser"
-	password := "testpass"
+	username := "test-user"
+	password := "test-pass"
 
 	return &TestSMTPServer{
 		Server:   s,

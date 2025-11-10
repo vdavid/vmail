@@ -26,6 +26,9 @@ type TestIMAPServer struct {
 // NewTestIMAPServer creates a new test IMAP server with an in-memory backend.
 // Returns the server instance and cleanup function.
 // The memory backend creates a default user with username "username" and password "password".
+//
+// Note: This function is intended for use in test files (requires *testing.T).
+// For E2E tests that don't have a testing context, use NewTestIMAPServerForE2E instead.
 func NewTestIMAPServer(t *testing.T) *TestIMAPServer {
 	t.Helper()
 

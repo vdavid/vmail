@@ -36,18 +36,26 @@ test.describe('Search Functionality', () => {
             return
         }
 
-        // Type search query
-        await searchInput.fill('Special Report')
+        // Use sampleMessages to ensure test data consistency
+        // Search for "Special Report" which should match "Special Report Q3" from sampleMessages
+        const searchTerm = 'Special Report'
+        await searchInput.fill(searchTerm)
         await searchInput.press('Enter')
 
         // Verify we're on search page
-        await expect(page).toHaveURL(/.*\/search\?q=Special%20Report/)
+        await expect(page).toHaveURL(new RegExp(`.*/search\\?q=${encodeURIComponent(searchTerm)}`))
 
         // Wait for results
         await waitForEmailList(page)
 
         // Verify search results page shows query
         await expect(page.locator('h1')).toContainText('Search results')
+        
+        // Verify we found the expected message from sampleMessages
+        const expectedMessage = sampleMessages.find(m => m.subject.includes('Special Report'))
+        if (expectedMessage) {
+            await expect(page.locator('text=' + expectedMessage.subject)).toBeVisible()
+        }
     })
 
     test('from: filter works', async ({ page }) => {
