@@ -136,6 +136,23 @@ func TestSearchHandler_Search(t *testing.T) {
 			t.Errorf("Expected status 500, got %d", rr.Code)
 		}
 	})
+
+	t.Run("returns 400 for invalid query syntax", func(t *testing.T) {
+		email := "searchuser5@example.com"
+		setupTestUserAndSettings(t, pool, encryptor, email)
+
+		// Mock IMAP service to return parser error
+		mockIMAP.searchErr = &imapError{message: "invalid search query: empty from: value"}
+
+		req := createRequestWithUser("GET", "/api/v1/search?q=from:", email)
+		rr := httptest.NewRecorder()
+
+		handler.Search(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", rr.Code)
+		}
+	})
 }
 
 // mockIMAPServiceForSearch is a mock implementation of IMAPService for search tests

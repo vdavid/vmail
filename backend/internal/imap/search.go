@@ -14,6 +14,59 @@ import (
 	"github.com/vdavid/vmail/backend/internal/models"
 )
 
+// parseHeaderFilter processes from:, to:, or subject: filters.
+func parseHeaderFilter(token, prefix, headerName string, criteria *imap.SearchCriteria) (bool, error) {
+	if !strings.HasPrefix(token, prefix) {
+		return false, nil
+	}
+	value := strings.TrimPrefix(token, prefix)
+	if value == "" {
+		return false, fmt.Errorf("empty %s: value", prefix[:len(prefix)-1])
+	}
+	criteria.Header.Add(headerName, unquote(value))
+	return true, nil
+}
+
+// parseDateFilter processes after: or before: filters.
+func parseDateFilter(token, prefix string, criteria *imap.SearchCriteria) (bool, error) {
+	if !strings.HasPrefix(token, prefix) {
+		return false, nil
+	}
+	value := strings.TrimPrefix(token, prefix)
+	if value == "" {
+		return false, fmt.Errorf("empty %s: value", prefix[:len(prefix)-1])
+	}
+	date, err := parseDate(value)
+	if err != nil {
+		return false, fmt.Errorf("invalid date format for %s: %w", prefix[:len(prefix)-1], err)
+	}
+	if prefix == "after:" {
+		criteria.Since = date
+	} else {
+		// before: - set to end of day
+		date = time.Date(date.Year(), date.Month(), date.Day(), 23, 59, 59, 999999999, date.Location())
+		criteria.Before = date
+	}
+	return true, nil
+}
+
+// parseFolderFilter processes folder: or label: filters.
+func parseFolderFilter(token string, folderFound *bool) (bool, string, error) {
+	if !strings.HasPrefix(token, "folder:") && !strings.HasPrefix(token, "label:") {
+		return false, "", nil
+	}
+	if !*folderFound {
+		value := strings.TrimPrefix(token, "folder:")
+		value = strings.TrimPrefix(value, "label:")
+		if value == "" {
+			return false, "", fmt.Errorf("empty folder: value")
+		}
+		*folderFound = true
+		return true, unquote(value), nil
+	}
+	return true, "", nil
+}
+
 // parseFilterToken processes a single token and updates criteria/folder accordingly.
 // Returns (handled, folder, error) where handled indicates if the token was a filter.
 func parseFilterToken(token string, criteria *imap.SearchCriteria, folderFound *bool) (bool, string, error) {
@@ -22,78 +75,45 @@ func parseFilterToken(token string, criteria *imap.SearchCriteria, folderFound *
 		return false, "", fmt.Errorf("empty filter value: %s", token)
 	}
 
-	// Check for from: filter
-	if strings.HasPrefix(token, "from:") {
-		value := strings.TrimPrefix(token, "from:")
-		if value == "" {
-			return false, "", fmt.Errorf("empty from: value")
-		}
-		criteria.Header.Add("From", unquote(value))
+	// Try header filters (from:, to:, subject:)
+	if handled, err := parseHeaderFilter(token, "from:", "From", criteria); err != nil {
+		return false, "", err
+	} else if handled {
 		return true, "", nil
 	}
 
-	// Check for to: filter
-	if strings.HasPrefix(token, "to:") {
-		value := strings.TrimPrefix(token, "to:")
-		if value == "" {
-			return false, "", fmt.Errorf("empty to: value")
-		}
-		criteria.Header.Add("To", unquote(value))
+	if handled, err := parseHeaderFilter(token, "to:", "To", criteria); err != nil {
+		return false, "", err
+	} else if handled {
 		return true, "", nil
 	}
 
-	// Check for subject: filter
-	if strings.HasPrefix(token, "subject:") {
-		value := strings.TrimPrefix(token, "subject:")
-		if value == "" {
-			return false, "", fmt.Errorf("empty subject: value")
-		}
-		criteria.Header.Add("Subject", unquote(value))
+	if handled, err := parseHeaderFilter(token, "subject:", "Subject", criteria); err != nil {
+		return false, "", err
+	} else if handled {
 		return true, "", nil
 	}
 
-	// Check for after: filter
-	if strings.HasPrefix(token, "after:") {
-		value := strings.TrimPrefix(token, "after:")
-		if value == "" {
-			return false, "", fmt.Errorf("empty after: value")
-		}
-		date, err := parseDate(value)
-		if err != nil {
-			return false, "", fmt.Errorf("invalid date format for after: %w", err)
-		}
-		criteria.Since = date
+	// Try date filters (after:, before:)
+	if handled, err := parseDateFilter(token, "after:", criteria); err != nil {
+		return false, "", err
+	} else if handled {
 		return true, "", nil
 	}
 
-	// Check for before: filter
-	if strings.HasPrefix(token, "before:") {
-		value := strings.TrimPrefix(token, "before:")
-		if value == "" {
-			return false, "", fmt.Errorf("empty before: value")
-		}
-		date, err := parseDate(value)
-		if err != nil {
-			return false, "", fmt.Errorf("invalid date format for before: %w", err)
-		}
-		// Set to end of day
-		date = time.Date(date.Year(), date.Month(), date.Day(), 23, 59, 59, 999999999, date.Location())
-		criteria.Before = date
+	if handled, err := parseDateFilter(token, "before:", criteria); err != nil {
+		return false, "", err
+	} else if handled {
 		return true, "", nil
 	}
 
-	// Check for folder: or label: filter
-	if strings.HasPrefix(token, "folder:") || strings.HasPrefix(token, "label:") {
-		if !*folderFound {
-			value := strings.TrimPrefix(token, "folder:")
-			value = strings.TrimPrefix(value, "label:")
-			if value == "" {
-				return false, "", fmt.Errorf("empty folder: value")
-			}
-			*folderFound = true
-			return true, unquote(value), nil
-		}
-		return true, "", nil
+	// Try folder filter
+	handled, folder, err := parseFolderFilter(token, folderFound)
+	if err != nil {
+		return false, "", err
+	}
+	if handled {
+		return true, folder, nil
 	}
 
 	return false, "", nil
@@ -318,7 +338,7 @@ func sortAndPaginateThreads(threadMap map[string]*models.Thread, threadToLatestS
 	totalCount := len(threads)
 	offset := (page - 1) * limit
 	if offset >= len(threads) {
-		return []*models.Thread{}, totalCount
+		return nil, totalCount
 	}
 
 	end := offset + limit
@@ -356,7 +376,7 @@ func (s *Service) Search(ctx context.Context, userID string, query string, page,
 	}
 
 	if len(uids) == 0 {
-		return []*models.Thread{}, 0, nil
+		return nil, 0, nil
 	}
 
 	messages, err := FetchMessageHeaders(client, uids)

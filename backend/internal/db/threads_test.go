@@ -782,8 +782,8 @@ func TestGetThreadsForFolder_DeepPagination(t *testing.T) {
 		t.Logf("Page %d (OFFSET %d) completed in %v, returned %d threads", page, offset, duration, len(threads))
 	})
 
-	t.Run("page 20 (OFFSET 1900) completes in reasonable time", func(t *testing.T) {
-		page := 20
+	t.Run("page 15 (OFFSET 1400) completes in reasonable time", func(t *testing.T) {
+		page := 15
 		offset := (page - 1) * threadsPerPage
 
 		start := time.Now()

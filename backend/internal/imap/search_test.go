@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/vdavid/vmail/backend/internal/models"
 )
 
 func TestParseFolderFromQuery(t *testing.T) {
@@ -220,6 +222,75 @@ func TestParseSearchQuery(t *testing.T) {
 		}
 		if folder != "Inbox" {
 			t.Errorf("Expected folder 'Inbox' (folder: takes precedence), got '%s'", folder)
+		}
+	})
+}
+
+func TestSortAndPaginateThreads(t *testing.T) {
+	t.Run("handles empty thread map", func(t *testing.T) {
+		threadMap := make(map[string]*models.Thread)
+		sentAtMap := make(map[string]*time.Time)
+
+		threads, count := sortAndPaginateThreads(threadMap, sentAtMap, 1, 100)
+		if len(threads) != 0 {
+			t.Errorf("Expected 0 threads, got %d", len(threads))
+		}
+		if count != 0 {
+			t.Errorf("Expected count 0, got %d", count)
+		}
+	})
+
+	t.Run("handles pagination boundaries", func(t *testing.T) {
+		threadMap := map[string]*models.Thread{
+			"thread-1": {StableThreadID: "thread-1"},
+			"thread-2": {StableThreadID: "thread-2"},
+		}
+		now := time.Now()
+		sentAtMap := map[string]*time.Time{
+			"thread-1": &now,
+			"thread-2": &now,
+		}
+
+		// Test offset >= len(threads)
+		threads, count := sortAndPaginateThreads(threadMap, sentAtMap, 10, 100)
+		if len(threads) != 0 {
+			t.Errorf("Expected 0 threads when offset >= len, got %d", len(threads))
+		}
+		if count != 2 {
+			t.Errorf("Expected total count 2, got %d", count)
+		}
+
+		// Test end > len(threads)
+		threads, count = sortAndPaginateThreads(threadMap, sentAtMap, 1, 100)
+		if len(threads) != 2 {
+			t.Errorf("Expected 2 threads when limit > len, got %d", len(threads))
+		}
+		if count != 2 {
+			t.Errorf("Expected total count 2, got %d", count)
+		}
+	})
+
+	t.Run("handles threads with nil sent_at", func(t *testing.T) {
+		threadMap := map[string]*models.Thread{
+			"thread-1": {StableThreadID: "thread-1"},
+			"thread-2": {StableThreadID: "thread-2"},
+		}
+		now := time.Now()
+		sentAtMap := map[string]*time.Time{
+			"thread-1": &now,
+			"thread-2": nil, // No sent_at
+		}
+
+		threads, count := sortAndPaginateThreads(threadMap, sentAtMap, 1, 100)
+		if len(threads) != 2 {
+			t.Errorf("Expected 2 threads, got %d", len(threads))
+		}
+		// Thread with sent_at should come first
+		if threads[0].StableThreadID != "thread-1" {
+			t.Errorf("Expected thread-1 first (has sent_at), got %s", threads[0].StableThreadID)
+		}
+		if count != 2 {
+			t.Errorf("Expected total count 2, got %d", count)
 		}
 	})
 }
