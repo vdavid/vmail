@@ -28,10 +28,63 @@ while still using Docker to manage the database.
 
 Before committing, ensure all checks pass locally to avoid CI failures.
 
-To run all checks at once, use: `./scripts/check.sh`
+- The `./scripts/check.sh` script runs all formatting, linting, and tests. It exits with a non-zero code if any check fails.
+- You can also use `./scripts/check.sh --backend` and `./scripts/check.sh --frontend`.
+- To run a specific check, use `./scripts/check.sh --check <check-name>` –see `./scripts/check.sh --help` for the list of checks. This is mostly for CI, though.
 
-This script runs all formatting, linting, and tests for both backend and frontend.
-It exits with a non-zero code if any check fails.
+**What the script checks:**
+
+Backend (Go):
+- `gofmt` - Code formatting
+- `go mod tidy` - Module file tidiness
+- `govulncheck` - Security vulnerability scanning
+- `go vet` - Static analysis
+- `staticcheck` - Advanced static analysis
+- `ineffassign` - Ineffective assignments detection
+- `misspell` - Spelling errors
+- `gocyclo` - Cyclomatic complexity (warns on functions > 15)
+- `go test` - Unit and integration tests
+
+Frontend (TypeScript):
+- `Prettier` - Code formatting
+- `ESLint` - Linting
+- `pnpm test` - Unit tests
+
+The script automatically installs missing linting tools and uses the Go version specified in `go.mod` (via `GOTOOLCHAIN=auto`).
+
+### Setting up GitHub branch protection and required checks
+
+To ensure all pull requests pass checks before merging, set up branch protection rules on GitHub:
+
+1. **Navigate to repository settings:**
+   - Go to your repository on GitHub
+   - Click **Settings** → **Branches**
+
+2. **Add a branch protection rule:**
+   - Click **Add rule** or edit an existing rule for `main`
+   - Under **Branch name pattern**, enter: `main`
+
+3. **Enable required status checks:**
+   - Check the box **Require status checks to pass before merging**
+   - Check **Require branches to be up to date before merging**
+   - In the search box, select these required checks:
+     - `Backend (Go)` - Backend checks job
+     - `Frontend (TypeScript)` - Frontend checks job
+
+4. **Additional recommended settings:**
+   - ✅ **Require pull request reviews before merging** (optional, but recommended)
+   - ✅ **Do not allow bypassing the above settings** (recommended for main branch)
+
+5. **Save the rule:**
+   - Click **Create** or **Save changes**
+
+**Note:** The check names in branch protection should match the job names in the CI workflow:
+- `Backend (Go)` - The backend-checks job
+- `Frontend (TypeScript)` - The frontend-checks job
+
+Each job contains multiple individual check steps (gofmt, govulncheck, etc.) that will appear in the GitHub Actions UI. If you change the job names in `.github/workflows/ci.yml`, update the branch protection rule accordingly.
+
+After setting this up, pull requests to `main` will show a check status, and merging will be blocked until both checks pass.
 
 ### Commit messages
 

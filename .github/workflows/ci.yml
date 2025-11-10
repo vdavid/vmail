@@ -12,9 +12,6 @@ jobs:
   backend-checks:
     name: Backend (Go)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./backend
 
     steps:
       - name: Checkout code
@@ -23,7 +20,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.1'
+          go-version: '1.25.3'
 
       - name: Cache Go modules
         uses: actions/cache@v4
@@ -33,51 +30,54 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Download dependencies
-        run: go mod download
+      - name: Check gofmt
+        run: ./scripts/check.sh --check gofmt
+        env:
+          GOTOOLCHAIN: auto
 
-      - name: Check Go formatting
-        run: |
-          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
-            echo "The following files are not formatted correctly:"
-            gofmt -s -d .
-            exit 1
-          fi
+      - name: Check go mod tidy
+        run: ./scripts/check.sh --check go-mod-tidy
+        env:
+          GOTOOLCHAIN: auto
 
-      - name: Install linting tools
-        run: |
-          go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
-          go install github.com/gordonklaus/ineffassign@latest
-          go install github.com/client9/misspell/cmd/misspell@latest
-          go install honnef.co/go/tools/cmd/staticcheck@latest
+      - name: Run govulncheck
+        run: ./scripts/check.sh --check govulncheck
+        env:
+          GOTOOLCHAIN: auto
 
       - name: Run go vet
-        run: go vet ./...
+        run: ./scripts/check.sh --check go-vet
+        env:
+          GOTOOLCHAIN: auto
 
       - name: Run staticcheck
-        run: staticcheck ./...
-
-      - name: Run gocyclo (check complexity)
-        run: |
-          gocyclo -over 15 . || true
-          echo "Functions with complexity > 15 (non-blocking):"
-          gocyclo -over 15 .
+        run: ./scripts/check.sh --check staticcheck
+        env:
+          GOTOOLCHAIN: auto
 
       - name: Run ineffassign
-        run: ineffassign ./...
+        run: ./scripts/check.sh --check ineffassign
+        env:
+          GOTOOLCHAIN: auto
 
       - name: Run misspell
-        run: misspell -error .
+        run: ./scripts/check.sh --check misspell
+        env:
+          GOTOOLCHAIN: auto
 
-      - name: Run Go tests
-        run: go test -v ./...
+      - name: Run gocyclo
+        run: ./scripts/check.sh --check gocyclo
+        env:
+          GOTOOLCHAIN: auto
+
+      - name: Run backend tests
+        run: ./scripts/check.sh --check backend-tests
+        env:
+          GOTOOLCHAIN: auto
 
   frontend-checks:
     name: Frontend (TypeScript)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./frontend
 
     steps:
       - name: Checkout code
@@ -97,13 +97,13 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+        working-directory: ./frontend
 
-      - name: Check Prettier formatting
-        run: pnpm format:check
+      - name: Check Prettier
+        run: ./scripts/check.sh --check prettier
 
       - name: Run ESLint
-        run: pnpm lint
+        run: ./scripts/check.sh --check eslint
 
       - name: Run frontend tests
-        run: pnpm test --run
-
+        run: ./scripts/check.sh --check frontend-tests
