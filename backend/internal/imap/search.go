@@ -14,7 +14,205 @@ import (
 	"github.com/vdavid/vmail/backend/internal/models"
 )
 
+// parseFilterToken processes a single token and updates criteria/folder accordingly.
+// Returns (handled, folder, error) where handled indicates if the token was a filter.
+func parseFilterToken(token string, criteria *imap.SearchCriteria, folderFound *bool) (bool, string, error) {
+	// Check for filter without value
+	if strings.HasSuffix(token, ":") {
+		return false, "", fmt.Errorf("empty filter value: %s", token)
+	}
+
+	// Check for from: filter
+	if strings.HasPrefix(token, "from:") {
+		value := strings.TrimPrefix(token, "from:")
+		if value == "" {
+			return false, "", fmt.Errorf("empty from: value")
+		}
+		criteria.Header.Add("From", unquote(value))
+		return true, "", nil
+	}
+
+	// Check for to: filter
+	if strings.HasPrefix(token, "to:") {
+		value := strings.TrimPrefix(token, "to:")
+		if value == "" {
+			return false, "", fmt.Errorf("empty to: value")
+		}
+		criteria.Header.Add("To", unquote(value))
+		return true, "", nil
+	}
+
+	// Check for subject: filter
+	if strings.HasPrefix(token, "subject:") {
+		value := strings.TrimPrefix(token, "subject:")
+		if value == "" {
+			return false, "", fmt.Errorf("empty subject: value")
+		}
+		criteria.Header.Add("Subject", unquote(value))
+		return true, "", nil
+	}
+
+	// Check for after: filter
+	if strings.HasPrefix(token, "after:") {
+		value := strings.TrimPrefix(token, "after:")
+		if value == "" {
+			return false, "", fmt.Errorf("empty after: value")
+		}
+		date, err := parseDate(value)
+		if err != nil {
+			return false, "", fmt.Errorf("invalid date format for after: %w", err)
+		}
+		criteria.Since = date
+		return true, "", nil
+	}
+
+	// Check for before: filter
+	if strings.HasPrefix(token, "before:") {
+		value := strings.TrimPrefix(token, "before:")
+		if value == "" {
+			return false, "", fmt.Errorf("empty before: value")
+		}
+		date, err := parseDate(value)
+		if err != nil {
+			return false, "", fmt.Errorf("invalid date format for before: %w", err)
+		}
+		// Set to end of day
+		date = time.Date(date.Year(), date.Month(), date.Day(), 23, 59, 59, 999999999, date.Location())
+		criteria.Before = date
+		return true, "", nil
+	}
+
+	// Check for folder: or label: filter
+	if strings.HasPrefix(token, "folder:") || strings.HasPrefix(token, "label:") {
+		if !*folderFound {
+			value := strings.TrimPrefix(token, "folder:")
+			value = strings.TrimPrefix(value, "label:")
+			if value == "" {
+				return false, "", fmt.Errorf("empty folder: value")
+			}
+			*folderFound = true
+			return true, unquote(value), nil
+		}
+		return true, "", nil
+	}
+
+	return false, "", nil
+}
+
+// ParseSearchQuery parses a Gmail-like search query into IMAP SearchCriteria.
+// Returns the parsed criteria, extracted folder name (or empty), and error.
+// Supported syntax:
+//   - from:george → criteria.Header["From"] = "george"
+//   - to:alice → criteria.Header["To"] = "alice"
+//   - subject:meeting → criteria.Header["Subject"] = "meeting"
+//   - after:2025-01-01 → criteria.Since = time.Date(...)
+//   - before:2025-12-31 → criteria.Before = time.Date(...)
+//   - folder:Inbox or label:Inbox → extract folder name (returned separately)
+//   - Plain text → criteria.Text = []string{text}
+//   - Combinations: from:george after:2025-01-01 cabbage
+func ParseSearchQuery(query string) (*imap.SearchCriteria, string, error) {
+	criteria := imap.NewSearchCriteria()
+	folder := ""
+
+	if query == "" {
+		return criteria, folder, nil
+	}
+
+	// Tokenize query, respecting quoted strings
+	tokens := tokenizeQuery(query)
+
+	// Track if we've seen folder: or label:
+	folderFound := false
+	plainTextParts := []string{}
+
+	for _, token := range tokens {
+		handled, extractedFolder, err := parseFilterToken(token, criteria, &folderFound)
+		if err != nil {
+			return nil, "", err
+		}
+		if handled {
+			if extractedFolder != "" {
+				folder = extractedFolder
+			}
+			continue
+		}
+
+		// Plain text - add to text search
+		plainTextParts = append(plainTextParts, token)
+	}
+
+	// If we have plain text parts, add them to Text criteria
+	if len(plainTextParts) > 0 {
+		criteria.Text = []string{strings.Join(plainTextParts, " ")}
+	}
+
+	return criteria, folder, nil
+}
+
+// tokenizeQuery splits a query into tokens, respecting quoted strings.
+func tokenizeQuery(query string) []string {
+	var tokens []string
+	var current strings.Builder
+	inQuotes := false
+
+	for i, r := range query {
+		if r == '"' {
+			if inQuotes {
+				// End of quoted string
+				if current.Len() > 0 {
+					tokens = append(tokens, `"`+current.String()+`"`)
+					current.Reset()
+				}
+				inQuotes = false
+			} else {
+				// Start of quoted string
+				if current.Len() > 0 {
+					tokens = append(tokens, current.String())
+					current.Reset()
+				}
+				inQuotes = true
+			}
+		} else if r == ' ' && !inQuotes {
+			// Space outside quotes - end of token
+			if current.Len() > 0 {
+				tokens = append(tokens, current.String())
+				current.Reset()
+			}
+		} else {
+			current.WriteRune(r)
+		}
+
+		// Handle last token
+		if i == len(query)-1 && current.Len() > 0 {
+			tokens = append(tokens, current.String())
+		}
+	}
+
+	return tokens
+}
+
+// unquote removes surrounding quotes from a string if present.
+func unquote(s string) string {
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		return s[1 : len(s)-1]
+	}
+	return s
+}
+
+// parseDate parses a date string in YYYY-MM-DD format.
+func parseDate(dateStr string) (time.Time, error) {
+	dateStr = strings.TrimSpace(dateStr)
+	// Try YYYY-MM-DD format
+	date, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid date format: expected YYYY-MM-DD, got %s", dateStr)
+	}
+	return date, nil
+}
+
 // parseFolderFromQuery extracts folder name from query and returns folder and cleaned query.
+// This is a legacy function kept for backward compatibility during Phase 1.
+// Phase 2 uses ParseSearchQuery instead.
 func parseFolderFromQuery(query string) (string, string) {
 	folder := "INBOX"
 	queryLower := strings.ToLower(query)
@@ -118,19 +316,24 @@ func sortAndPaginateThreads(threadMap map[string]*models.Thread, threadToLatestS
 }
 
 // Search searches for threads matching the query in the specified folder.
-// For Phase 1, this handles basic text search only.
+// Supports Gmail-like syntax via ParseSearchQuery.
 // Returns threads, total count, and error.
 func (s *Service) Search(ctx context.Context, userID string, query string, page, limit int) ([]*models.Thread, int, error) {
-	folder, cleanedQuery := parseFolderFromQuery(query)
+	// Parse the query using Gmail-like syntax
+	criteria, extractedFolder, err := ParseSearchQuery(query)
+	if err != nil {
+		return nil, 0, fmt.Errorf("invalid search query: %w", err)
+	}
+
+	// Use extracted folder or default to INBOX
+	folder := extractedFolder
+	if folder == "" {
+		folder = "INBOX"
+	}
 
 	client, _, err := s.getClientAndSelectFolder(ctx, userID, folder)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get IMAP client: %w", err)
-	}
-
-	criteria := imap.NewSearchCriteria()
-	if cleanedQuery != "" {
-		criteria.Text = []string{cleanedQuery}
 	}
 
 	uids, err := client.UidSearch(criteria)

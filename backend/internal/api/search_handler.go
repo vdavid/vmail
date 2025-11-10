@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/vdavid/vmail/backend/internal/auth"
@@ -49,6 +50,12 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 	// Call IMAP service search
 	threads, totalCount, err := h.imapService.Search(ctx, userID, query, page, limit)
 	if err != nil {
+		// Check if it's a query parsing error (should return 400)
+		if strings.Contains(err.Error(), "invalid search query") {
+			log.Printf("SearchHandler: Invalid query: %v", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		log.Printf("SearchHandler: Failed to search: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
