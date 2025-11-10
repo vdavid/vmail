@@ -1,12 +1,16 @@
 import { useState } from 'react'
 import * as React from 'react'
+import { useNavigate } from 'react-router-dom'
 
 export default function Header() {
     const [searchQuery, setSearchQuery] = useState('')
+    const navigate = useNavigate()
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault()
-        // TODO: Implement search functionality
+        if (searchQuery.trim()) {
+            void navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`)
+        }
     }
 
     return (
