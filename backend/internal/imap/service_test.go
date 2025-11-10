@@ -55,7 +55,7 @@ func TestShouldSyncFolder(t *testing.T) {
 
 	t.Run("returns false when cache is fresh", func(t *testing.T) {
 		// Set a recent sync timestamp
-		if err := db.SetFolderSyncTimestamp(ctx, pool, userID, folderName); err != nil {
+		if err := db.SetFolderSyncInfo(ctx, pool, userID, folderName, nil); err != nil {
 			t.Fatalf("Failed to set sync timestamp: %v", err)
 		}
 
@@ -106,6 +106,74 @@ func getTestEncryptor(t *testing.T) *crypto.Encryptor {
 	return encryptor
 }
 
+func TestGetFolderSyncInfoWithUID(t *testing.T) {
+	pool := testutil.NewTestDB(t)
+	defer pool.Close()
+
+	ctx := context.Background()
+
+	// Ensure the folder_sync_timestamps table exists with new columns
+	_, err := pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS folder_sync_timestamps (
+			user_id        UUID        NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+			folder_name    TEXT        NOT NULL,
+			synced_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+			last_synced_uid BIGINT,
+			thread_count   INT DEFAULT 0,
+			PRIMARY KEY (user_id, folder_name)
+		)
+	`)
+	if err != nil {
+		t.Fatalf("Failed to ensure folder_sync_timestamps table exists: %v", err)
+	}
+
+	userID, err := db.GetOrCreateUser(ctx, pool, "uid-test@example.com")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	folderName := "INBOX"
+
+	t.Run("GetFolderSyncInfo returns UID when set", func(t *testing.T) {
+		lastUID := int64(50000)
+		err := db.SetFolderSyncInfo(ctx, pool, userID, folderName, &lastUID)
+		if err != nil {
+			t.Fatalf("SetFolderSyncInfo failed: %v", err)
+		}
+
+		info, err := db.GetFolderSyncInfo(ctx, pool, userID, folderName)
+		if err != nil {
+			t.Fatalf("GetFolderSyncInfo failed: %v", err)
+		}
+		if info == nil {
+			t.Fatal("Expected sync info, got nil")
+		}
+		if info.LastSyncedUID == nil {
+			t.Error("Expected LastSyncedUID to be set")
+		} else if *info.LastSyncedUID != lastUID {
+			t.Errorf("Expected LastSyncedUID %d, got %d", lastUID, *info.LastSyncedUID)
+		}
+	})
+
+	t.Run("GetFolderSyncInfo returns nil UID when not set", func(t *testing.T) {
+		err := db.SetFolderSyncInfo(ctx, pool, userID, "TestFolder", nil)
+		if err != nil {
+			t.Fatalf("SetFolderSyncInfo failed: %v", err)
+		}
+
+		info, err := db.GetFolderSyncInfo(ctx, pool, userID, "TestFolder")
+		if err != nil {
+			t.Fatalf("GetFolderSyncInfo failed: %v", err)
+		}
+		if info == nil {
+			t.Fatal("Expected sync info, got nil")
+		}
+		if info.LastSyncedUID != nil {
+			t.Errorf("Expected LastSyncedUID to be nil, got %d", *info.LastSyncedUID)
+		}
+	})
+}
+
 // Note: Full unit tests for SyncThreadsForFolder with mocks would require:
 // 1. Creating interfaces for db operations and IMAP client pool
 // 2. Refactoring Service to accept these interfaces
@@ -119,3 +187,9 @@ func getTestEncryptor(t *testing.T) *crypto.Encryptor {
 // - DBService interface with GetUserSettings, SaveThread, SaveMessage, etc.
 // - IMAPPool interface with GetClient method
 // - Mock implementations of these interfaces
+//
+// The following functions would benefit from unit tests with mocks:
+// - tryIncrementalSync: Requires mock IMAP client with UidSearch
+// - performFullSync: Requires mock IMAP client with THREAD command
+// - processIncrementalMessage: Can be tested with mock IMAP message
+// - SearchUIDsSince: Requires mock IMAP client

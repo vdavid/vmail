@@ -71,6 +71,11 @@ jobs:
         env:
           GOTOOLCHAIN: auto
 
+      - name: Run nilaway
+        run: ./scripts/check.sh --check nilaway
+        env:
+          GOTOOLCHAIN: auto
+
       - name: Run backend tests
         run: ./scripts/check.sh --check backend-tests
         env:

@@ -136,6 +136,58 @@ func GetMessagesForThread(ctx context.Context, pool *pgxpool.Pool, threadID stri
 	return messages, nil
 }
 
+// GetMessageByMessageID returns a message by its Message-ID header.
+func GetMessageByMessageID(ctx context.Context, pool *pgxpool.Pool, userID, messageID string) (*models.Message, error) {
+	var msg models.Message
+	err := pool.QueryRow(ctx, `
+		SELECT 
+			id,
+			thread_id,
+			user_id,
+			imap_uid,
+			imap_folder_name,
+			message_id_header,
+			from_address,
+			to_addresses,
+			cc_addresses,
+			sent_at,
+			subject,
+			unsafe_body_html,
+			body_text,
+			is_read,
+			is_starred
+		FROM messages
+		WHERE user_id = $1 AND message_id_header = $2
+		LIMIT 1
+	`, userID, messageID).Scan(
+		&msg.ID,
+		&msg.ThreadID,
+		&msg.UserID,
+		&msg.IMAPUID,
+		&msg.IMAPFolderName,
+		&msg.MessageIDHeader,
+		&msg.FromAddress,
+		&msg.ToAddresses,
+		&msg.CCAddresses,
+		&msg.SentAt,
+		&msg.Subject,
+		&msg.UnsafeBodyHTML,
+		&msg.BodyText,
+		&msg.IsRead,
+		&msg.IsStarred,
+	)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrMessageNotFound
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get message by Message-ID: %w", err)
+	}
+
+	return &msg, nil
+}
+
 // GetMessageByUID returns a message by its IMAP UID and folder.
 func GetMessageByUID(ctx context.Context, pool *pgxpool.Pool, userID, folderName string, imapUID int64) (*models.Message, error) {
 	var msg models.Message

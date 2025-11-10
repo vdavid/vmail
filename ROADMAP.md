@@ -267,7 +267,7 @@ Before we can *queue* any actions, we need to build the worker that *processes* 
     * After a job is processed *successfully*, it must `DELETE FROM action_queue WHERE id = $1`.
 * [ ] **Add unit tests:**
     * Test the `processJobs` function in isolation.
-    * Mock the database: Make your `SELECT ... FOR UPDATE` mock return a list of 2-3 sample jobs (e.g., one "star", one "move").
+    * Mock the database: Make your `SELECT ... FOR UPDATE` mock return a list of 2–3 sample jobs (e.g., one "star", one "move").
     * Mock the IMAP service.
     * **Assert** that the correct IMAP service methods (e.g., `StarThread`, `MoveThread`) are called with the exact payloads from the mock jobs.
     * **Assert** that the `DELETE FROM action_queue` command is called for each *successfully* processed job.
@@ -392,8 +392,8 @@ These are identical, just with a different destination. We'll build them as a ge
         * **Assert** it updates the `messages` table in the mock DB with the new `imap_folder_name`.
 * [ ] **Frontend Integration (RTL + <code>msw</code>):**
     * **Test Cache Invalidation:**
-        * Mock the `GET /api/v1/threads?folder=INBOX` to return 3 items.
-        * Render the `Inbox.page.tsx`. **Assert** 3 items are visible.
+        * Mock the `GET /api/v1/threads?folder=INBOX` to return three items.
+        * Render the `Inbox.page.tsx`. **Assert** three items are visible.
         * Mock the `POST /api/v1/actions` API to succeed.
         * Mock `queryClient.invalidateQueries` to track calls.
         * Click the "Archive" button on the first item.
@@ -473,7 +473,7 @@ This **Playwright** plan tests the full "action" loop. It assumes a pre-populate
     * Click the "Archive" folder in the sidebar.
     * **Assert** the "Project Budget" thread *appears* in the Archive folder list.
 * [ ] **Test 3: Search (Full Loop)**
-    * Log in. (Assume a message with subject "Special Report Q3" exists on the mock IMAP server).
+    * Log in. (Assume a message with the subject "Special Report Q3" exists on the mock IMAP server).
     * Type "Special Report" into the search bar and press Enter.
     * **Assert** the URL changes to `/search?q=Special%20Report`.
     * **Assert** the thread "Special Report Q3" is visible in the search results.
@@ -584,7 +584,7 @@ Now, the frontend to create and cancel jobs.
     * The "Undo" button in the snackbar calls this mutation and hides the snackbar.
 * [ ] **Frontend Integration Tests (RTL + <code>msw</code>):**
     * Mock `POST /api/v1/send` to return `{"job_id": "123"}`.
-    * Click "Compose" button. **Assert** composer is visible.
+    * Click the "Compose" button. **Assert** composer is visible.
     * Fill inputs, click "Send". **Assert** the API was called with the correct data.
     * **Assert** the composer closes.
     * **Assert** the "Undo Snackbar" is now visible.
@@ -626,7 +626,8 @@ This **Playwright** plan tests the full send-and-undo loop.
     * Click "Send".
     * **Assert** the composer closes.
     * **Assert** the "Undo" snackbar appears.
-    * **Do not** click Undo. Wait for the `undo_send_delay_seconds` (e.g., 20s) *plus* the worker poll time (e.g., 5s).
+    * **Do not** click Undo. Wait for the `undo_send_delay_seconds` (default: 20 sec)
+      *plus* the worker poll time (default: 5 sec).
     * **Check external email:** **Assert** the email ("E2E Test Send") was received.
     * **Check V-Mail UI:** Click the "Sent" folder. **Assert** the "E2E Test Send" email now appears in the "Sent" list (proves the IMAP `APPEND` worked).
 * [ ] **Test 2: Compose and Undo (Full Loop)**
@@ -734,7 +735,7 @@ This is a frontend-only task that expands on the hook you built in M2.
     * `e`: If `selectedThreadId` exists, call `moveThreadMutation.mutate({ ..., destination_folder: 'Archive' })`.
     * `s`: If `selectedThreadId` exists, call `starThreadMutation.mutate(...)`.
     * `#` (Shift+3): If `selectedThreadId` exists, call `moveThreadMutation.mutate({ ..., destination_folder: 'Trash' })`.
-* [ ] **Add shortcuts for thread view:**
+* [ ] **Add shortcuts for the thread view:**
     * When on a `/thread/:threadId` page:
     * `r`: Call `composer.store.openReply(currentThreadData)`.
     * `a`: Call `composer.store.openReplyAll(currentThreadData)`.
@@ -854,7 +855,7 @@ This is the most complex but most rewarding "quality of life" feature.
 
 Breakdown:
 
-### **6/1. 💾 Frontend: Set up local database**
+### **6/1. 💾 Frontend: Set up the local database**
 
 First, we need a place to store the emails in the browser. We'll use `dexie.js`, which is a powerful and easy-to-use wrapper for IndexedDB.
 
@@ -1018,7 +1019,7 @@ This logic will run in the background to keep the local database fresh.
 
 ### **6/6. 🧪 Test plan: Milestone 6 (end-to-end)**
 
-Offline mode is notoriously difficult to test. Use **Playwright** for this.
+Offline mode is notoriously hard to test. Use **Playwright** for this.
 
 * [ ] **Test 1: Offline read (cache population)**
     * Log in while **online**.
@@ -1039,7 +1040,7 @@ Offline mode is notoriously difficult to test. Use **Playwright** for this.
     * **Reload the page** (still offline).
     * **Assert** the star is *still* "filled" (this tests that your optimistic UI state is also saved, or that you're reading the `action_queue`).
     * **Turn network online** (`context.setOffline(false)`).
-    * Wait 10-15 seconds (for the worker and sync logic to run).
+    * Wait 10–15 seconds (for the worker and sync logic to run).
     * **Reload the page** (now online).
     * **Assert** the "Meeting Notes" email is *still* starred (proving the action was synced to the server).
 * [ ] **Test 3: Background sync (delta sync)**

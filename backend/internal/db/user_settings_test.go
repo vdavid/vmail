@@ -237,7 +237,13 @@ func TestSaveUserSettingsUpdatesTimestamp(t *testing.T) {
 		t.Fatalf("SaveUserSettings failed: %v", err)
 	}
 
-	retrieved1, _ := GetUserSettings(ctx, pool, userID)
+	retrieved1, err := GetUserSettings(ctx, pool, userID)
+	if err != nil {
+		t.Fatalf("GetUserSettings failed: %v", err)
+	}
+	if retrieved1 == nil {
+		t.Fatalf("GetUserSettings returned nil")
+	}
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -247,7 +253,13 @@ func TestSaveUserSettingsUpdatesTimestamp(t *testing.T) {
 		t.Fatalf("SaveUserSettings (update) failed: %v", err)
 	}
 
-	retrieved2, _ := GetUserSettings(ctx, pool, userID)
+	retrieved2, err := GetUserSettings(ctx, pool, userID)
+	if err != nil {
+		t.Fatalf("GetUserSettings (second) failed: %v", err)
+	}
+	if retrieved2 == nil {
+		t.Fatalf("GetUserSettings (second) returned nil")
+	}
 
 	if !retrieved2.UpdatedAt.After(retrieved1.UpdatedAt) {
 		t.Error("Expected updated_at to be updated after second save")

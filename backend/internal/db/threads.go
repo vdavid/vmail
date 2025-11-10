@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -60,6 +61,32 @@ func GetThreadByStableID(ctx context.Context, pool *pgxpool.Pool, userID, stable
 	return &thread, nil
 }
 
+// GetThreadByID returns a thread by its database ID.
+func GetThreadByID(ctx context.Context, pool *pgxpool.Pool, threadID string) (*models.Thread, error) {
+	var thread models.Thread
+
+	err := pool.QueryRow(ctx, `
+		SELECT id, user_id, stable_thread_id, subject
+		FROM threads
+		WHERE id = $1
+	`, threadID).Scan(
+		&thread.ID,
+		&thread.UserID,
+		&thread.StableThreadID,
+		&thread.Subject,
+	)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrThreadNotFound
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get thread by ID: %w", err)
+	}
+
+	return &thread, nil
+}
+
 // GetThreadsForFolder returns threads for a specific folder.
 // It returns threads that have at least one message in the specified folder.
 func GetThreadsForFolder(ctx context.Context, pool *pgxpool.Pool, userID, folderName string, limit, offset int) ([]*models.Thread, error) {
@@ -103,55 +130,106 @@ func GetThreadsForFolder(ctx context.Context, pool *pgxpool.Pool, userID, folder
 }
 
 // GetThreadCountForFolder returns the total count of threads for a specific folder.
+// Uses the materialized count from folder_sync_timestamps if available,
+// otherwise falls back to calculating it on the fly.
 func GetThreadCountForFolder(ctx context.Context, pool *pgxpool.Pool, userID, folderName string) (int, error) {
-	var count int
+	// Try to get the materialized count first
+	var count *int
 	err := pool.QueryRow(ctx, `
+		SELECT thread_count
+		FROM folder_sync_timestamps
+		WHERE user_id = $1 AND folder_name = $2
+	`, userID, folderName).Scan(&count)
+
+	if err == nil && count != nil {
+		// Materialized count exists, use it
+		return *count, nil
+	}
+
+	// If the row doesn't exist or the count is NULL, fallback to calculating on the fly
+	if !errors.Is(err, pgx.ErrNoRows) && err != nil {
+		// Some other error occurred, log it but continue to fallback
+		log.Printf("Warning: Failed to get materialized thread count: %v", err)
+	}
+
+	// Fallback: calculate count on the fly
+	var calculatedCount int
+	err = pool.QueryRow(ctx, `
         SELECT COUNT(DISTINCT t.id)
         FROM threads t
         INNER JOIN messages m ON t.id = m.thread_id
         WHERE t.user_id = $1 AND m.imap_folder_name = $2
-    `, userID, folderName).Scan(&count)
+    `, userID, folderName).Scan(&calculatedCount)
 
 	if err != nil {
 		return 0, fmt.Errorf("failed to get thread count: %w", err)
 	}
 
-	return count, nil
+	return calculatedCount, nil
 }
 
-// GetFolderSyncTimestamp returns the timestamp when we last synced the given folder.
+// FolderSyncInfo contains information about folder sync status.
+type FolderSyncInfo struct {
+	SyncedAt      *time.Time
+	LastSyncedUID *int64
+	ThreadCount   int
+}
+
+// GetFolderSyncInfo returns the sync information for the given folder.
 // Returns nil if we've never synced it.
-func GetFolderSyncTimestamp(ctx context.Context, pool *pgxpool.Pool, userID, folderName string) (*time.Time, error) {
-	var syncedAt *time.Time
+func GetFolderSyncInfo(ctx context.Context, pool *pgxpool.Pool, userID, folderName string) (*FolderSyncInfo, error) {
+	var info FolderSyncInfo
 
 	err := pool.QueryRow(ctx, `
-		SELECT synced_at
+		SELECT synced_at, last_synced_uid, thread_count
 		FROM folder_sync_timestamps
 		WHERE user_id = $1 AND folder_name = $2
-	`, userID, folderName).Scan(&syncedAt)
+	`, userID, folderName).Scan(&info.SyncedAt, &info.LastSyncedUID, &info.ThreadCount)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get folder sync timestamp: %w", err)
+		return nil, fmt.Errorf("failed to get folder sync info: %w", err)
 	}
 
-	return syncedAt, nil
+	return &info, nil
 }
 
-// SetFolderSyncTimestamp sets the timestamp when we last synced the given folder.
-func SetFolderSyncTimestamp(ctx context.Context, pool *pgxpool.Pool, userID, folderName string) error {
+// SetFolderSyncInfo sets the sync information for the given folder.
+func SetFolderSyncInfo(ctx context.Context, pool *pgxpool.Pool, userID, folderName string, lastSyncedUID *int64) error {
 	_, err := pool.Exec(ctx, `
-		INSERT INTO folder_sync_timestamps (user_id, folder_name, synced_at)
-		VALUES ($1, $2, now())
+		INSERT INTO folder_sync_timestamps (user_id, folder_name, synced_at, last_synced_uid)
+		VALUES ($1, $2, now(), $3)
 		ON CONFLICT (user_id, folder_name) DO UPDATE SET
-			synced_at = now()
+			synced_at = now(),
+			last_synced_uid = COALESCE($3, folder_sync_timestamps.last_synced_uid)
+	`, userID, folderName, lastSyncedUID)
+
+	if err != nil {
+		return fmt.Errorf("failed to set folder sync info: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateThreadCount updates the materialized thread count for a folder.
+// This should be called in the background after syncing.
+func UpdateThreadCount(ctx context.Context, pool *pgxpool.Pool, userID, folderName string) error {
+	_, err := pool.Exec(ctx, `
+		UPDATE folder_sync_timestamps
+		SET thread_count = (
+			SELECT COUNT(DISTINCT t.id)
+			FROM threads t
+			INNER JOIN messages m ON t.id = m.thread_id
+			WHERE t.user_id = $1 AND m.imap_folder_name = $2
+		)
+		WHERE user_id = $1 AND folder_name = $2
 	`, userID, folderName)
 
 	if err != nil {
-		return fmt.Errorf("failed to set folder sync timestamp: %w", err)
+		return fmt.Errorf("failed to update thread count: %w", err)
 	}
 
 	return nil
