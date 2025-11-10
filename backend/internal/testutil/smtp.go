@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -189,4 +190,53 @@ func (s *TestSMTPServer) GetMessages() []*memoryMessage {
 // ClearMessages clears all stored messages.
 func (s *TestSMTPServer) ClearMessages() {
 	s.Backend.ClearMessages()
+}
+
+// NewTestSMTPServerForE2E creates a new test SMTP server for E2E tests (non-test context).
+// Returns the server instance. The memory backend accepts any username/password combination.
+// Uses a fixed port (1025) for E2E tests so Playwright can connect to it.
+func NewTestSMTPServerForE2E() (*TestSMTPServer, error) {
+	// Create an in-memory backend
+	be := NewMemoryBackend()
+
+	// Create server
+	s := smtp.NewServer(be)
+	s.Addr = ":1025" // Fixed port for E2E tests
+	s.AllowInsecureAuth = true
+	s.Domain = "localhost"
+
+	// Start server on fixed port for E2E tests
+	listener, err := net.Listen("tcp", "127.0.0.1:1025")
+	if err != nil {
+		return nil, fmt.Errorf("failed to listen: %w", err)
+	}
+
+	addr := listener.Addr().String()
+
+	// Start server in goroutine
+	go func() {
+		if err := s.Serve(listener); err != nil {
+			// Server closed, ignore error
+		}
+	}()
+
+	// Give server time to start
+	time.Sleep(100 * time.Millisecond)
+
+	cleanup := func() {
+		_ = s.Close()
+	}
+
+	// Memory backend accepts any credentials for testing
+	username := "testuser"
+	password := "testpass"
+
+	return &TestSMTPServer{
+		Server:   s,
+		Address:  addr,
+		Backend:  be,
+		cleanup:  cleanup,
+		username: username,
+		password: password,
+	}, nil
 }

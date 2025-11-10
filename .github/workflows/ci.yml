@@ -163,3 +163,4 @@ jobs:
         env:
           VMAIL_TEST_MODE: 'true'
           GOTOOLCHAIN: auto
+          PLAYWRIGHT: '1'

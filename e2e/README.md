@@ -4,30 +4,24 @@ End-to-end tests for V-Mail using Playwright.
 
 ## Current Status
 
-The E2E test infrastructure is set up, but tests currently require manual server setup. Future work will automate server startup with test IMAP/SMTP servers.
+✅ **Automated setup is complete!** The test server (`backend/cmd/test-server`) automatically starts all required services.
 
 ## Running Tests
 
 ### Prerequisites
 
-1. Backend server running on `http://localhost:8080`
-2. Test IMAP server running (using `go-imap/server`)
-3. Test SMTP server running (using `go-smtp`)
-4. Database running and migrated
+1. Docker and Docker Compose (for the database), or a local Postgres instance.
+2. Go 1.25.3+
+3. Node.js 25+ and pnpm 10+
+4. A `.env` file with database credentials
 
-### Manual Setup (Current)
+**Note:** The test server automatically starts:
+- Backend server on `http://localhost:8080`
+- Test IMAP server on `localhost:1143`
+- Test SMTP server on `localhost:1025`
+- Seeds test data (sample emails)
 
-For now, you need to manually start:
-- Backend server configured to use test IMAP/SMTP servers
-- Test IMAP server on a known port
-- Test SMTP server on a known port
-
-### Future: Automated Setup
-
-We plan to automate this by:
-- Creating a test server binary that starts backend + test servers
-- Or using Playwright's `webServer` config to start everything
-- Or using a test harness that manages all services
+If using Docker for the DB: ensure the database is running: `docker compose up -d db`
 
 ## Running Tests
 
