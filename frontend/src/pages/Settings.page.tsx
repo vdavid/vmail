@@ -28,7 +28,7 @@ export default function SettingsPage() {
     const initializedRef = useRef(false)
     const wasNewUserRef = useRef(false)
 
-    const { data, isLoading, isError } = useQuery<UserSettings>({
+    const { data, isLoading, isError, error } = useQuery<UserSettings>({
         queryKey: ['settings'],
         queryFn: () => api.getSettings(),
         retry: false,
@@ -64,14 +64,20 @@ export default function SettingsPage() {
             })
         } else if (isError && !initializedRef.current) {
             initializedRef.current = true
-            wasNewUserRef.current = true // This is a new user (no settings exist)
+
+            // Only treat 404 (Not Found) as "new user" - other errors are real problems
+            // that should not trigger redirect after save
+            const fetchError = error as Error & { status?: number }
+
+            wasNewUserRef.current = fetchError.status === 404 // Only true for 404 (settings not found)
+
             setFormData(defaultSettings)
             setNumberInputs({
                 undo_send_delay_seconds: String(defaultSettings.undo_send_delay_seconds),
                 pagination_threads_per_page: String(defaultSettings.pagination_threads_per_page),
             })
         }
-    }, [data, isError])
+    }, [data, isError, error])
 
     const saveMutation = useMutation({
         mutationFn: (settings: UserSettings) => api.saveSettings(settings),
