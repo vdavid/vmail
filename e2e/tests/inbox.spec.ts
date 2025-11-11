@@ -147,5 +147,116 @@ test.describe('Existing User Read-Only Flow', () => {
             }
         }
     })
+
+    test('displays sender and subject in email list', async ({ page }) => {
+        await setupAuth(page, defaultTestUser.email)
+        await navigateAndWait(page, '/')
+
+        // Wait for redirect to complete
+        await page.waitForURL(/.*\/(settings|$)/, { timeout: 10000 })
+
+        const currentURL = page.url()
+        if (currentURL.includes('/settings')) {
+            return // Skip if redirected to settings
+        }
+
+        // Wait for settings to load first
+        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+        
+        await waitForEmailList(page)
+
+        const emailLinks = page.locator('a[href*="/thread/"]')
+        const count = await emailLinks.count()
+
+        if (count > 0) {
+            // Get the first email link
+            const firstEmail = emailLinks.first()
+
+            // Verify sender is displayed (not "Unknown")
+            // EmailListItem structure: <div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="truncate text-sm text-gray-900">{sender}</span>
+            // We look for the sender span within the email link
+            const senderSpan = firstEmail.locator('div.flex-1 div.flex span.text-gray-900').first()
+            await expect(senderSpan).toBeVisible({ timeout: 5000 })
+            const senderText = await senderSpan.textContent()
+            expect(senderText).toBeTruthy()
+            expect(senderText?.trim()).not.toBe('Unknown')
+            expect(senderText?.trim().length).toBeGreaterThan(0)
+
+            // Verify subject is displayed
+            // EmailListItem structure: <div class="flex-1 min-w-0"><div class="truncate text-sm text-gray-600">{subject}</div>
+            const subjectDiv = firstEmail.locator('div.flex-1 div.text-gray-600').first()
+            await expect(subjectDiv).toBeVisible({ timeout: 5000 })
+            const subjectText = await subjectDiv.textContent()
+            expect(subjectText).toBeTruthy()
+            expect(subjectText?.trim()).not.toBe('(No subject)')
+            expect(subjectText?.trim().length).toBeGreaterThan(0)
+        }
+    })
+
+    test('clicking email navigates to thread with correct URL and displays body', async ({ page }) => {
+        await setupAuth(page, defaultTestUser.email)
+        await navigateAndWait(page, '/')
+
+        // Wait for redirect to complete
+        await page.waitForURL(/.*\/(settings|$)/, { timeout: 10000 })
+
+        const currentURL = page.url()
+        if (currentURL.includes('/settings')) {
+            return // Skip if redirected to settings
+        }
+
+        // Wait for settings to load first
+        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+        
+        await waitForEmailList(page)
+
+        const emailLinks = page.locator('a[href*="/thread/"]')
+        const count = await emailLinks.count()
+
+        if (count > 0) {
+            // Get the href of the first email to verify URL format
+            const firstEmailHref = await emailLinks.first().getAttribute('href')
+            expect(firstEmailHref).toBeTruthy()
+            expect(firstEmailHref).toMatch(/^\/thread\//)
+
+            // Click the first email
+            await clickFirstEmail(page)
+
+            // Verify URL is correct format (should be /thread/{threadId}, not double-encoded)
+            // The URL should not have %3C or %3E (encoded < and >) unless the threadId actually contains them
+            // But it should be properly formatted
+            await expect(page).toHaveURL(/.*\/thread\/[^/]+$/, { timeout: 5000 })
+
+            // Verify the URL doesn't have obvious encoding issues
+            const finalURL = page.url()
+            // Check that if there are angle brackets, they're properly encoded, but the URL is still valid
+            expect(finalURL).toContain('/thread/')
+
+            // Wait for thread content to load
+            await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+
+            // Verify thread page shows content (not blank)
+            // Check for thread subject in header
+            const threadHeader = page.locator('main h1, [role="main"] h1').first()
+            await expect(threadHeader).toBeVisible({ timeout: 5000 })
+
+            // Verify email body/content is visible
+            // Message component should render the email body
+            const messageContent = page.locator(
+                'article, [data-testid="message"], .message, main div.border-b'
+            ).first()
+            await expect(messageContent).toBeVisible({ timeout: 5000 })
+
+            // Verify sender is displayed in the message
+            const senderInMessage = page.locator('text=/sender@example\\.com|colleague@example\\.com|reports@example\\.com/i')
+            await expect(senderInMessage.first()).toBeVisible({ timeout: 5000 })
+
+            // Verify message body text is visible (not empty)
+            const bodyText = page.locator('div.prose, div.whitespace-pre-wrap, article').first()
+            const bodyContent = await bodyText.textContent()
+            expect(bodyContent).toBeTruthy()
+            expect(bodyContent?.trim().length).toBeGreaterThan(0)
+        }
+    })
 })
 

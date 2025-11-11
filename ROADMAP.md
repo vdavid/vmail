@@ -209,7 +209,7 @@ Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.m
 
 This plan uses **Playwright** to test the entire read-only flow, assuming the backend and frontend are running.
 
-* [ ] **Test 1: New User Onboarding Flow**
+* [x] **Test 1: New User Onboarding Flow**
     * Mock your Authelia login to succeed for a *new user*.
     * Start at the app's root URL.
     * **Assert** the app redirects to the `/settings` page.
@@ -217,7 +217,7 @@ This plan uses **Playwright** to test the entire read-only flow, assuming the ba
     * Click "Save".
     * **Assert** the app redirects to the Inbox (`/`).
     * (Optional DB check): `SELECT` from `user_settings` and `users` to verify the user was created and the passwords are *encrypted*.
-* [ ] **Test 2: Existing User Read-Only Flow**
+* [x] **Test 2: Existing User Read-Only Flow**
     * Log in as an *existing* (already set-up) user.
     * **Assert** the app lands on the Inbox (`/`).
     * **Assert** the sidebar populates with folders (e.g., "Inbox", "Sent").
@@ -225,7 +225,7 @@ This plan uses **Playwright** to test the entire read-only flow, assuming the ba
     * Note the subject of the first email, then click it.
     * **Assert** the URL changes to `/thread/some-id`.
     * **Assert** the full email body and any attachment names are visible on the screen.
-* [ ] **Test 3: Navigation**
+* [x] **Test 3: Navigation**
     * From the thread view, press the "u" key.
     * **Assert** the app navigates back to the Inbox (`/`).
     * Press the "j" key.

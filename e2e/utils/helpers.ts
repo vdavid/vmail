@@ -89,7 +89,8 @@ export async function clickFirstEmail(page: Page) {
     const firstEmailLink = page.locator('a[href*="/thread/"]').first()
     await firstEmailLink.waitFor({ state: 'visible', timeout: 5000 })
     await firstEmailLink.click()
-    await page.waitForURL('**/thread/**', { timeout: 5000 })
+    // Wait for navigation - URL should be properly formatted
+    await page.waitForURL(/.*\/thread\/[^/]+/, { timeout: 5000 })
 }
 
 /**
