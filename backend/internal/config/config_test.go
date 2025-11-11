@@ -59,7 +59,7 @@ func TestNewConfig(t *testing.T) {
 	}
 
 	if config.DBUsername != "test-user" {
-		t.Errorf("expected DBUsername 'testuser', got '%s'", config.DBUsername)
+		t.Errorf("expected DBUsername 'test-user', got '%s'", config.DBUsername)
 	}
 
 	if config.DBPassword != "test-password" {

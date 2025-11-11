@@ -99,7 +99,10 @@ export const api = {
             headers: getAuthHeaders(),
         })
         if (!response.ok) {
-            throw new Error('Failed to fetch settings')
+            // Preserve status code information so caller can distinguish 404 from other errors
+            const error = new Error('Failed to fetch settings')
+            ;(error as Error & { status?: number }).status = response.status
+            throw error
         }
         return (await response.json()) as Promise<UserSettings>
     },

@@ -290,6 +290,17 @@ run_frontend_tests() {
     fi
 }
 
+run_e2e_tests() {
+    echo -n "  • E2E tests... "
+    if ! pnpm test:e2e > /dev/null 2>&1; then
+        echo -e "${RED}FAILED${NC}"
+        pnpm test:e2e
+        FAILED=1
+    else
+        echo -e "${GREEN}OK${NC}"
+    fi
+}
+
 # Run all backend checks
 run_all_backend_checks() {
     echo "📦 Backend (Go) checks..."
@@ -321,6 +332,7 @@ run_all_frontend_checks() {
     run_frontend_prettier
     run_frontend_eslint
     run_frontend_tests
+    run_e2e_tests
     
     cd ..
 }
@@ -345,7 +357,7 @@ If no options are provided, runs all checks (backend and frontend).
 Available check names:
   Backend: gofmt, go-mod-tidy, govulncheck, go-vet, staticcheck, 
            ineffassign, misspell, gocyclo, nilaway, backend-tests
-  Frontend: prettier, eslint, frontend-tests
+  Frontend: prettier, eslint, frontend-tests, e2e-tests
 
 EXAMPLES:
     $0                    # Run all checks
@@ -374,7 +386,7 @@ run_single_check() {
                     ;;
             esac
             ;;
-        prettier|eslint|frontend-tests)
+        prettier|eslint|frontend-tests|e2e-tests)
             # Frontend check - need to be in frontend directory
             cd frontend
             ;;
@@ -430,6 +442,9 @@ run_single_check() {
             ;;
         frontend-tests)
             run_frontend_tests
+            ;;
+        e2e-tests)
+            run_e2e_tests
             ;;
         prettier)
             run_frontend_prettier

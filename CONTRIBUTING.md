@@ -65,6 +65,61 @@ Frontend (TypeScript):
 The script automatically installs missing linting tools and uses the Go version specified in `go.mod` (via
 `GOTOOLCHAIN=auto`).
 
+### Running E2E tests
+
+End-to-end (E2E) tests verify the full application flow using Playwright. They test the integration between
+frontend, backend, database, and test IMAP/SMTP servers.
+
+**When to run E2E tests:**
+
+- Before merging a PR
+- Before a release
+- When adding major features
+- In CI (automated)
+
+For daily development, unit and integration tests are usually enough.
+
+**Prerequisites:**
+
+- Go 1.25.3+
+- Node.js 25+ and pnpm 10+
+- A `.env` file with database credentials (see `.env.example`)
+
+**Running E2E tests:**
+
+```bash
+# Run all E2E tests
+# This automatically starts the test server (backend + test IMAP/SMTP servers)
+cd frontend
+pnpm test:e2e
+
+# Run tests in UI mode (interactive)
+pnpm test:e2e:ui
+
+# Run a specific test file
+pnpm exec playwright test e2e/tests/onboarding.spec.ts
+```
+
+The test server (`backend/cmd/test-server`) automatically:
+- Starts a test IMAP server on `localhost:1143`
+- Starts a test SMTP server on `localhost:1025`
+- Starts the backend server on `localhost:8080`
+- Seeds test data (sample emails)
+- Sets `VMAIL_TEST_MODE=true` for non-TLS connections
+
+**Test server credentials:**
+
+- IMAP: `username` / `password` on `localhost:1143`
+- SMTP: `test-user` / `test-pass` on `localhost:1025`
+
+These match the values in `e2e/fixtures/test-data.ts`.
+
+**Troubleshooting:**
+
+- If tests fail to connect, ensure ports 8080, 1143, and 1025 are not in use
+- If the database connection fails, ensure Docker Compose is running: `docker compose up -d db`
+- Check the test server logs for detailed error messages
+
 ### Commit messages
 
 The first line is max 50 characters. Examples: "Add new feature X", "Frontend: Fix Save button size on the Settings

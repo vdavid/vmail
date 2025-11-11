@@ -107,4 +107,17 @@ export default [
             ],
         },
     },
+    {
+        files: ['scripts/**/*.mjs'],
+        languageOptions: {
+            globals: {
+                ...globals.node,
+            },
+            ecmaVersion: 'latest',
+            sourceType: 'module',
+        },
+        rules: {
+            'no-console': 'off', // Scripts can use console
+        },
+    },
 ]

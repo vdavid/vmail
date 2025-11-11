@@ -8,3 +8,7 @@
 # Docker Compose override file
 docker-compose.override.yml
 docker-compose.override.yaml
+
+# Playwright
+frontend/playwright-report/
+frontend/test-results/

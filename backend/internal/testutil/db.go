@@ -70,7 +70,7 @@ func NewTestDB(t *testing.T) *pgxpool.Pool {
 	}
 
 	// Run migrations
-	if err := runMigrations(ctx, pool); err != nil {
+	if err := RunMigrations(ctx, pool); err != nil {
 		pool.Close()
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
@@ -78,8 +78,9 @@ func NewTestDB(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-// runMigrations reads all migration files and executes them in order
-func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
+// RunMigrations reads all migration files and executes them in order.
+// This is exported so it can be used by the E2E test server.
+func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 	// Read all migration files
 	migrations, err := readMigrations()
 	if err != nil {

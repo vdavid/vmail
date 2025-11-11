@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -44,8 +45,10 @@ func (p *Pool) getClientConcrete(userID, server, username, password string) (*cl
 		p.mu.Unlock()
 	}
 
-	// Create a new connection
-	c, err := ConnectToIMAP(server)
+	// Create a new connection (use TLS in production, non-TLS for tests)
+	// Check environment variable for test mode
+	useTLS := os.Getenv("VMAIL_TEST_MODE") != "true"
+	c, err := ConnectToIMAP(server, useTLS)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect: %w", err)
 	}
@@ -97,13 +100,23 @@ func (p *Pool) Close() {
 	}
 }
 
-// ConnectToIMAP connects to the IMAP server using TLS with a 5-second timeout.
-func ConnectToIMAP(server string) (*client.Client, error) {
+// ConnectToIMAP connects to the IMAP server with a 5-second timeout.
+// useTLS: true for production (TLS), false for tests (non-TLS).
+func ConnectToIMAP(server string, useTLS bool) (*client.Client, error) {
 	dialer := &net.Dialer{
 		Timeout: 5 * time.Second,
 	}
 
-	c, err := client.DialWithDialerTLS(dialer, server, nil)
+	if useTLS {
+		c, err := client.DialWithDialerTLS(dialer, server, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to dial with TLS: %w", err)
+		}
+		return c, nil
+	}
+
+	// Non-TLS connection for testing
+	c, err := client.DialWithDialer(dialer, server)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial: %w", err)
 	}
