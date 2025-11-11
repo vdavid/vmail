@@ -76,11 +76,6 @@ func TestSettingsHandler_GetSettings(t *testing.T) {
 			SMTPServerHostname:       "smtp.test.com",
 			SMTPUsername:             "test_user",
 			EncryptedSMTPPassword:    encryptedSMTPPassword,
-			ArchiveFolderName:        "Archive",
-			SentFolderName:           "Sent",
-			DraftsFolderName:         "Drafts",
-			TrashFolderName:          "Trash",
-			SpamFolderName:           "Spam",
 		}
 		if err := db.SaveUserSettings(ctx, pool, settings); err != nil {
 			t.Fatalf("Failed to save settings: %v", err)
@@ -147,11 +142,6 @@ func TestSettingsHandler_PostSettings(t *testing.T) {
 			SMTPServerHostname:       "smtp.new.com",
 			SMTPUsername:             "new-user",
 			SMTPPassword:             "smtp_password_456",
-			ArchiveFolderName:        "MyArchive",
-			SentFolderName:           "MySent",
-			DraftsFolderName:         "MyDrafts",
-			TrashFolderName:          "MyTrash",
-			SpamFolderName:           "MySpam",
 		}
 
 		body, _ := json.Marshal(reqBody)
@@ -203,11 +193,6 @@ func TestSettingsHandler_PostSettings(t *testing.T) {
 			SMTPServerHostname:       "old.smtp.com",
 			SMTPUsername:             "old_user",
 			EncryptedSMTPPassword:    []byte("old_encrypted"),
-			ArchiveFolderName:        "Archive",
-			SentFolderName:           "Sent",
-			DraftsFolderName:         "Drafts",
-			TrashFolderName:          "Trash",
-			SpamFolderName:           "Spam",
 		}
 		err := db.SaveUserSettings(ctx, pool, initialSettings)
 		if err != nil {
@@ -223,11 +208,6 @@ func TestSettingsHandler_PostSettings(t *testing.T) {
 			SMTPServerHostname:       "new.smtp.com",
 			SMTPUsername:             "new_user",
 			SMTPPassword:             "new_smtp_password",
-			ArchiveFolderName:        "Archive",
-			SentFolderName:           "Sent",
-			DraftsFolderName:         "Drafts",
-			TrashFolderName:          "Trash",
-			SpamFolderName:           "Spam",
 		}
 
 		body, _ := json.Marshal(reqBody)
@@ -293,11 +273,6 @@ func TestSettingsHandler_PostSettings(t *testing.T) {
 			SMTPServerHostname:       "old.smtp.com",
 			SMTPUsername:             "old_user",
 			EncryptedSMTPPassword:    encryptedSMTPPassword,
-			ArchiveFolderName:        "Archive",
-			SentFolderName:           "Sent",
-			DraftsFolderName:         "Drafts",
-			TrashFolderName:          "Trash",
-			SpamFolderName:           "Spam",
 		}
 		err := db.SaveUserSettings(ctx, pool, initialSettings)
 		if err != nil {
@@ -314,11 +289,6 @@ func TestSettingsHandler_PostSettings(t *testing.T) {
 			SMTPServerHostname:       "new.smtp.com",
 			SMTPUsername:             "new_user",
 			SMTPPassword:             "", // Empty password
-			ArchiveFolderName:        "Archive",
-			SentFolderName:           "Sent",
-			DraftsFolderName:         "Drafts",
-			TrashFolderName:          "Trash",
-			SpamFolderName:           "Spam",
 		}
 
 		body, _ := json.Marshal(reqBody)
@@ -362,11 +332,6 @@ func TestSettingsHandler_PostSettings(t *testing.T) {
 			SMTPServerHostname:       "smtp.new.com",
 			SMTPUsername:             "new-user",
 			SMTPPassword:             "", // Empty password for new user
-			ArchiveFolderName:        "Archive",
-			SentFolderName:           "Sent",
-			DraftsFolderName:         "Drafts",
-			TrashFolderName:          "Trash",
-			SpamFolderName:           "Spam",
 		}
 
 		body, _ := json.Marshal(reqBody)

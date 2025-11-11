@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -34,12 +35,20 @@ func NewThreadHandler(pool *pgxpool.Pool, encryptor *crypto.Encryptor, imapServi
 }
 
 // getStableThreadIDFromPath extracts the stable thread ID from the request path.
+// The thread ID is expected to be URL-encoded (percent-encoded) raw Message-ID.
 func getStableThreadIDFromPath(path string) (string, error) {
 	pathParts := strings.Split(strings.TrimPrefix(path, "/api/v1/thread/"), "/")
 	if len(pathParts) == 0 || pathParts[0] == "" {
 		return "", fmt.Errorf("thread_id is required")
 	}
-	return pathParts[0], nil
+
+	// URL decode the thread ID (handles %3C for <, %3E for >, etc.)
+	decoded, err := url.PathUnescape(pathParts[0])
+	if err != nil {
+		return "", fmt.Errorf("invalid thread_id encoding: %w", err)
+	}
+
+	return decoded, nil
 }
 
 // collectMessagesToSync collects messages that need syncing and returns them with a UID-to-index map.
@@ -101,10 +110,15 @@ func assignAttachments(messages []*models.Message, attachmentsMap map[string][]*
 }
 
 // convertMessagesToThreadMessages converts []*Message to []Message.
+// Ensures that Attachments is always an array, never nil.
 func convertMessagesToThreadMessages(messages []*models.Message) []models.Message {
 	threadMessages := make([]models.Message, 0, len(messages))
 	for _, msg := range messages {
 		if msg != nil {
+			// Ensure Attachments is always initialized to an empty array if nil
+			if msg.Attachments == nil {
+				msg.Attachments = []models.Attachment{}
+			}
 			threadMessages = append(threadMessages, *msg)
 		}
 	}

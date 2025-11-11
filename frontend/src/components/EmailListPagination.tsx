@@ -1,5 +1,7 @@
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
+import { api } from '../lib/api'
 import type { Pagination } from '../lib/api'
 
 interface EmailListPaginationProps {
@@ -11,12 +13,33 @@ export default function EmailListPagination({ pagination }: EmailListPaginationP
     const [searchParams] = useSearchParams()
     const totalPages = Math.ceil(pagination.total_count / pagination.per_page)
 
+    // Get folders to determine which folder is the inbox
+    const { data: folders } = useQuery({
+        queryKey: ['folders'],
+        queryFn: () => api.getFolders(),
+    })
+
     const handlePageChange = (newPage: number) => {
         const params = new URLSearchParams(searchParams)
         params.set('page', newPage.toString())
+
+        // Remove folder param if it's the inbox folder (inbox uses just '/' as the URL)
+        const folderParam = params.get('folder')
+        if (folderParam) {
+            const inboxFolder = folders?.find((f) => f.role === 'inbox')
+            if (inboxFolder && folderParam === inboxFolder.name) {
+                params.delete('folder')
+            }
+        }
+
         // Determine the base path based on whether we're on search or inbox
         const basePath = params.has('q') ? '/search' : '/'
-        void navigate(`${basePath}?${params.toString()}`)
+
+        // Build the URL - if there are no params left (or only page param for INBOX), use basePath
+        // Otherwise, append the query string
+        const queryString = params.toString()
+        const url = queryString ? `${basePath}?${queryString}` : basePath
+        void navigate(url)
     }
 
     if (totalPages <= 1) {

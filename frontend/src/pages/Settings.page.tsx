@@ -12,11 +12,6 @@ const defaultSettings: UserSettings = {
     smtp_server_hostname: '',
     smtp_username: '',
     smtp_password: '',
-    archive_folder_name: 'Archive',
-    sent_folder_name: 'Sent',
-    drafts_folder_name: 'Drafts',
-    trash_folder_name: 'Trash',
-    spam_folder_name: 'Spam',
     undo_send_delay_seconds: 20,
     pagination_threads_per_page: 100,
 }
@@ -317,97 +312,6 @@ export default function SettingsPage() {
                                     password.
                                 </p>
                             )}
-                        </div>
-                    </div>
-                </section>
-
-                <section>
-                    <h2 className='mb-4 text-xl font-semibold text-gray-900'>Folder names</h2>
-                    <div className='grid grid-cols-2 gap-4'>
-                        <div>
-                            <label
-                                htmlFor='archive_folder_name'
-                                className='block text-sm font-medium text-gray-700'
-                            >
-                                Archive folder
-                            </label>
-                            <input
-                                type='text'
-                                id='archive_folder_name'
-                                name='archive_folder_name'
-                                value={formData.archive_folder_name}
-                                onChange={handleChange}
-                                required
-                                className='mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                            />
-                        </div>
-                        <div>
-                            <label
-                                htmlFor='sent_folder_name'
-                                className='block text-sm font-medium text-gray-700'
-                            >
-                                Sent folder
-                            </label>
-                            <input
-                                type='text'
-                                id='sent_folder_name'
-                                name='sent_folder_name'
-                                value={formData.sent_folder_name}
-                                onChange={handleChange}
-                                required
-                                className='mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                            />
-                        </div>
-                        <div>
-                            <label
-                                htmlFor='drafts_folder_name'
-                                className='block text-sm font-medium text-gray-700'
-                            >
-                                Drafts folder
-                            </label>
-                            <input
-                                type='text'
-                                id='drafts_folder_name'
-                                name='drafts_folder_name'
-                                value={formData.drafts_folder_name}
-                                onChange={handleChange}
-                                required
-                                className='mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                            />
-                        </div>
-                        <div>
-                            <label
-                                htmlFor='trash_folder_name'
-                                className='block text-sm font-medium text-gray-700'
-                            >
-                                Trash folder
-                            </label>
-                            <input
-                                type='text'
-                                id='trash_folder_name'
-                                name='trash_folder_name'
-                                value={formData.trash_folder_name}
-                                onChange={handleChange}
-                                required
-                                className='mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                            />
-                        </div>
-                        <div>
-                            <label
-                                htmlFor='spam_folder_name'
-                                className='block text-sm font-medium text-gray-700'
-                            >
-                                Spam folder
-                            </label>
-                            <input
-                                type='text'
-                                id='spam_folder_name'
-                                name='spam_folder_name'
-                                value={formData.spam_folder_name}
-                                onChange={handleChange}
-                                required
-                                className='mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                            />
                         </div>
                     </div>
                 </section>

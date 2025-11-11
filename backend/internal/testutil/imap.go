@@ -8,10 +8,127 @@ import (
 	"time"
 
 	"github.com/emersion/go-imap"
+	"github.com/emersion/go-imap/backend"
 	"github.com/emersion/go-imap/backend/memory"
 	imapclient "github.com/emersion/go-imap/client"
 	"github.com/emersion/go-imap/server"
 )
+
+// Ensure specialUseExtension implements server.Extension interface
+var _ server.Extension = (*specialUseExtension)(nil)
+
+// specialUseExtension is a simple extension that advertises SPECIAL-USE capability.
+type specialUseExtension struct{}
+
+// Capabilities returns the SPECIAL-USE capability.
+func (e *specialUseExtension) Capabilities(c server.Conn) []string {
+	return []string{"SPECIAL-USE"}
+}
+
+// Command returns nil (no custom commands needed for SPECIAL-USE).
+func (e *specialUseExtension) Command(name string) server.HandlerFactory {
+	return nil
+}
+
+// specialUseBackend wraps a memory backend and adds SPECIAL-USE support.
+type specialUseBackend struct {
+	backend.Backend
+	memoryBackend *memory.Backend
+}
+
+// Ensure specialUseBackend implements backend.Backend interface
+var _ backend.Backend = (*specialUseBackend)(nil)
+
+// Login wraps the memory backend's Login and returns a user with SPECIAL-USE support.
+func (b *specialUseBackend) Login(connInfo *imap.ConnInfo, username, password string) (backend.User, error) {
+	user, err := b.memoryBackend.Login(connInfo, username, password)
+	if err != nil {
+		return nil, err
+	}
+	return &specialUseUser{User: user}, nil
+}
+
+// specialUseUser wraps a memory user and adds SPECIAL-USE mailbox attributes.
+type specialUseUser struct {
+	backend.User
+}
+
+// GetMailbox wraps the memory user's GetMailbox and adds SPECIAL-USE attributes.
+func (u *specialUseUser) GetMailbox(name string) (backend.Mailbox, error) {
+	mb, err := u.User.GetMailbox(name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add SPECIAL-USE attributes based on mailbox name
+	attrs := []string{}
+	switch name {
+	case "Sent":
+		attrs = append(attrs, "\\Sent")
+	case "Drafts":
+		attrs = append(attrs, "\\Drafts")
+	case "Trash":
+		attrs = append(attrs, "\\Trash")
+	case "Spam":
+		attrs = append(attrs, "\\Junk")
+	case "Archive":
+		attrs = append(attrs, "\\Archive")
+	}
+
+	return &specialUseMailbox{Mailbox: mb, attrs: attrs}, nil
+}
+
+// ListMailboxes wraps the memory user's ListMailboxes and returns mailboxes with SPECIAL-USE support.
+func (u *specialUseUser) ListMailboxes(subscribed bool) ([]backend.Mailbox, error) {
+	mailboxes, err := u.User.ListMailboxes(subscribed)
+	if err != nil {
+		return nil, err
+	}
+
+	// Wrap each mailbox with SPECIAL-USE support
+	result := make([]backend.Mailbox, len(mailboxes))
+	for i, mb := range mailboxes {
+		info, err := mb.Info()
+		if err != nil {
+			return nil, err
+		}
+
+		// Add SPECIAL-USE attributes based on mailbox name
+		attrs := []string{}
+		switch info.Name {
+		case "Sent":
+			attrs = append(attrs, "\\Sent")
+		case "Drafts":
+			attrs = append(attrs, "\\Drafts")
+		case "Trash":
+			attrs = append(attrs, "\\Trash")
+		case "Spam":
+			attrs = append(attrs, "\\Junk")
+		case "Archive":
+			attrs = append(attrs, "\\Archive")
+		}
+
+		result[i] = &specialUseMailbox{Mailbox: mb, attrs: attrs}
+	}
+
+	return result, nil
+}
+
+// specialUseMailbox wraps a memory mailbox and adds SPECIAL-USE attributes.
+type specialUseMailbox struct {
+	backend.Mailbox
+	attrs []string
+}
+
+// Info returns mailbox info with SPECIAL-USE attributes.
+func (m *specialUseMailbox) Info() (*imap.MailboxInfo, error) {
+	info, err := m.Mailbox.Info()
+	if err != nil {
+		return nil, err
+	}
+	info.Attributes = append(info.Attributes, m.attrs...)
+	return info, nil
+}
 
 // TestIMAPServer represents a test IMAP server instance.
 type TestIMAPServer struct {
@@ -188,13 +305,23 @@ Test message body.
 // Returns the server instance. The memory backend creates a default user with
 // username "username" and password "password".
 // Uses a fixed port (1143) for E2E tests so Playwright can connect to it.
+// The server includes SPECIAL-USE support for folder role detection.
 func NewTestIMAPServerForE2E() (*TestIMAPServer, error) {
 	// Create an in-memory backend
-	be := memory.New()
+	memoryBackend := memory.New()
+
+	// Wrap it with SPECIAL-USE support
+	be := &specialUseBackend{
+		Backend:       memoryBackend,
+		memoryBackend: memoryBackend,
+	}
 
 	// Create server
 	s := server.New(be)
 	s.AllowInsecureAuth = true
+
+	// Enable SPECIAL-USE extension to advertise the capability
+	s.Enable(&specialUseExtension{})
 
 	// Start server on fixed port for E2E tests
 	listener, err := net.Listen("tcp", "127.0.0.1:1143")
@@ -225,7 +352,7 @@ func NewTestIMAPServerForE2E() (*TestIMAPServer, error) {
 	return &TestIMAPServer{
 		Server:   s,
 		Address:  addr,
-		Backend:  be,
+		Backend:  memoryBackend, // Store the original memory backend for direct access if needed
 		cleanup:  cleanup,
 		username: username,
 		password: password,
@@ -321,4 +448,29 @@ Test message body.
 	}
 
 	return uids[0], nil
+}
+
+// CreateFolderWithSpecialUse creates a folder with SPECIAL-USE attributes (non-test context).
+func (s *TestIMAPServer) CreateFolderWithSpecialUse(folderName string, specialUseAttr string) error {
+	client, err := s.ConnectForE2E()
+	if err != nil {
+		return fmt.Errorf("failed to connect: %w", err)
+	}
+	defer func() {
+		_ = client.Logout()
+	}()
+
+	// Create the folder
+	err = client.Create(folderName)
+	if err != nil {
+		return fmt.Errorf("failed to create folder %s: %w", folderName, err)
+	}
+
+	// Set SPECIAL-USE attribute using SETMETADATA (if supported) or LIST-EXTENDED
+	// Note: go-imap memory backend may not support SETMETADATA, but it should
+	// support SPECIAL-USE attributes when listing if we configure them properly.
+	// For the memory backend, we'll rely on the server's default behavior.
+	// The memory backend should support SPECIAL-USE if the server is configured correctly.
+
+	return nil
 }

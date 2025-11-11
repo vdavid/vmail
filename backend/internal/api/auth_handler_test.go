@@ -64,11 +64,6 @@ func TestAuthHandler_GetAuthStatus(t *testing.T) {
 			SMTPServerHostname:       "smtp.example.com",
 			SMTPUsername:             "user",
 			EncryptedSMTPPassword:    []byte("encrypted"),
-			ArchiveFolderName:        "Archive",
-			SentFolderName:           "Sent",
-			DraftsFolderName:         "Drafts",
-			TrashFolderName:          "Trash",
-			SpamFolderName:           "Spam",
 		}
 		if err := db.SaveUserSettings(ctx, pool, settings); err != nil {
 			t.Fatalf("Failed to save settings: %v", err)

@@ -86,11 +86,6 @@ func TestThreadHandler_GetThread(t *testing.T) {
 			SMTPServerHostname:       "smtp.test.com",
 			SMTPUsername:             "user",
 			EncryptedSMTPPassword:    encryptedSMTPPassword,
-			ArchiveFolderName:        "Archive",
-			SentFolderName:           "Sent",
-			DraftsFolderName:         "Drafts",
-			TrashFolderName:          "Trash",
-			SpamFolderName:           "Spam",
 		}
 		if err := db.SaveUserSettings(ctx, pool, settings); err != nil {
 			t.Fatalf("Failed to save settings: %v", err)
@@ -183,11 +178,6 @@ func TestThreadHandler_GetThread(t *testing.T) {
 			SMTPServerHostname:       "smtp.test.com",
 			SMTPUsername:             "user",
 			EncryptedSMTPPassword:    encryptedSMTPPassword,
-			ArchiveFolderName:        "Archive",
-			SentFolderName:           "Sent",
-			DraftsFolderName:         "Drafts",
-			TrashFolderName:          "Trash",
-			SpamFolderName:           "Spam",
 		}
 		if err := db.SaveUserSettings(ctx, pool, settings); err != nil {
 			t.Fatalf("Failed to save settings: %v", err)

@@ -39,8 +39,14 @@ test.describe('Keyboard Navigation', () => {
 
         // Wait for thread to load
         await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+        
+        // Wait for thread content to be visible (ensures page is fully loaded)
+        await page.waitForSelector('h1, button:has-text("Back to Inbox")', { timeout: 5000 })
 
-        // Press 'u' to go back
+        // Wait a bit for React to finish rendering and keyboard handler to be ready
+        await page.waitForTimeout(200)
+
+        // Press 'u' to go back (keyboard handler should be active)
         await page.keyboard.press('u')
 
         // Verify we're back on the inbox
@@ -65,7 +71,8 @@ test.describe('Keyboard Navigation', () => {
         }
 
         // Focus the page to ensure keyboard events work
-        await page.click('body')
+        // Click on the sidebar title (non-interactive) instead of body to avoid clicking on email links
+        await page.click('text=V-Mail')
 
         // Press 'j' to move to next email
         await page.keyboard.press('j')
@@ -97,7 +104,11 @@ test.describe('Keyboard Navigation', () => {
             return
         }
 
-        await page.click('body')
+        // Ensure we're on the inbox before starting
+        await expect(page).toHaveURL(/.*\/$/)
+
+        // Click on the sidebar title (non-interactive) to make sure the
+        await page.click('text=V-Mail')
 
         // Move down with 'j' first
         await page.keyboard.press('j')
@@ -128,7 +139,8 @@ test.describe('Keyboard Navigation', () => {
             return
         }
 
-        await page.click('body')
+        // Click on the sidebar title (non-interactive) instead of body to avoid clicking on email links
+        await page.click('text=V-Mail')
 
         // Select first email with 'j' (if not already selected)
         // Then press 'o' to open

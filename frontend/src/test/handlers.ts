@@ -111,9 +111,15 @@ export const handlers = [
     }),
 
     http.get('/api/v1/thread/:threadId', ({ params }) => {
-        const threadId = params.threadId as string
+        // Decode URL-encoded thread ID (handles %3C for <, %3E for >, %40 for @, etc.)
+        const threadId = decodeURIComponent(params.threadId as string)
 
-        if (threadId === 'thread-1') {
+        // Support both simple test IDs and Message-IDs with angle brackets
+        if (
+            threadId === 'thread-1' ||
+            threadId === '<thread-1@example.com>' ||
+            threadId === '<thread-1%40example.com>'
+        ) {
             return HttpResponse.json({
                 id: '1',
                 stable_thread_id: 'thread-1',

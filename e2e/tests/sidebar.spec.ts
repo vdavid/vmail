@@ -48,8 +48,8 @@ test.describe('Sidebar and Folder Navigation', () => {
         await expect(sidebar).toBeVisible({ timeout: 5000 })
 
         // Verify common folders are present (at least Inbox should be there)
-        // The exact folder names depend on what the test IMAP server returns
-        const inboxLink = page.locator('a[href*="folder=INBOX"], a[href*="folder=Inbox"], a:has-text("Inbox"), a:has-text("INBOX")').first()
+        // Inbox link should be href="/" (inbox is special and doesn't use folder parameter)
+        const inboxLink = page.locator('a[href="/"], a:has-text("Inbox"), a:has-text("INBOX")').first()
         await expect(inboxLink).toBeVisible({ timeout: 5000 })
     })
 
@@ -61,14 +61,15 @@ test.describe('Sidebar and Folder Navigation', () => {
         }
         
         // Wait for sidebar folders to be visible
-        const inboxLink = page.locator('a[href*="folder=INBOX"], a[href*="folder=Inbox"], a:has-text("Inbox"), a:has-text("INBOX")').first()
+        // Inbox link should be href="/" (inbox is special and doesn't use folder parameter)
+        const inboxLink = page.locator('a[href="/"], a:has-text("Inbox"), a:has-text("INBOX")').first()
         await expect(inboxLink).toBeVisible({ timeout: 5000 })
 
         // Click the Inbox link
         await inboxLink.click()
 
-        // Verify URL contains folder parameter
-        await expect(page).toHaveURL(/.*folder=(INBOX|Inbox)/i, { timeout: 5000 })
+        // Verify URL is just '/' (inbox is special and doesn't use folder parameter)
+        await expect(page).toHaveURL(/.*\/$/, { timeout: 5000 })
 
         // Verify email list loads
         await waitForEmailList(page)

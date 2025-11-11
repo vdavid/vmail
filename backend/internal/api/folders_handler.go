@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -41,83 +42,135 @@ func (h *FoldersHandler) GetFolders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get user settings
+	settings, imapPassword, ok := h.getUserSettingsAndPassword(ctx, w, userID)
+	if !ok {
+		return
+	}
+
+	client, ok := h.getIMAPClient(w, userID, settings, imapPassword)
+	if !ok {
+		return
+	}
+
+	folders, ok := h.listFoldersWithRetry(w, userID, client, settings, imapPassword)
+	if !ok {
+		return
+	}
+
+	h.writeFoldersResponse(w, folders)
+}
+
+// getUserSettingsAndPassword retrieves user settings and decrypts the IMAP password.
+func (h *FoldersHandler) getUserSettingsAndPassword(ctx context.Context, w http.ResponseWriter, userID string) (*models.UserSettings, string, bool) {
 	settings, err := db.GetUserSettings(ctx, h.pool, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrUserSettingsNotFound) {
 			http.Error(w, "User settings not found", http.StatusNotFound)
-			return
+			return nil, "", false
 		}
 		log.Printf("FoldersHandler: Failed to get user settings: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
+		return nil, "", false
 	}
 
-	// Decrypt password
 	imapPassword, err := h.encryptor.Decrypt(settings.EncryptedIMAPPassword)
 	if err != nil {
 		log.Printf("FoldersHandler: Failed to decrypt IMAP password: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
+		return nil, "", false
 	}
 
-	// Get IMAP client
+	return settings, imapPassword, true
+}
+
+// getIMAPClient gets an IMAP client, handling connection errors.
+func (h *FoldersHandler) getIMAPClient(w http.ResponseWriter, userID string, settings *models.UserSettings, imapPassword string) (imap.IMAPClient, bool) {
 	client, err := h.imapPool.GetClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
 	if err != nil {
 		log.Printf("FoldersHandler: Failed to get IMAP client: %v", err)
-		// Check if it's a timeout or connection error
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "i/o timeout") {
 			http.Error(w, "Connection to IMAP server timed out. Please double-check your server hostname in your Settings and try again.", http.StatusServiceUnavailable)
 		} else {
 			http.Error(w, "Failed to connect to IMAP server", http.StatusInternalServerError)
 		}
-		return
+		return nil, false
 	}
+	return client, true
+}
 
-	// List folders using the interface method
-	folderNames, err := client.ListFolders()
+// listFoldersWithRetry lists folders with automatic retry on connection errors.
+func (h *FoldersHandler) listFoldersWithRetry(w http.ResponseWriter, userID string, client imap.IMAPClient, settings *models.UserSettings, imapPassword string) ([]*models.Folder, bool) {
+	folders, err := client.ListFolders()
 	if err != nil {
-		log.Printf("FoldersHandler: Failed to list folders: %v", err)
+		return h.handleListFoldersError(w, userID, err, settings, imapPassword)
+	}
+	return folders, true
+}
 
-		// Check if it's a broken connection error
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "broken pipe") || strings.Contains(errMsg, "connection reset") || strings.Contains(errMsg, "EOF") {
-			// Remove the dead connection from the pool and retry once
-			h.imapPool.RemoveClient(userID)
+// handleListFoldersError handles errors from ListFolders, including retry logic.
+func (h *FoldersHandler) handleListFoldersError(w http.ResponseWriter, userID string, err error, settings *models.UserSettings, imapPassword string) ([]*models.Folder, bool) {
+	log.Printf("FoldersHandler: Failed to list folders: %v", err)
+	errMsg := err.Error()
 
-			// Retry with a fresh connection
-			client, retryErr := h.imapPool.GetClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
-			if retryErr != nil {
-				log.Printf("FoldersHandler: Failed to get IMAP client on retry: %v", retryErr)
-				http.Error(w, "Failed to connect to IMAP server", http.StatusInternalServerError)
-				return
-			}
-
-			folderNames, err = client.ListFolders()
-			if err != nil {
-				log.Printf("FoldersHandler: Failed to list folders on retry: %v", err)
-				http.Error(w, "Failed to list folders", http.StatusInternalServerError)
-				return
-			}
-			// Success on retry, continue below
-		} else {
-			http.Error(w, "Failed to list folders", http.StatusInternalServerError)
-			return
-		}
+	if strings.Contains(errMsg, "SPECIAL-USE") {
+		http.Error(w, "Your IMAP server doesn't support the SPECIAL-USE extension (RFC 6154), which is required for V-Mail to identify folder types. Please contact your email provider or use a different IMAP server.", http.StatusBadRequest)
+		return nil, false
 	}
 
-	// Convert to response format
-	folders := make([]models.Folder, 0, len(folderNames))
-	for _, name := range folderNames {
-		folders = append(folders, models.Folder{Name: name})
+	if h.isBrokenConnectionError(errMsg) {
+		return h.retryListFolders(w, userID, settings, imapPassword)
+	}
+
+	http.Error(w, "Failed to list folders", http.StatusInternalServerError)
+	return nil, false
+}
+
+// isBrokenConnectionError checks if the error indicates a broken connection.
+func (h *FoldersHandler) isBrokenConnectionError(errMsg string) bool {
+	return strings.Contains(errMsg, "broken pipe") ||
+		strings.Contains(errMsg, "connection reset") ||
+		strings.Contains(errMsg, "EOF")
+}
+
+// retryListFolders retries listing folders after removing the broken connection.
+func (h *FoldersHandler) retryListFolders(w http.ResponseWriter, userID string, settings *models.UserSettings, imapPassword string) ([]*models.Folder, bool) {
+	h.imapPool.RemoveClient(userID)
+
+	client, retryErr := h.imapPool.GetClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
+	if retryErr != nil {
+		log.Printf("FoldersHandler: Failed to get IMAP client on retry: %v", retryErr)
+		http.Error(w, "Failed to connect to IMAP server", http.StatusInternalServerError)
+		return nil, false
+	}
+
+	folders, err := client.ListFolders()
+	if err != nil {
+		log.Printf("FoldersHandler: Failed to list folders on retry: %v", err)
+		if strings.Contains(err.Error(), "SPECIAL-USE") {
+			http.Error(w, "Your IMAP server doesn't support the SPECIAL-USE extension (RFC 6154), which is required for V-Mail to identify folder types. Please contact your email provider or use a different IMAP server.", http.StatusBadRequest)
+			return nil, false
+		}
+		http.Error(w, "Failed to list folders", http.StatusInternalServerError)
+		return nil, false
+	}
+
+	return folders, true
+}
+
+// writeFoldersResponse writes the folders response as JSON.
+func (h *FoldersHandler) writeFoldersResponse(w http.ResponseWriter, folders []*models.Folder) {
+	sortFoldersByRole(folders)
+
+	folderValues := make([]models.Folder, len(folders))
+	for i, f := range folders {
+		folderValues[i] = *f
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(folders); err != nil {
+	if err := json.NewEncoder(w).Encode(folderValues); err != nil {
 		log.Printf("FoldersHandler: Failed to encode response: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
 	}
 }
 
@@ -137,4 +190,30 @@ func (h *FoldersHandler) getUserIDFromContext(ctx context.Context, w http.Respon
 	}
 
 	return userID, true
+}
+
+// sortFoldersByRole sorts folders by role priority, then alphabetically for "other" folders.
+// Priority order: inbox, sent, drafts, spam, trash, archive, other (alphabetically).
+func sortFoldersByRole(folders []*models.Folder) {
+	rolePriority := map[string]int{
+		"inbox":   1,
+		"sent":    2,
+		"drafts":  3,
+		"spam":    4,
+		"trash":   5,
+		"archive": 6,
+		"other":   7,
+	}
+
+	sort.Slice(folders, func(i, j int) bool {
+		priorityI := rolePriority[folders[i].Role]
+		priorityJ := rolePriority[folders[j].Role]
+
+		if priorityI != priorityJ {
+			return priorityI < priorityJ
+		}
+
+		// Same priority - sort alphabetically by name
+		return folders[i].Name < folders[j].Name
+	})
 }

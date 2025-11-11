@@ -12,7 +12,7 @@ interface AuthWrapperProps {
 
 export default function AuthWrapper({ children }: AuthWrapperProps) {
     const location = useLocation()
-    const { isSetupComplete, setIsSetupComplete } = useAuthStore()
+    const { setIsSetupComplete } = useAuthStore()
 
     const { data, isLoading, isError } = useQuery<AuthStatus>({
         queryKey: ['authStatus'],
@@ -40,9 +40,14 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
         )
     }
 
-    if (!isSetupComplete && location.pathname !== '/settings') {
-        return <Navigate to='/settings' replace />
+    // Only redirect if we have data indicating setup is incomplete, or if there's an error
+    // This ensures we don't redirect based on stale store state
+    if (location.pathname !== '/settings') {
+        if ((data && !data.isSetupComplete) || isError) {
+            return <Navigate to='/settings' replace />
+        }
     }
 
+    // If we have data and setup is complete, or if we don't have data yet, render children
     return <>{children}</>
 }

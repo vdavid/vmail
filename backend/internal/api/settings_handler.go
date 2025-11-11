@@ -57,11 +57,6 @@ func (h *SettingsHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 		SMTPServerHostname:       settings.SMTPServerHostname,
 		SMTPUsername:             settings.SMTPUsername,
 		SMTPPasswordSet:          len(settings.EncryptedSMTPPassword) > 0,
-		ArchiveFolderName:        settings.ArchiveFolderName,
-		SentFolderName:           settings.SentFolderName,
-		DraftsFolderName:         settings.DraftsFolderName,
-		TrashFolderName:          settings.TrashFolderName,
-		SpamFolderName:           settings.SpamFolderName,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -153,11 +148,6 @@ func (h *SettingsHandler) PostSettings(w http.ResponseWriter, r *http.Request) {
 		SMTPServerHostname:       req.SMTPServerHostname,
 		SMTPUsername:             req.SMTPUsername,
 		EncryptedSMTPPassword:    encryptedSMTPPassword,
-		ArchiveFolderName:        req.ArchiveFolderName,
-		SentFolderName:           req.SentFolderName,
-		DraftsFolderName:         req.DraftsFolderName,
-		TrashFolderName:          req.TrashFolderName,
-		SpamFolderName:           req.SpamFolderName,
 	}
 
 	if err := db.SaveUserSettings(ctx, h.pool, settings); err != nil {

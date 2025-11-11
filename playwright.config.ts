@@ -13,7 +13,7 @@ export default defineConfig({
     // Use a separate TypeScript config to avoid Vitest conflicts
     // This ensures Playwright doesn't load Vitest's setup files
     use: {
-        baseURL: 'http://localhost:7556', // Frontend Vite dev server
+        baseURL: 'http://localhost:7557', // Frontend Vite dev server (E2E test port)
         trace: 'on-first-retry',
     },
 
@@ -30,16 +30,17 @@ export default defineConfig({
     webServer: [
         {
             command: 'cd backend && go run ./cmd/test-server',
-            url: 'http://localhost:8080',
+            url: 'http://localhost:11765',
             reuseExistingServer: false,
             timeout: 120 * 1000,
             env: {
                 VMAIL_TEST_MODE: 'true',
+                PORT: '11765', // Use different port for E2E tests
             },
         },
         {
-            command: 'cd frontend && pnpm dev',
-            url: 'http://localhost:7556',
+            command: 'cd frontend && VITE_PORT=7557 VITE_API_URL=http://localhost:11765 pnpm dev',
+            url: 'http://localhost:7557',
             reuseExistingServer: false,
             timeout: 60 * 1000,
         },

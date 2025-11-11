@@ -45,7 +45,7 @@ func NewConfig() (*Config, error) {
 		DBPassword:          os.Getenv("VMAIL_DB_PASSWORD"),
 		DBName:              getEnvOrDefault("VMAIL_DB_NAME", "vmail"),
 		DBSSLMode:           getEnvOrDefault("VMAIL_DB_SSLMODE", "disable"),
-		Port:                getEnvOrDefault("PORT", "8080"),
+		Port:                getEnvOrDefault("PORT", "11764"),
 		Timezone:            getEnvOrDefault("TZ", "UTC"),
 	}
 
