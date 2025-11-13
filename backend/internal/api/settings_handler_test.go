@@ -3,34 +3,16 @@ package api
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/vdavid/vmail/backend/internal/auth"
-	"github.com/vdavid/vmail/backend/internal/crypto"
 	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/models"
 	"github.com/vdavid/vmail/backend/internal/testutil"
 )
-
-func getTestEncryptor(t *testing.T) *crypto.Encryptor {
-	t.Helper()
-
-	key := make([]byte, 32)
-	for i := range key {
-		key[i] = byte(i)
-	}
-	base64Key := base64.StdEncoding.EncodeToString(key)
-
-	encryptor, err := crypto.NewEncryptor(base64Key)
-	if err != nil {
-		t.Fatalf("Failed to create encryptor: %v", err)
-	}
-	return encryptor
-}
 
 func TestSettingsHandler_GetSettings(t *testing.T) {
 	pool := testutil.NewTestDB(t)
