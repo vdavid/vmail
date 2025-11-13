@@ -26,217 +26,6 @@
     * Goal: Basic offline support.
     * Tasks: Implement IndexedDB caching for recently viewed emails. Build the sync logic.
 
-## Milestone 1
-
-**Goal:** Prove the core technology works. A simple Go CLI app. No UI.
-
-* [x] Set up a new Go module (`go mod init backend`).
-* [x] Add `github.com/emersion/go-imap` as a dependency.
-* [x] Create a `main.go` file.
-* [x] Implement logic to connect to the mailcow IMAP server (using `imap.DialTLS`).
-* [x] Implement logic to log in using a username and password (from env vars for now).
-* [x] Implement a function to run the `CAPABILITY` command and print the results (to verify `THREAD` support).
-* [x] Implement a function to `SELECT` the "Inbox".
-* [x] Implement a function to run a `THREAD` command (`THREAD=REFERENCES UTF-8 ALL`) and print the raw response.
-* [x] Implement a function to run a `SEARCH` command (e.g., `SEARCH FROM "test"`) and print the resulting UIDs.
-* [x] Implement a function to `FETCH` a single message (using a UID from the search) and print its body structure and headers.
-
-Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.md` for details on milestone 1.
-
-## Milestone 2
-
-### **2/1. 🏗️ Backend: Server foundation**
-
-* [x] **Create the main server:** In `/backend/cmd/server`, create a new `main.go`. This will be your *actual* server (unlike the `spike`).
-    * It should start a `net/http` server using `http.ListenAndServe`.
-    * It should use `http.ServeMux` (as specified in your spec) for routing.
-    * Add a simple `http.HandlerFunc` for `/` that responds with "V-Mail API is running".
-* [x] **Set up config loading:** In `/backend/internal/config`, create a `config.go`.
-    * Create a `struct` that holds all env vars (DB host, master key, etc.).
-    * Create a `NewConfig()` function that reads from the `.env` file (using `godotenv` for local dev) and `os.Getenv` (for production).
-    * Pass this `Config` struct to your server in `main.go`.
-* [x] **Set up database connection:** In `/backend/internal/db`, create a `db.go`.
-    * Create a `NewConnection()` function that takes the DB config and returns a `*pgxpool.Pool`.
-    * Add this `*pgxpool.Pool` to your server's dependencies.
-* [x] **Set up DB migrations:**
-    * Install `golang-migrate` (e.g., `brew install golang-migrate`).
-    * Create a `/backend/migrations` directory.
-    * Create a new migration file (e.g., `migrate create -ext sql -dir backend/migrations -seq init_schema`).
-    * Copy-paste the entire SQL schema from `SPEC.md` into the `.up.sql` file.
-    * Run the migration (`migrate -database "..." -path backend/migrations up`) to create your tables.
-
-### **2/2. 🛡️ Backend: Auth and onboarding**
-
-* [x] **Create Authelia middleware:** In `/backend/internal/api` (or `/internal/auth`), create a `middleware.go`.
-    * Create a `RequireAuth` middleware.
-    * This middleware should:
-        * Get the `Authorization: Bearer ...` token from the request header.
-        * (For now) Log the token. In a later step, you'll validate it.
-        * Pass the request to the next handler.
-* [x] **Create API: <code>auth/status</code> endpoint:**
-    * Add the `GET /api/v1/auth/status` route.
-    * Create its handler function. This function should:
-        * (For now) Assume auth is okay.
-        * Check if a row exists in `user_settings` for this user.
-        * Return `{"isAuthenticated": true, "isSetupComplete": [true/false]}`.
-* [x] **Create API: <code>settings</code> endpoints:**
-    * In `/backend/internal/db`, create `user_settings.go`. Add `GetUserSettings(userID string)` and `SaveUserSettings(settings UserSettings)` functions.
-    * Add the `GET /api/v1/settings` route and handler. It should call `GetUserSettings` and return the data (without passwords).
-    * Add the `POST /api/v1/settings` route and handler.
-        * It must read the JSON body.
-        * It must **encrypt** the `imap_password` and `smtp_password` fields (using your standard `crypto/aes` logic).
-        * It should call `SaveUserSettings` to save the data to the DB.
-
-### **2/3. 🎨 Frontend: Skeleton and settings page**
-
-* [x] **Set up the React project:**
-    * In the root `/frontend` folder, run `pnpm create vite . --template react-ts`.
-    * Install all your core dependencies:
-      ```bash
-      pnpm install react-router-dom @tanstack/react-query zustand dompurify
-      pnpm install -D tailwindcss postcss autoprefixer
-      ```
-    * Initialize Tailwind (`pnpm tailwindcss init -p`).
-* [x] **Create the basic layout:**
-    * In `/frontend/src`, create a `components/Layout.tsx`.
-    * `Layout.tsx` should have a static `Sidebar.tsx` (left), `Header.tsx` (top, for search), and a main content area that renders `{children}`.
-* [x] **Set up routing:**
-    * In `main.tsx`, wrap your app in `<BrowserRouter>`.
-    * Create `App.tsx` to define your routes:
-        * `/` (goes to `Inbox.page.tsx`)
-        * `/thread/:threadId` (goes to `Thread.page.tsx`)
-        * `/settings` (goes to `Settings.page.tsx`)
-* [x] **Create Auth/Onboarding flow:**
-    * Create an "auth" store in `store/auth.store.ts` (using Zustand). It should hold `isSetupComplete` (boolean, default `false`).
-    * Create a `components/AuthWrapper.tsx` component.
-        * This component uses `useEffect` on mount to `fetch` your `GET /api/v1/auth/status` endpoint.
-        * When it gets the response, it sets the `isSetupComplete` state in your Zustand store.
-        * It should render `{children}` *only if* `isSetupComplete` is true.
-        * If `isSetupComplete` is `false`, it should render `<Navigate to="/settings" />` (from `react-router-dom`).
-    * Wrap your main `<Layout />` in `AuthWrapper.tsx`.
-* [x] **Build Settings Page:**
-    * Create `pages/Settings.page.tsx`.
-    * This page should be a simple form with fields for all the `user_settings` (IMAP server, username, password, folder names, etc.).
-    * Use `TanStack Query` to fetch data from `GET /api/v1/settings` to populate the form.
-    * Use `TanStack Query`'s `useMutation` hook to `POST` the form data to `POST /api/v1/settings` on submit.
-
-### **2/4. 📨 Backend: Read-only email API**
-
-* [x] **Refactor <code>spike</code> code:** Move your `connectToIMAP`, `login`, `runThreadCommand`, etc. from the `spike` into reusable functions in `/backend/internal/imap`.
-    * Create an `imap/client.go` that manages a **connection pool** (as discussed). This is complex, so start simple: just a `map[string]*client.Client` to hold one connection per user.
-* [x] **Create API: <code>folders</code> endpoint:**
-    * Add the `GET /api/v1/folders` route and handler.
-    * The handler should:
-        1. Get the user's IMAP credentials from the DB.
-        2. Get an IMAP connection from your pool.
-        3. Run the IMAP `LIST` command to get all folders.
-        4. Return them as a JSON array: `[{"name": "INBOX"}, {"name": "Sent"}]`.
-* [x] **Create API: <code>threads</code> endpoint:**
-    * Add the `GET /api/v1/threads` route (it needs a query param, e.g., `?folder=INBOX`).
-    * This is the most complex handler:
-        1. Get user credentials.
-        2. Check the DB cache (as discussed, based on a TTL).
-        3. If cache is stale: Get IMAP connection, run `THREAD` (like in your spike), then `FETCH` headers for all messages in those threads.
-        4. Parse the messages (using `enmime` for headers).
-        5. Save the data to your `threads` and `messages` tables.
-        6. Return the list of threads from your **database**.
-* [x] **Create API: <code>thread/:thread_id</code> endpoint:**
-    * Add the `GET /api/v1/thread/:thread_id` route.
-    * This handler should:
-        1. Query your *database* for the thread (using `stable_thread_id`).
-        2. Fetch all messages for that thread from your `messages` table.
-        3. (If messages are missing bodies) Fetch the full message bodies from IMAP.
-        4. Parse with `enmime`, saving `unsafe_body_html` and `attachments` to the DB.
-        5. Return the full thread with all messages and attachments as JSON.
-
-### **2/5. 🖥️ Frontend: Read-only email UI**
-
-* [x] **Render folders:**
-    * In `Sidebar.tsx`, use `TanStack Query` (`useQuery`) to fetch from `GET /api/v1/folders`.
-    * Render the list of folders as links (`<Link to="/?folder=INBOX">Inbox</Link>`).
-* [x] **Render thread list:**
-    * Create `pages/Inbox.page.tsx`.
-    * It should read the `?folder=` query param from the URL (using `react-router`'s `useSearchParams` hook).
-    * Use `useQuery` to fetch from `GET /api/v1/threads?folder=...`.
-    * Create an `EmailListItem.tsx` component.
-    * Render the list of threads using this component, showing sender, subject, date, etc.
-* [x] **Render thread view:**
-    * Create `pages/Thread.page.tsx`.
-    * It should read the `:threadId` from the URL (using `useParams`).
-    * Use `useQuery` to fetch from `GET /api/v1/thread/:threadId`.
-    * Create a `Message.tsx` component.
-    * Render each message in the thread.
-    * **Crucially:** In `Message.tsx`, use `DOMPurify.sanitize()` on the `unsafe_body_html` before rendering it with `dangerouslySetInnerHTML`.
-    * Render the list of attachments.
-* [x] **Implement basic keyboard navigation:**
-    * Create a `hooks/useKeyboardShortcuts.ts`.
-    * This hook should `useEffect` to add a `keydown` event listener.
-    * (For now) Just implement `j` (next item) and `k` (previous item) to move a "selected" index, which you'll store in a new Zustand store (`ui.store.ts`).
-    * Implement `o` (open) or `Enter` to navigate to the selected thread (using `react-router`'s `useNavigate` hook).
-    * Implement `u` (up) to navigate from a thread view back to the inbox (`Maps('/')`).
-
-#### **Testing: Unit Tests (Jest + React Testing Library)**
-
-* [x] **<code>Message.tsx</code> (Security):**
-    * Test that the component *always* calls `DOMPurify.sanitize()` with the `unsafe_body_html` prop.
-    * Test that the output of `DOMPurify.sanitize` is what's actually rendered via `dangerouslySetInnerHTML`.
-* [x] **<code>hooks/useKeyboardShortcuts.ts</code>:**
-    * Mock `window.addEventListener` and `window.removeEventListener` to test that they are called on mount/unmount.
-    * Test that pressing "j" calls the function to increment the selected index.
-    * Test that pressing "k" calls the function to decrement the selected index.
-    * Test that pressing "o" or "Enter" calls the `react-router` `Maps` function.
-    * Test that pressing "u" calls the `Maps` function to go back.
-
-#### **Testing: Integration Tests (React Testing Library + <code>msw</code>)**
-
-* [x] **Mock API:** Set up `msw` (Mock Service Worker) to intercept and mock all API calls (`GET /api/v1/folders`, `GET /api/v1/threads`, `GET /api/v1/thread/:threadId`).
-* [x] **<code>Sidebar.tsx</code>:**
-    * Test that it renders a "Loading..." state.
-    * Test that it calls `GET /api/v1/folders`.
-    * Test that it renders a list of links (e.g., "Inbox", "Sent") based on the mock API response.
-    * Test that clicking the "Sent" link navigates the user to `/?folder=Sent`.
-* [x] **<code>Inbox.page.tsx</code> (Thread List):**
-    * Test that it renders a "Loading..." state.
-    * Test that it reads the `?folder=INBOX` URL parameter and calls the correct API: `GET /api/v1/threads?folder=INBOX`.
-    * Test that it renders the list of `EmailListItem` components based on the mock response.
-    * Test that clicking an `EmailListItem` navigates the user to the correct thread (e.g., `/thread/thread-id-123`).
-* [x] **<code>Thread.page.tsx</code> (Thread View):**
-    * Test that it renders a "Loading..." state.
-    * Test that it reads the `:threadId` URL parameter and calls the correct API: `GET /api/v1/thread/thread-id-123`.
-    * Test that it correctly renders all messages, sender names, subjects, and attachment filenames from the mock response.
-
-### **2/6. 🧪 Test Plan: Milestone 2 (End-to-End)**
-
-This plan uses **Playwright** to test the entire read-only flow, assuming the backend and frontend are running.
-
-* [x] **Test 1: New User Onboarding Flow**
-    * Mock your Authelia login to succeed for a *new user*.
-    * Start at the app's root URL.
-    * **Assert** the app redirects to the `/settings` page.
-    * Fill in all the form fields (IMAP server, user, pass, etc.).
-    * Click "Save".
-    * **Assert** the app redirects to the Inbox (`/`).
-    * (Optional DB check): `SELECT` from `user_settings` and `users` to verify the user was created and the passwords are *encrypted*.
-* [x] **Test 2: Existing User Read-Only Flow**
-    * Log in as an *existing* (already set-up) user.
-    * **Assert** the app lands on the Inbox (`/`).
-    * **Assert** the sidebar populates with folders (e.g., "Inbox", "Sent").
-    * **Assert** the main view populates with a list of email threads.
-    * Note the subject of the first email, then click it.
-    * **Assert** the URL changes to `/thread/some-id`.
-    * **Assert** the full email body and any attachment names are visible on the screen.
-* [x] **Test 3: Navigation**
-    * From the thread view, press the "u" key.
-    * **Assert** the app navigates back to the Inbox (`/`).
-    * Press the "j" key.
-    * **Assert** the visual focus/selection moves to the *second* email in the list.
-    * Press the "o" key.
-    * **Assert** the app navigates to the *second* thread's page.
-
-### **Front end cleanup**
-
-* [x] Do the stuff from frontend/README.md and get rid of that file.
-
 ## Milestone 3: Actions
 
 - Goal: Be able to manage email.
@@ -398,184 +187,6 @@ These are identical, just with a different destination. We'll build them as a ge
         * Mock `queryClient.invalidateQueries` to track calls.
         * Click the "Archive" button on the first item.
         * **Assert** `invalidateQueries` was called with the `['threads', 'INBOX']` query key.
-
-### **3/4. 🔎 Feature: Search**
-
-This is a read-only feature, so it doesn't use the action queue. We'll implement it in two phases:
-- **Phase 1:** Basic text search (plain text queries)
-- **Phase 2:** Gmail-like syntax parsing (`from:`, `to:`, `subject:`, etc.)
-
-#### **Phase 1: Basic Text Search**
-
-##### **Backend (Basic Search)**
-
-* [x] **Create the "Search" IMAP logic:**
-    * Create a new file `/backend/internal/imap/search.go`.
-    * Create: `func (s *Service) Search(ctx context.Context, userID string, query string, page, limit int) ([]*models.Thread, int, error)`.
-    * This function needs to:
-        1. Get user settings and IMAP connection using `s.getClientAndSelectFolder()`.
-        2. **Folder selection:** If the query contains `folder:` (parse it first), use that folder. Otherwise, default to `"INBOX"`.
-        3. Build IMAP criteria: `criteria := imap.NewSearchCriteria()` -> `criteria.Text = []string{query}` (for Phase 1, treat the entire query as plain text).
-        4. Run `uids, err := c.UidSearch(criteria)`.
-        5. If no UIDs are found, return an empty slice and count 0.
-        6. **Threading logic:**
-            * Fetch headers for matching UIDs using `FetchMessageHeaders(client, uids)`.
-            * For each message:
-                * Extract `Message-ID` from `Envelope.MessageId`.
-                * Look up the message in DB: `db.GetMessageByMessageID(ctx, pool, userID, messageID)`.
-                * If found, get its `thread_id`, then get the thread: `db.GetThreadByID(ctx, pool, threadID)`.
-                * If not found in DB, this is a new message — we'll need to create/sync it. For now, skip it (or trigger a sync — see note below).
-            * Collect all unique threads (deduplicate by `stable_thread_id`).
-            * **Note:** Messages not in DB should ideally trigger a sync, but for MVP we can skip them or do a lightweight sync. Consider calling `s.SyncThreadsForFolder()` for the search folder if many messages are missing.
-        7. **Pagination:** Apply pagination to the deduplicated thread list (sort by most recent message `sent_at`, then apply `LIMIT` and `OFFSET`).
-        8. Get the total count of unique threads (before pagination).
-        9. Return threads and total count.
-* [x] **Create the <code>search</code> API endpoint:**
-    * In `routes.go` (or wherever routes are defined), add: `router.Get("/api/v1/search", app.searchHandler)`.
-    * Create `/backend/internal/api/search_handler.go`.
-    * The `searchHandler` should:
-        1. Get the query: `q := r.URL.Query().Get("q")`. If empty, treat as "return all emails".
-        2. Get pagination params: Use `parsePaginationParams(r, 100)` (reuse from `threads_handler.go`).
-        3. Get user ID from context (reuse `getUserIDFromContext` pattern from other handlers).
-        4. Call `imapService.Search(ctx, userID, q, page, limit)`.
-        5. Return the same JSON format as `GET /api/v1/threads`: on {"threads": [...], "pagination": { "total_count": 123, "page": 1, "per_page": 100 } }
-        6. **Error handling:**
-           * Empty query (`q == ""`): Return all emails (paginated).
-           * Invalid query: Return `400 Bad Request` with an error message.
-           * IMAP errors: Return `500 Internal Server Error` with a generic message (log details server-side).
-           * No results: Return `200 OK` with empty `threads` array.
-
-##### **Frontend (Basic Search)**
-
-* [x] **Create the search results page:**
-    * Create a new page: `pages/Search.page.tsx`.
-    * Add the route in `App.tsx`: `<Route path="/search" element={<SearchPage />} />`.
-* [x] **Hook up the search bar:**
-    * In `Header.tsx`, make the search input a controlled component (use `useState`).
-    * On form submit (or `Enter` key), use `useNavigate` from `react-router-dom` to navigate: `navigate(`/search?q=${encodeURIComponent(query)}`)`.
-    * **Basic validation:** Check that the query is not empty (or allow empty to show all emails).
-* [x] **Fetch and display results:**
-    * In `Search.page.tsx`, use `useSearchParams` hook to get the `q` param from the URL.
-    * Use `TanStack Query`'s `useQuery` to fetch from the backend:
-
-      useQuery({
-      queryKey: ['search', q, page],
-      queryFn: () => fetchSearchResults(q, page, limit)
-      })
-      * **Re-use existing components:** The page should map over the results and render your existing `EmailListItem.tsx` component for each thread.
-    * **Pagination:** Re-use `EmailListPagination.tsx` component (from milestone 5/3).
-    * Handle loading and error states.
-
-##### **Testing (Phase 1)**
-
-* [x] **Backend Unit (Go):**
-    * **<code>search_handler</code>:**
-        * Test that `GET /api/v1/search?q=test` correctly calls `imapService.Search("test", ...)`.
-        * Test that empty query (`q=`) calls search with empty string.
-        * Test pagination params are passed correctly.
-        * Test error handling (400 for invalid, 500 for IMAP errors).
-    * **<code>imapService.Search</code>:**
-        * Mock the DB and IMAP client.
-        * Test that `UidSearch` is called with correct criteria.
-        * Test that we look up messages in DB by Message-ID.
-        * Test that threads are deduplicated correctly.
-        * Test pagination logic.
-        * Test empty results case.
-* [x] **Frontend Integration (RTL + <code>msw</code>):**
-    * **<code>Header.tsx</code>:**
-        * Mock `react-router`'s `useNavigate` hook.
-        * Simulate typing "hello" into the search input and pressing "Enter".
-        * Assert `navigate` was called with `/search?q=hello`.
-    * **<code>Search.page.tsx</code>:**
-        * Mock `useSearchParams` to return `q=hello`.
-        * Mock the `GET /api/v1/search?q=hello&page=1&limit=100` API.
-        * Assert the page calls the API and renders the list of `EmailListItem` components from the mock response.
-        * Test pagination navigation.
-        * Test empty results display.
-
-#### **Phase 2: Gmail-like Syntax Parsing**
-
-##### **Backend (Query Parser)**
-
-* [x] **Create search query parser:**
-    * In `/backend/internal/imap/search.go`, create: `func ParseSearchQuery(query string) (*imap.SearchCriteria, string, error)`.
-    * Returns: parsed `SearchCriteria`, extracted `folder` name (or empty string), and error.
-    * **Supported syntax:**
-        * `from:george` → `criteria.From = []string{"george"}`
-        * `to:alice` → `criteria.To = []string{"alice"}`
-        * `subject:meeting` → `criteria.Subject = []string{"meeting"}`
-        * `after:2025-01-01` → `criteria.Since = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)`
-        * `before:2025-12-31` → `criteria.Before = time.Date(2025, 12, 31, 23, 59, 59, 999999999, time.UTC)`
-        * `folder:Inbox` or `label:Inbox` → extract folder name, return it separately (don't set in criteria)
-        * Plain text (no prefix) → `criteria.Text = []string{text}`
-        * **Combinations:** `from:george after:2025-01-01 cabbage` → combine multiple criteria
-    * **Parsing rules:**
-        * Split query by spaces, but respect quoted strings: `from:"John Doe"` should keep "John Doe" together.
-        * Handle multiple filters: `from:george to:alice subject:meeting`.
-        * If both `folder:` and `label:` are present, `folder:` takes precedence.
-        * Date parsing: Support `YYYY-MM-DD` format. Return error for invalid dates.
-        * If no filters match, treat the entire query as plain text search.
-    * **Error handling:**
-        * Invalid date format → return error.
-        * Empty filter value (e.g., `from:`) → treat as invalid, return error.
-* [x] **Update <code>Search</code> function:**
-    * Modify `Search()` to call `ParseSearchQuery(query)` first.
-    * Use the returned `folder` to select the IMAP folder (or default to `"INBOX"`).
-    * Use the parsed `SearchCriteria` instead of `criteria.Text = []string{query}`.
-    * Handle parser errors by returning `400 Bad Request`.
-
-##### **Frontend (Query Validation)**
-
-* [x] **Add basic query validation:**
-    * In `Header.tsx` or a new utility file, create a function to validate search queries before submission.
-    * **Basic checks:**
-        * Empty filter values: `from:` → show warning, don't submit.
-        * Invalid date format: `after:2025-13-45` → show warning.
-        * (Optional) Syntax highlighting or autocomplete for filter names.
-    * **Note:** Frontend validation is for UX only. Backend must still validate fully.
-
-##### **Testing (Phase 2)**
-
-* [x] **Backend Unit (Go):**
-    * **<code>ParseSearchQuery</code>:**
-        * Test `"from:george"` → asserts `criteria.From = []string{"george"}`.
-        * Test `"from:george after:2025-01-01"` → asserts both fields are set.
-        * Test `"folder:Inbox from:george"` → asserts folder extracted and criteria set.
-        * Test `"cabbage"` (plain text) → asserts `criteria.Text = []string{"cabbage"}`.
-        * Test `"from: to:alice"` → asserts error (empty `from:` value).
-        * Test `"after:invalid-date"` → asserts error.
-        * Test quoted strings: `from:"John Doe"` → keeps name together.
-        * Test `label:` alias works same as `folder:`.
-    * **<code>imapService.Search</code> with parser:**
-        * Test that parsed criteria are passed to `UidSearch` correctly.
-        * Test that folder from parser is used for `Select()`.
-* [x] **Frontend Integration (RTL):**
-    * Test that invalid queries show validation warnings.
-    * Test that valid queries navigate correctly.
-
-#### **Implementation Notes**
-
-* **Threading:** When a search result matches message #33 in a 50-message thread, we return the entire thread. This is handled by looking up the message's `thread_id` in the DB, then fetching all messages for that thread.
-* **Database vs IMAP:** Always search IMAP directly (not the DB cache) for real-time results. The DB may be stale if the user made changes via another email client.
-* **Empty query:** An empty `q` parameter should return all emails (paginated), equivalent to browsing the folder.
-* **Folder support:** Phase 1 defaults to `INBOX`. Phase 2 adds `folder:` filter to search any folder. If no `folder:` specified, default to `INBOX`.
-* **Pagination:** Reuse the existing pagination implementation from milestone 5/3. Search results should be paginated just like folder views.
-* **Error handling:**
-    * `400 Bad Request` for invalid query syntax or malformed dates.
-    * `500 Internal Server Error` for IMAP connection/search errors (log details, return a generic message).
-    * `200 OK` with empty array for no results.
-* **Performance:** For large result sets, consider:
-    * Limiting max search results (e.g., 10,000 UIDs) to avoid memory issues.
-    * Batching UID fetches if needed.
-    * Caching parsed queries (optional optimization).
-
-#### **Future Enhancements (Not in this milestone)**
-
-* [ ] Search across all folders (not just one at a time).
-* [ ] `has:attachment` filter.
-* [ ] `is:read` / `is:unread` / `is:starred` filters.
-* [ ] Search result caching.
-* [ ] Hybrid DB/IMAP search for better performance.
 
 ### **3/5. 🧪 Test plan: Milestone 3 (end-to-end)**
 
@@ -742,8 +353,6 @@ This part just pre-fills the composer you just built.
 
 This **Playwright** plan tests the full send-and-undo loop.
 
-
-
 * [ ] **Test 1: Compose and Send (Full Loop)**
     * Log in.
     * Click "Compose."
@@ -875,44 +484,6 @@ This is a frontend-only task that expands on the hook you built in M2.
     * Simulate `keydown` events (`c`, `/`, `g`+`i`, `e`, `r`, etc.).
     * Mock all the store actions and mutations.
     * **Assert** that the *correct* mock function is called for each key press.
-
-### **5/3. 📄 Feature: Add pagination**
-
-This makes the app usable with large inboxes.
-
-#### **Backend**
-
-* [x] **Update <code>GET /api/v1/threads</code> handler:**
-    * It *must* read `page` and `limit` query params (e.g., `?page=2&limit=50`). Default to `page=1, limit=100`.
-    * Update your DB query for threads to use `LIMIT $1 OFFSET $2`.
-    * Run a *second* DB query: `SELECT COUNT(*) FROM ...` with the same `WHERE` clause (to get the total count).
-    * Change the API response to a new object: `{"threads": [...], "pagination": {"total_count": 1234, "page": 2, "per_page": 50}}`
-* [x] **Update <code>GET /api/v1/search</code> handler:**
-    * Apply the exact same `page` and `limit` logic.
-    * Return the same `{"threads": [...], "pagination": {...}}` object.
-
-#### **Frontend**
-
-* [x] **Create <code>EmailListPagination.tsx</code> component:**
-    * This component receives the `pagination` object as a prop.
-    * It calculates `totalPages = total_count / per_page`.
-    * It renders "Page [page] of [totalPages]" and "Next >" / "&lt; Prev" links.
-* [x] **Update <code>Inbox.page.tsx</code> and <code>Search.page.tsx</code>:**
-    * Read the `page` from `useSearchParams`.
-    * Pass the `page` to the `useQuery` hook to fetch the correct data.
-    * Get the `pagination` object from the API response.
-    * Render `&lt;EmailListPagination pagination={data.pagination} />` at the bottom.
-    * The "Next" link should use `Maps` to go to `/?folder=INBOX&page={page + 1}`.
-    * The "Prev" link should use `Maps` to go to `/?folder=INBOX&page={page - 1}`.
-
-#### **Testing**
-
-* [x] **Backend Unit:** Test the `GET /api/v1/threads` handler. Assert `?page=2&limit=50` results in `LIMIT 50 OFFSET 50` in the SQL query. Assert the `pagination` object in the JSON response is correct.
-* [x] **Frontend Integration:**
-    * Mock the API to return `{"threads": [...], "pagination": {"total_count": 300, "page": 1, "per_page": 100}}`.
-    * **Assert** the pagination component renders "Page 1 of 3".
-    * Mock `Maps`. Click the "Next" button.
-    * **Assert** `Maps` was called with the new URL (`?page=2`).
 
 ### **5/4. ⚡ Feature: Add real-time updates**
 
@@ -1178,3 +749,440 @@ Offline mode is notoriously hard to test. Use **Playwright** for this.
 ## Later
 
 * [ ] Write a doc for how to create a daily DB backup, e.g., via a `pg_dump` cron job.
+
+# Archive
+
+
+## Milestone 1
+
+**Goal:** Prove the core technology works. A simple Go CLI app. No UI.
+
+* [x] Set up a new Go module (`go mod init backend`).
+* [x] Add `github.com/emersion/go-imap` as a dependency.
+* [x] Create a `main.go` file.
+* [x] Implement logic to connect to the mailcow IMAP server (using `imap.DialTLS`).
+* [x] Implement logic to log in using a username and password (from env vars for now).
+* [x] Implement a function to run the `CAPABILITY` command and print the results (to verify `THREAD` support).
+* [x] Implement a function to `SELECT` the "Inbox".
+* [x] Implement a function to run a `THREAD` command (`THREAD=REFERENCES UTF-8 ALL`) and print the raw response.
+* [x] Implement a function to run a `SEARCH` command (e.g., `SEARCH FROM "test"`) and print the resulting UIDs.
+* [x] Implement a function to `FETCH` a single message (using a UID from the search) and print its body structure and headers.
+
+Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.md` for details on milestone 1.
+
+## Milestone 2
+
+### **2/1. 🏗️ Backend: Server foundation**
+
+* [x] **Create the main server:** In `/backend/cmd/server`, create a new `main.go`. This will be your *actual* server (unlike the `spike`).
+    * It should start a `net/http` server using `http.ListenAndServe`.
+    * It should use `http.ServeMux` (as specified in your spec) for routing.
+    * Add a simple `http.HandlerFunc` for `/` that responds with "V-Mail API is running".
+* [x] **Set up config loading:** In `/backend/internal/config`, create a `config.go`.
+    * Create a `struct` that holds all env vars (DB host, master key, etc.).
+    * Create a `NewConfig()` function that reads from the `.env` file (using `godotenv` for local dev) and `os.Getenv` (for production).
+    * Pass this `Config` struct to your server in `main.go`.
+* [x] **Set up database connection:** In `/backend/internal/db`, create a `db.go`.
+    * Create a `NewConnection()` function that takes the DB config and returns a `*pgxpool.Pool`.
+    * Add this `*pgxpool.Pool` to your server's dependencies.
+* [x] **Set up DB migrations:**
+    * Install `golang-migrate` (e.g., `brew install golang-migrate`).
+    * Create a `/backend/migrations` directory.
+    * Create a new migration file (e.g., `migrate create -ext sql -dir backend/migrations -seq init_schema`).
+    * Copy-paste the entire SQL schema from `SPEC.md` into the `.up.sql` file.
+    * Run the migration (`migrate -database "..." -path backend/migrations up`) to create your tables.
+
+### **2/2. 🛡️ Backend: Auth and onboarding**
+
+* [x] **Create Authelia middleware:** In `/backend/internal/api` (or `/internal/auth`), create a `middleware.go`.
+    * Create a `RequireAuth` middleware.
+    * This middleware should:
+        * Get the `Authorization: Bearer ...` token from the request header.
+        * (For now) Log the token. In a later step, you'll validate it.
+        * Pass the request to the next handler.
+* [x] **Create API: <code>auth/status</code> endpoint:**
+    * Add the `GET /api/v1/auth/status` route.
+    * Create its handler function. This function should:
+        * (For now) Assume auth is okay.
+        * Check if a row exists in `user_settings` for this user.
+        * Return `{"isAuthenticated": true, "isSetupComplete": [true/false]}`.
+* [x] **Create API: <code>settings</code> endpoints:**
+    * In `/backend/internal/db`, create `user_settings.go`. Add `GetUserSettings(userID string)` and `SaveUserSettings(settings UserSettings)` functions.
+    * Add the `GET /api/v1/settings` route and handler. It should call `GetUserSettings` and return the data (without passwords).
+    * Add the `POST /api/v1/settings` route and handler.
+        * It must read the JSON body.
+        * It must **encrypt** the `imap_password` and `smtp_password` fields (using your standard `crypto/aes` logic).
+        * It should call `SaveUserSettings` to save the data to the DB.
+
+### **2/3. 🎨 Frontend: Skeleton and settings page**
+
+* [x] **Set up the React project:**
+    * In the root `/frontend` folder, run `pnpm create vite . --template react-ts`.
+    * Install all your core dependencies:
+      ```bash
+      pnpm install react-router-dom @tanstack/react-query zustand dompurify
+      pnpm install -D tailwindcss postcss autoprefixer
+      ```
+    * Initialize Tailwind (`pnpm tailwindcss init -p`).
+* [x] **Create the basic layout:**
+    * In `/frontend/src`, create a `components/Layout.tsx`.
+    * `Layout.tsx` should have a static `Sidebar.tsx` (left), `Header.tsx` (top, for search), and a main content area that renders `{children}`.
+* [x] **Set up routing:**
+    * In `main.tsx`, wrap your app in `<BrowserRouter>`.
+    * Create `App.tsx` to define your routes:
+        * `/` (goes to `Inbox.page.tsx`)
+        * `/thread/:threadId` (goes to `Thread.page.tsx`)
+        * `/settings` (goes to `Settings.page.tsx`)
+* [x] **Create Auth/Onboarding flow:**
+    * Create an "auth" store in `store/auth.store.ts` (using Zustand). It should hold `isSetupComplete` (boolean, default `false`).
+    * Create a `components/AuthWrapper.tsx` component.
+        * This component uses `useEffect` on mount to `fetch` your `GET /api/v1/auth/status` endpoint.
+        * When it gets the response, it sets the `isSetupComplete` state in your Zustand store.
+        * It should render `{children}` *only if* `isSetupComplete` is true.
+        * If `isSetupComplete` is `false`, it should render `<Navigate to="/settings" />` (from `react-router-dom`).
+    * Wrap your main `<Layout />` in `AuthWrapper.tsx`.
+* [x] **Build Settings Page:**
+    * Create `pages/Settings.page.tsx`.
+    * This page should be a simple form with fields for all the `user_settings` (IMAP server, username, password, folder names, etc.).
+    * Use `TanStack Query` to fetch data from `GET /api/v1/settings` to populate the form.
+    * Use `TanStack Query`'s `useMutation` hook to `POST` the form data to `POST /api/v1/settings` on submit.
+
+### **2/4. 📨 Backend: Read-only email API**
+
+* [x] **Refactor <code>spike</code> code:** Move your `connectToIMAP`, `login`, `runThreadCommand`, etc. from the `spike` into reusable functions in `/backend/internal/imap`.
+    * Create an `imap/client.go` that manages a **connection pool** (as discussed). This is complex, so start simple: just a `map[string]*client.Client` to hold one connection per user.
+* [x] **Create API: <code>folders</code> endpoint:**
+    * Add the `GET /api/v1/folders` route and handler.
+    * The handler should:
+        1. Get the user's IMAP credentials from the DB.
+        2. Get an IMAP connection from your pool.
+        3. Run the IMAP `LIST` command to get all folders.
+        4. Return them as a JSON array: `[{"name": "INBOX"}, {"name": "Sent"}]`.
+* [x] **Create API: <code>threads</code> endpoint:**
+    * Add the `GET /api/v1/threads` route (it needs a query param, e.g., `?folder=INBOX`).
+    * This is the most complex handler:
+        1. Get user credentials.
+        2. Check the DB cache (as discussed, based on a TTL).
+        3. If cache is stale: Get IMAP connection, run `THREAD` (like in your spike), then `FETCH` headers for all messages in those threads.
+        4. Parse the messages (using `enmime` for headers).
+        5. Save the data to your `threads` and `messages` tables.
+        6. Return the list of threads from your **database**.
+* [x] **Create API: <code>thread/:thread_id</code> endpoint:**
+    * Add the `GET /api/v1/thread/:thread_id` route.
+    * This handler should:
+        1. Query your *database* for the thread (using `stable_thread_id`).
+        2. Fetch all messages for that thread from your `messages` table.
+        3. (If messages are missing bodies) Fetch the full message bodies from IMAP.
+        4. Parse with `enmime`, saving `unsafe_body_html` and `attachments` to the DB.
+        5. Return the full thread with all messages and attachments as JSON.
+
+### **2/5. 🖥️ Frontend: Read-only email UI**
+
+* [x] **Render folders:**
+    * In `Sidebar.tsx`, use `TanStack Query` (`useQuery`) to fetch from `GET /api/v1/folders`.
+    * Render the list of folders as links (`<Link to="/?folder=INBOX">Inbox</Link>`).
+* [x] **Render thread list:**
+    * Create `pages/Inbox.page.tsx`.
+    * It should read the `?folder=` query param from the URL (using `react-router`'s `useSearchParams` hook).
+    * Use `useQuery` to fetch from `GET /api/v1/threads?folder=...`.
+    * Create an `EmailListItem.tsx` component.
+    * Render the list of threads using this component, showing sender, subject, date, etc.
+* [x] **Render thread view:**
+    * Create `pages/Thread.page.tsx`.
+    * It should read the `:threadId` from the URL (using `useParams`).
+    * Use `useQuery` to fetch from `GET /api/v1/thread/:threadId`.
+    * Create a `Message.tsx` component.
+    * Render each message in the thread.
+    * **Crucially:** In `Message.tsx`, use `DOMPurify.sanitize()` on the `unsafe_body_html` before rendering it with `dangerouslySetInnerHTML`.
+    * Render the list of attachments.
+* [x] **Implement basic keyboard navigation:**
+    * Create a `hooks/useKeyboardShortcuts.ts`.
+    * This hook should `useEffect` to add a `keydown` event listener.
+    * (For now) Just implement `j` (next item) and `k` (previous item) to move a "selected" index, which you'll store in a new Zustand store (`ui.store.ts`).
+    * Implement `o` (open) or `Enter` to navigate to the selected thread (using `react-router`'s `useNavigate` hook).
+    * Implement `u` (up) to navigate from a thread view back to the inbox (`Maps('/')`).
+
+#### **Testing: Unit Tests (Jest + React Testing Library)**
+
+* [x] **<code>Message.tsx</code> (Security):**
+    * Test that the component *always* calls `DOMPurify.sanitize()` with the `unsafe_body_html` prop.
+    * Test that the output of `DOMPurify.sanitize` is what's actually rendered via `dangerouslySetInnerHTML`.
+* [x] **<code>hooks/useKeyboardShortcuts.ts</code>:**
+    * Mock `window.addEventListener` and `window.removeEventListener` to test that they are called on mount/unmount.
+    * Test that pressing "j" calls the function to increment the selected index.
+    * Test that pressing "k" calls the function to decrement the selected index.
+    * Test that pressing "o" or "Enter" calls the `react-router` `Maps` function.
+    * Test that pressing "u" calls the `Maps` function to go back.
+
+#### **Testing: Integration Tests (React Testing Library + <code>msw</code>)**
+
+* [x] **Mock API:** Set up `msw` (Mock Service Worker) to intercept and mock all API calls (`GET /api/v1/folders`, `GET /api/v1/threads`, `GET /api/v1/thread/:threadId`).
+* [x] **<code>Sidebar.tsx</code>:**
+    * Test that it renders a "Loading..." state.
+    * Test that it calls `GET /api/v1/folders`.
+    * Test that it renders a list of links (e.g., "Inbox", "Sent") based on the mock API response.
+    * Test that clicking the "Sent" link navigates the user to `/?folder=Sent`.
+* [x] **<code>Inbox.page.tsx</code> (Thread List):**
+    * Test that it renders a "Loading..." state.
+    * Test that it reads the `?folder=INBOX` URL parameter and calls the correct API: `GET /api/v1/threads?folder=INBOX`.
+    * Test that it renders the list of `EmailListItem` components based on the mock response.
+    * Test that clicking an `EmailListItem` navigates the user to the correct thread (e.g., `/thread/thread-id-123`).
+* [x] **<code>Thread.page.tsx</code> (Thread View):**
+    * Test that it renders a "Loading..." state.
+    * Test that it reads the `:threadId` URL parameter and calls the correct API: `GET /api/v1/thread/thread-id-123`.
+    * Test that it correctly renders all messages, sender names, subjects, and attachment filenames from the mock response.
+
+### **2/6. 🧪 Test Plan: Milestone 2 (End-to-End)**
+
+This plan uses **Playwright** to test the entire read-only flow, assuming the backend and frontend are running.
+
+* [x] **Test 1: New User Onboarding Flow**
+    * Mock your Authelia login to succeed for a *new user*.
+    * Start at the app's root URL.
+    * **Assert** the app redirects to the `/settings` page.
+    * Fill in all the form fields (IMAP server, user, pass, etc.).
+    * Click "Save".
+    * **Assert** the app redirects to the Inbox (`/`).
+    * (Optional DB check): `SELECT` from `user_settings` and `users` to verify the user was created and the passwords are *encrypted*.
+* [x] **Test 2: Existing User Read-Only Flow**
+    * Log in as an *existing* (already set-up) user.
+    * **Assert** the app lands on the Inbox (`/`).
+    * **Assert** the sidebar populates with folders (e.g., "Inbox", "Sent").
+    * **Assert** the main view populates with a list of email threads.
+    * Note the subject of the first email, then click it.
+    * **Assert** the URL changes to `/thread/some-id`.
+    * **Assert** the full email body and any attachment names are visible on the screen.
+* [x] **Test 3: Navigation**
+    * From the thread view, press the "u" key.
+    * **Assert** the app navigates back to the Inbox (`/`).
+    * Press the "j" key.
+    * **Assert** the visual focus/selection moves to the *second* email in the list.
+    * Press the "o" key.
+    * **Assert** the app navigates to the *second* thread's page.
+
+### **Front end cleanup**
+
+* [x] Do the stuff from frontend/README.md and get rid of that file.
+
+## Milestone 3
+
+### **3/4. 🔎 Feature: Search**
+
+This is a read-only feature, so it doesn't use the action queue. We'll implement it in two phases:
+- **Phase 1:** Basic text search (plain text queries)
+- **Phase 2:** Gmail-like syntax parsing (`from:`, `to:`, `subject:`, etc.)
+
+#### **Phase 1: Basic Text Search**
+
+##### **Backend (Basic Search)**
+
+* [x] **Create the "Search" IMAP logic:**
+    * Create a new file `/backend/internal/imap/search.go`.
+    * Create: `func (s *Service) Search(ctx context.Context, userID string, query string, page, limit int) ([]*models.Thread, int, error)`.
+    * This function needs to:
+        1. Get user settings and IMAP connection using `s.getClientAndSelectFolder()`.
+        2. **Folder selection:** If the query contains `folder:` (parse it first), use that folder. Otherwise, default to `"INBOX"`.
+        3. Build IMAP criteria: `criteria := imap.NewSearchCriteria()` -> `criteria.Text = []string{query}` (for Phase 1, treat the entire query as plain text).
+        4. Run `uids, err := c.UidSearch(criteria)`.
+        5. If no UIDs are found, return an empty slice and count 0.
+        6. **Threading logic:**
+            * Fetch headers for matching UIDs using `FetchMessageHeaders(client, uids)`.
+            * For each message:
+                * Extract `Message-ID` from `Envelope.MessageId`.
+                * Look up the message in DB: `db.GetMessageByMessageID(ctx, pool, userID, messageID)`.
+                * If found, get its `thread_id`, then get the thread: `db.GetThreadByID(ctx, pool, threadID)`.
+                * If not found in DB, this is a new message — we'll need to create/sync it. For now, skip it (or trigger a sync — see note below).
+            * Collect all unique threads (deduplicate by `stable_thread_id`).
+            * **Note:** Messages not in DB should ideally trigger a sync, but for MVP we can skip them or do a lightweight sync. Consider calling `s.SyncThreadsForFolder()` for the search folder if many messages are missing.
+        7. **Pagination:** Apply pagination to the deduplicated thread list (sort by most recent message `sent_at`, then apply `LIMIT` and `OFFSET`).
+        8. Get the total count of unique threads (before pagination).
+        9. Return threads and total count.
+* [x] **Create the <code>search</code> API endpoint:**
+    * In `routes.go` (or wherever routes are defined), add: `router.Get("/api/v1/search", app.searchHandler)`.
+    * Create `/backend/internal/api/search_handler.go`.
+    * The `searchHandler` should:
+        1. Get the query: `q := r.URL.Query().Get("q")`. If empty, treat as "return all emails".
+        2. Get pagination params: Use `parsePaginationParams(r, 100)` (reuse from `threads_handler.go`).
+        3. Get user ID from context (reuse `getUserIDFromContext` pattern from other handlers).
+        4. Call `imapService.Search(ctx, userID, q, page, limit)`.
+        5. Return the same JSON format as `GET /api/v1/threads`: on {"threads": [...], "pagination": { "total_count": 123, "page": 1, "per_page": 100 } }
+        6. **Error handling:**
+            * Empty query (`q == ""`): Return all emails (paginated).
+            * Invalid query: Return `400 Bad Request` with an error message.
+            * IMAP errors: Return `500 Internal Server Error` with a generic message (log details server-side).
+            * No results: Return `200 OK` with empty `threads` array.
+
+##### **Frontend (Basic Search)**
+
+* [x] **Create the search results page:**
+    * Create a new page: `pages/Search.page.tsx`.
+    * Add the route in `App.tsx`: `<Route path="/search" element={<SearchPage />} />`.
+* [x] **Hook up the search bar:**
+    * In `Header.tsx`, make the search input a controlled component (use `useState`).
+    * On form submit (or `Enter` key), use `useNavigate` from `react-router-dom` to navigate: `navigate(`/search?q=${encodeURIComponent(query)}`)`.
+    * **Basic validation:** Check that the query is not empty (or allow empty to show all emails).
+* [x] **Fetch and display results:**
+    * In `Search.page.tsx`, use `useSearchParams` hook to get the `q` param from the URL.
+    * Use `TanStack Query`'s `useQuery` to fetch from the backend:
+
+      useQuery({
+      queryKey: ['search', q, page],
+      queryFn: () => fetchSearchResults(q, page, limit)
+      })
+        * **Re-use existing components:** The page should map over the results and render your existing `EmailListItem.tsx` component for each thread.
+    * **Pagination:** Re-use `EmailListPagination.tsx` component (from milestone 5/3).
+    * Handle loading and error states.
+
+##### **Testing (Phase 1)**
+
+* [x] **Backend Unit (Go):**
+    * **<code>search_handler</code>:**
+        * Test that `GET /api/v1/search?q=test` correctly calls `imapService.Search("test", ...)`.
+        * Test that empty query (`q=`) calls search with empty string.
+        * Test pagination params are passed correctly.
+        * Test error handling (400 for invalid, 500 for IMAP errors).
+    * **<code>imapService.Search</code>:**
+        * Mock the DB and IMAP client.
+        * Test that `UidSearch` is called with correct criteria.
+        * Test that we look up messages in DB by Message-ID.
+        * Test that threads are deduplicated correctly.
+        * Test pagination logic.
+        * Test empty results case.
+* [x] **Frontend Integration (RTL + <code>msw</code>):**
+    * **<code>Header.tsx</code>:**
+        * Mock `react-router`'s `useNavigate` hook.
+        * Simulate typing "hello" into the search input and pressing "Enter".
+        * Assert `navigate` was called with `/search?q=hello`.
+    * **<code>Search.page.tsx</code>:**
+        * Mock `useSearchParams` to return `q=hello`.
+        * Mock the `GET /api/v1/search?q=hello&page=1&limit=100` API.
+        * Assert the page calls the API and renders the list of `EmailListItem` components from the mock response.
+        * Test pagination navigation.
+        * Test empty results display.
+
+#### **Phase 2: Gmail-like Syntax Parsing**
+
+##### **Backend (Query Parser)**
+
+* [x] **Create search query parser:**
+    * In `/backend/internal/imap/search.go`, create: `func ParseSearchQuery(query string) (*imap.SearchCriteria, string, error)`.
+    * Returns: parsed `SearchCriteria`, extracted `folder` name (or empty string), and error.
+    * **Supported syntax:**
+        * `from:george` → `criteria.From = []string{"george"}`
+        * `to:alice` → `criteria.To = []string{"alice"}`
+        * `subject:meeting` → `criteria.Subject = []string{"meeting"}`
+        * `after:2025-01-01` → `criteria.Since = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)`
+        * `before:2025-12-31` → `criteria.Before = time.Date(2025, 12, 31, 23, 59, 59, 999999999, time.UTC)`
+        * `folder:Inbox` or `label:Inbox` → extract folder name, return it separately (don't set in criteria)
+        * Plain text (no prefix) → `criteria.Text = []string{text}`
+        * **Combinations:** `from:george after:2025-01-01 cabbage` → combine multiple criteria
+    * **Parsing rules:**
+        * Split query by spaces, but respect quoted strings: `from:"John Doe"` should keep "John Doe" together.
+        * Handle multiple filters: `from:george to:alice subject:meeting`.
+        * If both `folder:` and `label:` are present, `folder:` takes precedence.
+        * Date parsing: Support `YYYY-MM-DD` format. Return error for invalid dates.
+        * If no filters match, treat the entire query as plain text search.
+    * **Error handling:**
+        * Invalid date format → return error.
+        * Empty filter value (e.g., `from:`) → treat as invalid, return error.
+* [x] **Update <code>Search</code> function:**
+    * Modify `Search()` to call `ParseSearchQuery(query)` first.
+    * Use the returned `folder` to select the IMAP folder (or default to `"INBOX"`).
+    * Use the parsed `SearchCriteria` instead of `criteria.Text = []string{query}`.
+    * Handle parser errors by returning `400 Bad Request`.
+
+##### **Frontend (Query Validation)**
+
+* [x] **Add basic query validation:**
+    * In `Header.tsx` or a new utility file, create a function to validate search queries before submission.
+    * **Basic checks:**
+        * Empty filter values: `from:` → show warning, don't submit.
+        * Invalid date format: `after:2025-13-45` → show warning.
+        * (Optional) Syntax highlighting or autocomplete for filter names.
+    * **Note:** Frontend validation is for UX only. Backend must still validate fully.
+
+##### **Testing (Phase 2)**
+
+* [x] **Backend Unit (Go):**
+    * **<code>ParseSearchQuery</code>:**
+        * Test `"from:george"` → asserts `criteria.From = []string{"george"}`.
+        * Test `"from:george after:2025-01-01"` → asserts both fields are set.
+        * Test `"folder:Inbox from:george"` → asserts folder extracted and criteria set.
+        * Test `"cabbage"` (plain text) → asserts `criteria.Text = []string{"cabbage"}`.
+        * Test `"from: to:alice"` → asserts error (empty `from:` value).
+        * Test `"after:invalid-date"` → asserts error.
+        * Test quoted strings: `from:"John Doe"` → keeps name together.
+        * Test `label:` alias works same as `folder:`.
+    * **<code>imapService.Search</code> with parser:**
+        * Test that parsed criteria are passed to `UidSearch` correctly.
+        * Test that folder from parser is used for `Select()`.
+* [x] **Frontend Integration (RTL):**
+    * Test that invalid queries show validation warnings.
+    * Test that valid queries navigate correctly.
+
+#### **Implementation Notes**
+
+* **Threading:** When a search result matches message #33 in a 50-message thread, we return the entire thread. This is handled by looking up the message's `thread_id` in the DB, then fetching all messages for that thread.
+* **Database vs IMAP:** Always search IMAP directly (not the DB cache) for real-time results. The DB may be stale if the user made changes via another email client.
+* **Empty query:** An empty `q` parameter should return all emails (paginated), equivalent to browsing the folder.
+* **Folder support:** Phase 1 defaults to `INBOX`. Phase 2 adds `folder:` filter to search any folder. If no `folder:` specified, default to `INBOX`.
+* **Pagination:** Reuse the existing pagination implementation from milestone 5/3. Search results should be paginated just like folder views.
+* **Error handling:**
+    * `400 Bad Request` for invalid query syntax or malformed dates.
+    * `500 Internal Server Error` for IMAP connection/search errors (log details, return a generic message).
+    * `200 OK` with empty array for no results.
+* **Performance:** For large result sets, consider:
+    * Limiting max search results (e.g., 10,000 UIDs) to avoid memory issues.
+    * Batching UID fetches if needed.
+    * Caching parsed queries (optional optimization).
+
+#### **Future Enhancements (Not in this milestone)**
+
+* [ ] Search across all folders (not just one at a time).
+* [ ] `has:attachment` filter.
+* [ ] `is:read` / `is:unread` / `is:starred` filters.
+* [ ] Search result caching.
+* [ ] Hybrid DB/IMAP search for better performance.
+
+
+
+## Milestone 5
+
+### **5/3. 📄 Feature: Add pagination**
+
+This makes the app usable with large inboxes.
+
+#### **Backend**
+
+* [x] **Update <code>GET /api/v1/threads</code> handler:**
+    * It *must* read `page` and `limit` query params (e.g., `?page=2&limit=50`). Default to `page=1, limit=100`.
+    * Update your DB query for threads to use `LIMIT $1 OFFSET $2`.
+    * Run a *second* DB query: `SELECT COUNT(*) FROM ...` with the same `WHERE` clause (to get the total count).
+    * Change the API response to a new object: `{"threads": [...], "pagination": {"total_count": 1234, "page": 2, "per_page": 50}}`
+* [x] **Update <code>GET /api/v1/search</code> handler:**
+    * Apply the exact same `page` and `limit` logic.
+    * Return the same `{"threads": [...], "pagination": {...}}` object.
+
+#### **Frontend**
+
+* [x] **Create <code>EmailListPagination.tsx</code> component:**
+    * This component receives the `pagination` object as a prop.
+    * It calculates `totalPages = total_count / per_page`.
+    * It renders "Page [page] of [totalPages]" and "Next >" / "&lt; Prev" links.
+* [x] **Update <code>Inbox.page.tsx</code> and <code>Search.page.tsx</code>:**
+    * Read the `page` from `useSearchParams`.
+    * Pass the `page` to the `useQuery` hook to fetch the correct data.
+    * Get the `pagination` object from the API response.
+    * Render `&lt;EmailListPagination pagination={data.pagination} />` at the bottom.
+    * The "Next" link should use `Maps` to go to `/?folder=INBOX&page={page + 1}`.
+    * The "Prev" link should use `Maps` to go to `/?folder=INBOX&page={page - 1}`.
+
+#### **Testing**
+
+* [x] **Backend Unit:** Test the `GET /api/v1/threads` handler. Assert `?page=2&limit=50` results in `LIMIT 50 OFFSET 50` in the SQL query. Assert the `pagination` object in the JSON response is correct.
+* [x] **Frontend Integration:**
+    * Mock the API to return `{"threads": [...], "pagination": {"total_count": 300, "page": 1, "per_page": 100}}`.
+    * **Assert** the pagination component renders "Page 1 of 3".
+    * Mock `Maps`. Click the "Next" button.
+    * **Assert** `Maps` was called with the new URL (`?page=2`).
+
