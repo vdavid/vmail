@@ -58,7 +58,7 @@ func GetUserEmailFromContext(ctx context.Context) (string, bool) {
 // it extracts the email from the token (e.g., "email:user@example.com" -> "user@example.com").
 // Otherwise, it returns "test@example.com" as the default test user.
 func ValidateToken(token string) (string, error) {
-	if token == "" {
+	if strings.TrimSpace(token) == "" || strings.TrimSpace(token) == "email:" {
 		return "", fmt.Errorf("token is empty")
 	}
 
