@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"log"
@@ -57,11 +58,18 @@ func (h *SettingsHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 		SMTPPasswordSet:          len(settings.EncryptedSMTPPassword) > 0,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	// Encode to buffer first to prevent partial writes
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		log.Printf("SettingsHandler: Failed to encode response: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
+	}
+
+	// Only write headers and body if encoding succeeded
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		log.Printf("SettingsHandler: Failed to write response: %v", err)
 	}
 }
 
@@ -87,7 +95,8 @@ func (h *SettingsHandler) PostSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get existing settings to preserve passwords if not provided
+	// Get existing settings to preserve passwords if not provided in the request.
+	// This allows users to update other settings without re-entering passwords.
 	existingSettings, err := db.GetUserSettings(ctx, h.pool, userID)
 	var encryptedIMAPPassword []byte
 	var encryptedSMTPPassword []byte
@@ -98,7 +107,8 @@ func (h *SettingsHandler) PostSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Handle IMAP password: use existing if not provided, encrypt new one if provided
+	// Handle IMAP password: use existing if not provided, encrypt new one if provided.
+	// For initial setup (no existing settings), password is required.
 	if req.IMAPPassword == "" {
 		if existingSettings != nil {
 			encryptedIMAPPassword = existingSettings.EncryptedIMAPPassword
@@ -117,7 +127,8 @@ func (h *SettingsHandler) PostSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Handle SMTP password: use existing if not provided, encrypt new one if provided
+	// Handle SMTP password: use existing if not provided, encrypt new one if provided.
+	// For initial setup (no existing settings), password is required.
 	if req.SMTPPassword == "" {
 		if existingSettings != nil {
 			encryptedSMTPPassword = existingSettings.EncryptedSMTPPassword
@@ -154,14 +165,29 @@ func (h *SettingsHandler) PostSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	_, err = w.Write([]byte(`{"success": true}`))
-	if err != nil {
-		log.Printf("SettingsHandler: Failed to write response: %v", err)
+	// Encode success response to buffer first to prevent partial writes
+	successResponse := struct {
+		Success bool `json:"success"`
+	}{Success: true}
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(successResponse); err != nil {
+		log.Printf("SettingsHandler: Failed to encode response: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
+	}
+
+	// Only write headers and body if encoding succeeded
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		log.Printf("SettingsHandler: Failed to write response: %v", err)
 	}
 }
 
+// validateSettingsRequest validates the user settings request, ensuring all required
+// fields are present. Note that passwords are optional on update (they can be empty
+// to preserve existing passwords), but are required for initial setup.
 func (h *SettingsHandler) validateSettingsRequest(req *models.UserSettingsRequest) error {
 	if req.IMAPServerHostname == "" {
 		return errors.New("IMAP server hostname is required")
