@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 type fileStats struct {
@@ -38,12 +39,22 @@ func main() {
 	// Group commits by date and get the latest commit per day
 	dailyCommits := groupCommitsByDate(commits)
 
-	// Get dates sorted
-	dates := make([]string, 0, len(dailyCommits))
-	for date := range dailyCommits {
-		dates = append(dates, date)
+	// Get all dates from first commit to last commit
+	if len(dailyCommits) == 0 {
+		return
 	}
-	sort.Strings(dates)
+
+	// Find first and last dates
+	allDates := make([]string, 0, len(dailyCommits))
+	for date := range dailyCommits {
+		allDates = append(allDates, date)
+	}
+	sort.Strings(allDates)
+	firstDate := allDates[0]
+	lastDate := allDates[len(allDates)-1]
+
+	// Generate all consecutive dates
+	allConsecutiveDates := generateConsecutiveDates(firstDate, lastDate)
 
 	// Output CSV header
 	writer := csv.NewWriter(os.Stdout)
@@ -53,20 +64,67 @@ func main() {
 		return
 	}
 
-	// Process each date
-	for _, date := range dates {
-		commit := dailyCommits[date]
-		stats, err := countLinesForCommit(commit.hash, commit.messages)
-		if err != nil {
-			_, err := fmt.Fprintf(os.Stderr, "Error counting lines for commit %s: %v\n", commit.hash, err)
-			if err != nil {
-				return
-			}
-			continue
-		}
+	// Track previous stats for filling gaps
+	var prevStats *fileStats
 
-		// Format comments (first line of each commit message, joined with semicolon)
-		comments := strings.Join(stats.comments, "; ")
+	// Process each date
+	for _, date := range allConsecutiveDates {
+		commit, hasCommit := dailyCommits[date]
+		var stats *fileStats
+		var comments string
+
+		if hasCommit {
+			// Count lines for this commit
+			var err error
+			stats, err = countLinesForCommit(commit.hash, commit.messages)
+			if err != nil {
+				_, err := fmt.Fprintf(os.Stderr, "Error counting lines for commit %s: %v\n", commit.hash, err)
+				if err != nil {
+					return
+				}
+				// Use previous stats if counting fails
+				if prevStats != nil {
+					// Create a copy of previous stats
+					stats = &fileStats{
+						total:   prevStats.total,
+						ts:      prevStats.ts,
+						goTotal: prevStats.goTotal,
+						goProd:  prevStats.goProd,
+						goTest:  prevStats.goTest,
+						tsProd:  prevStats.tsProd,
+						tsTest:  prevStats.tsTest,
+						docs:    prevStats.docs,
+						other:   prevStats.other,
+					}
+					comments = "-"
+				} else {
+					continue
+				}
+			} else {
+				// Format comments (first line of each commit message, joined with semicolon)
+				comments = strings.Join(stats.comments, "; ")
+				prevStats = stats
+			}
+		} else {
+			// No commit on this day - use previous day's stats
+			if prevStats == nil {
+				// No previous stats available, skip this day
+				continue
+			}
+			// Create a copy of previous stats
+			stats = &fileStats{
+				total:   prevStats.total,
+				ts:      prevStats.ts,
+				goTotal: prevStats.goTotal,
+				goProd:  prevStats.goProd,
+				goTest:  prevStats.goTest,
+				tsProd:  prevStats.tsProd,
+				tsTest:  prevStats.tsTest,
+				docs:    prevStats.docs,
+				other:   prevStats.other,
+			}
+			comments = "-"
+		}
 
 		// Write CSV row
 		err = writer.Write([]string{
@@ -220,6 +278,26 @@ func getFilesAtCommit(commitHash string) ([]string, error) {
 	}
 
 	return files, scanner.Err()
+}
+
+// generateConsecutiveDates generates all dates from firstDate to lastDate (inclusive)
+func generateConsecutiveDates(firstDate, lastDate string) []string {
+	start, err := time.Parse("2006-01-02", firstDate)
+	if err != nil {
+		return []string{firstDate}
+	}
+	end, err := time.Parse("2006-01-02", lastDate)
+	if err != nil {
+		return []string{lastDate}
+	}
+
+	var dates []string
+	current := start
+	for !current.After(end) {
+		dates = append(dates, current.Format("2006-01-02"))
+		current = current.AddDate(0, 0, 1)
+	}
+	return dates
 }
 
 // isGoTestPath checks if a file path should be categorized as Go test code
