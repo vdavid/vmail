@@ -1,14 +1,12 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/vdavid/vmail/backend/internal/auth"
 	"github.com/vdavid/vmail/backend/internal/crypto"
 	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/models"
@@ -32,7 +30,7 @@ func NewSettingsHandler(pool *pgxpool.Pool, encryptor *crypto.Encryptor) *Settin
 func (h *SettingsHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	userID, ok := h.getUserIDFromContext(ctx, w)
+	userID, ok := GetUserIDFromContext(ctx, w, h.pool)
 	if !ok {
 		return
 	}
@@ -71,7 +69,7 @@ func (h *SettingsHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 func (h *SettingsHandler) PostSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	userID, ok := h.getUserIDFromContext(ctx, w)
+	userID, ok := GetUserIDFromContext(ctx, w, h.pool)
 	if !ok {
 		return
 	}
@@ -180,24 +178,4 @@ func (h *SettingsHandler) validateSettingsRequest(req *models.UserSettingsReques
 	}
 	// Password validation removed - passwords are optional on update
 	return nil
-}
-
-// getUserIDFromContext extracts the user's email from context, resolves/creates the DB user,
-// and writes appropriate HTTP errors when it fails. Returns (userID, true) on success.
-func (h *SettingsHandler) getUserIDFromContext(ctx context.Context, w http.ResponseWriter) (string, bool) {
-	email, ok := auth.GetUserEmailFromContext(ctx)
-	if !ok {
-		log.Println("SettingsHandler: No user email in context")
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return "", false
-	}
-
-	userID, err := db.GetOrCreateUser(ctx, h.pool, email)
-	if err != nil {
-		log.Printf("SettingsHandler: Failed to get/create user: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return "", false
-	}
-
-	return userID, true
 }

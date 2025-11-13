@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/vdavid/vmail/backend/internal/auth"
 	"github.com/vdavid/vmail/backend/internal/crypto"
 	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/imap"
@@ -37,7 +36,7 @@ func NewFoldersHandler(pool *pgxpool.Pool, encryptor *crypto.Encryptor, imapPool
 func (h *FoldersHandler) GetFolders(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	userID, ok := h.getUserIDFromContext(ctx, w)
+	userID, ok := GetUserIDFromContext(ctx, w, h.pool)
 	if !ok {
 		return
 	}
@@ -172,24 +171,6 @@ func (h *FoldersHandler) writeFoldersResponse(w http.ResponseWriter, folders []*
 		log.Printf("FoldersHandler: Failed to encode response: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
-}
-
-func (h *FoldersHandler) getUserIDFromContext(ctx context.Context, w http.ResponseWriter) (string, bool) {
-	email, ok := auth.GetUserEmailFromContext(ctx)
-	if !ok {
-		log.Println("FoldersHandler: No user email in context")
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return "", false
-	}
-
-	userID, err := db.GetOrCreateUser(ctx, h.pool, email)
-	if err != nil {
-		log.Printf("FoldersHandler: Failed to get/create user: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return "", false
-	}
-
-	return userID, true
 }
 
 // sortFoldersByRole sorts folders by role priority, then alphabetically for "other" folders.
