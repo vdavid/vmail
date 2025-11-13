@@ -23,14 +23,11 @@ It's a bit different from the ["Running"](README.md#running) section of the main
 This setup lets you run the Go backend and the React frontend locally for debugging.
 
 1. Run a Postgres v14+ instance and make it available on some port, either on your localhost or elsewhere.
+    - Edit your `.env` file: Change `VMAIL_DB_HOST` and any others needed to point to your Postgres instance.
 2. Also set up [Authelia](https://www.authelia.com), locally or remotely.
-3. Run the backend locally by 
-    - Use `docker compose up -d db`
-    - Edit your `.env` file: Change `VMAIL_DB_HOST` to point to `localhost`.
-3. Set up Authelia locally
     - Follow [Authelia's docs](https://www.authelia.com/docs/getting-started/installation/) to run it locally.
     - Set your `.env` file so that it points to the local Authelia instance.
-      TODO Complete this
+3. TODO Continue...
 
 ### Tooling
 
@@ -40,3 +37,20 @@ The project includes several utility scripts in the `scripts/` directory. See [`
 
 - **`check.sh`** - Runs all formatting, linting, and tests. Use `./scripts/check.sh` before committing new code and ensure all checks pass locally.
 - **`roadmap-burndown.go`** - Analyzes git history of `ROADMAP.md` to generate a CSV burndown chart showing task completion over time.
+
+
+### Dev process
+
+Always follow this process when developing in this project:
+
+1. Before developing a feature, make sure to do the planning and know exactly what you want to achieve.
+2. Do the changes, in small iterations. Adhere to the [style guide](docs/style-guide.md)!
+3. Use `./scripts/check.sh` to check that everything is still working.
+    - Or use a subset, for example, if you only touch the front end.
+    - Even fix gocyclo's cyclomatic complexity warnings! I know it's a pain, but it's helpful to keep Go funcs simple.
+4. Make sure to add tests for the new code. Think about unit tests, integration tests, and end-to-end tests.
+5. Update any related docs.
+6. Before you call it done, check out the diff of your changes (use `git diff`) and make sure everything is actually
+  needed. Revert unneeded changes.
+7. Rerun `./scripts/check.sh` to make sure everything still works.
+8. Suggest a commit message, in the format seen in the style guide. 

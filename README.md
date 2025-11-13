@@ -28,7 +28,7 @@ confusion.
 - Edit the `.env` file and follow the instructions inside.
 - Make sure you have **Docker** and **Docker Compose** installed.
 - Run `docker compose up -d --build` to start the services.
-- Open `http://localhost:8080` in the browser.
+- Open `http://localhost:11764` in the browser (or configure port mapping if using Docker).
 - Log in with your Authelia credentials.
 
 ## Non-goals

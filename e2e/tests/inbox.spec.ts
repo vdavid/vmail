@@ -258,5 +258,61 @@ test.describe('Existing User Read-Only Flow', () => {
             expect(bodyContent?.trim().length).toBeGreaterThan(0)
         }
     })
+
+    test('navigating directly to thread URL loads React app, not JSON', async ({ page }) => {
+        // This test specifically catches the bug where navigating to /thread/... 
+        // would show JSON instead of the React app
+        await setupAuth(page, defaultTestUser.email)
+        
+        // First, get a thread ID from the inbox
+        await navigateAndWait(page, '/')
+        await page.waitForURL(/.*\/(settings|$)/, { timeout: 10000 })
+        
+        const currentURL = page.url()
+        if (currentURL.includes('/settings')) {
+            return // Skip if redirected to settings
+        }
+
+        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+        await waitForEmailList(page)
+
+        const emailLinks = page.locator('a[href*="/thread/"]')
+        const count = await emailLinks.count()
+
+        if (count > 0) {
+            // Get the thread URL from the first email link
+            const threadUrl = await emailLinks.first().getAttribute('href')
+            expect(threadUrl).toBeTruthy()
+            
+            // Navigate directly to the thread URL (simulating a bookmark or direct navigation)
+            // This should load the React app, not JSON
+            await page.goto(threadUrl!, { waitUntil: 'networkidle' })
+            
+            // Verify we're on the thread page
+            await expect(page).toHaveURL(new RegExp(`.*${threadUrl}.*`), { timeout: 5000 })
+            
+            // CRITICAL: Verify the React app loaded (not JSON)
+            // Check for React app elements, not JSON content
+            const pageContent = await page.content()
+            
+            // Should contain React app structure (div with id="root" or React components)
+            expect(pageContent).toContain('root')
+            
+            // Should NOT be pure JSON (no JSON object at root level)
+            // If it's JSON, the page would start with { or [ and have no HTML structure
+            expect(pageContent).not.toMatch(/^\s*[{\[]/)
+            
+            // Should have HTML structure
+            expect(pageContent).toContain('<html')
+            expect(pageContent).toContain('<body')
+            
+            // Wait for React to hydrate and render
+            await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+            
+            // Verify thread content is visible (React rendered it)
+            const threadHeader = page.locator('h1, [role="heading"]').first()
+            await expect(threadHeader).toBeVisible({ timeout: 5000 })
+        }
+    })
 })
 

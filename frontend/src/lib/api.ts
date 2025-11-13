@@ -1,5 +1,41 @@
 const API_BASE_URL = '/api/v1'
 
+/**
+ * Encodes a thread ID (Message-ID with angle brackets) to URL-safe base64.
+ * This makes the ID safe for URLs without percent-encoding.
+ */
+export function encodeThreadIdForUrl(threadId: string): string {
+    // Convert string to base64 using TextEncoder for proper UTF-8 handling
+    const utf8Bytes = new TextEncoder().encode(threadId)
+    const base64 = btoa(String.fromCharCode(...utf8Bytes))
+    // Make it URL-safe: replace + with -, / with _, and remove padding =
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+/**
+ * Decodes a URL-safe base64 thread ID back to the original Message-ID.
+ */
+export function decodeThreadIdFromUrl(encoded: string): string {
+    // Restore base64 characters: - to +, _ to /
+    let base64 = encoded.replace(/-/g, '+').replace(/_/g, '/')
+    // Add padding if needed (base64 strings should be multiple of 4)
+    while (base64.length % 4) {
+        base64 += '='
+    }
+    // Decode from base64
+    try {
+        const binaryString = atob(base64)
+        const bytes = new Uint8Array(binaryString.length)
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i)
+        }
+        return new TextDecoder().decode(bytes)
+    } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : String(e)
+        throw new Error(`Failed to decode thread ID: ${errorMessage}`)
+    }
+}
+
 export interface AuthStatus {
     isAuthenticated: boolean
     isSetupComplete: boolean
@@ -14,17 +50,13 @@ export interface UserSettings {
     smtp_username: string
     smtp_password: string
     smtp_password_set?: boolean
-    archive_folder_name: string
-    sent_folder_name: string
-    drafts_folder_name: string
-    trash_folder_name: string
-    spam_folder_name: string
     undo_send_delay_seconds: number
     pagination_threads_per_page: number
 }
 
 export interface Folder {
     name: string
+    role: 'inbox' | 'sent' | 'drafts' | 'spam' | 'trash' | 'archive' | 'other'
 }
 
 export interface Message {
@@ -43,7 +75,7 @@ export interface Message {
     body_text: string
     is_read: boolean
     is_starred: boolean
-    attachments: Attachment[]
+    attachments?: Attachment[]
 }
 
 export interface Attachment {
@@ -61,6 +93,7 @@ export interface Thread {
     stable_thread_id: string
     subject: string
     user_id: string
+    first_message_from_address?: string
     messages?: Message[]
 }
 
@@ -158,7 +191,10 @@ export const api = {
     },
 
     async getThread(threadId: string): Promise<Thread> {
-        const response = await fetch(`${API_BASE_URL}/thread/${encodeURIComponent(threadId)}`, {
+        // threadId is expected to be the raw Message-ID (with angle brackets)
+        // We need to encode it for the URL path
+        const encodedId = encodeURIComponent(threadId)
+        const response = await fetch(`${API_BASE_URL}/thread/${encodedId}`, {
             credentials: 'include',
             headers: getAuthHeaders(),
         })

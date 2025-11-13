@@ -39,13 +39,25 @@ export default function Sidebar() {
                     </div>
                 ) : (
                     folders?.map((folder) => {
-                        const folderParam = `folder=${encodeURIComponent(folder.name)}`
-                        const isActive =
-                            location.pathname === '/' && location.search.includes(folderParam)
+                        const isInbox = folder.role === 'inbox'
+                        // For inbox, use just '/' instead of '/?folder=...'
+                        const linkTo = isInbox ? '/' : `/?folder=${encodeURIComponent(folder.name)}`
+
+                        // Inbox is active when pathname is '/' and there's no folder param (or folder matches inbox name)
+                        // Other folders are active when the folder param matches
+                        const isActive = isInbox
+                            ? location.pathname === '/' &&
+                              (location.search === '' ||
+                                  location.search.includes(
+                                      `folder=${encodeURIComponent(folder.name)}`,
+                                  ))
+                            : location.pathname === '/' &&
+                              location.search.includes(`folder=${encodeURIComponent(folder.name)}`)
+
                         return (
                             <Link
                                 key={folder.name}
-                                to={`/?${folderParam}`}
+                                to={linkTo}
                                 className={`group flex items-center rounded-md px-3 py-2 text-sm font-medium ${
                                     isActive
                                         ? 'bg-gray-100 text-gray-900'

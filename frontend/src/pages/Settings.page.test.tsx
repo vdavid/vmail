@@ -23,11 +23,6 @@ const mockSettings: UserSettings = {
     smtp_server_hostname: 'smtp.example.com:587',
     smtp_username: 'user@example.com',
     smtp_password: 'password123',
-    archive_folder_name: 'Archive',
-    sent_folder_name: 'Sent',
-    drafts_folder_name: 'Drafts',
-    trash_folder_name: 'Trash',
-    spam_folder_name: 'Spam',
     undo_send_delay_seconds: 20,
     pagination_threads_per_page: 100,
 }
@@ -96,7 +91,6 @@ describe('SettingsPage', () => {
 
         const userFields = screen.getAllByDisplayValue('user@example.com')
         expect(userFields).toHaveLength(2)
-        expect(screen.getByDisplayValue('Archive')).toBeInTheDocument()
     })
 
     it('should handle form input changes', async () => {

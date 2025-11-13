@@ -50,7 +50,7 @@ func getTestConfig() *config.Config {
 		DBPassword:          pgPassword,
 		DBName:              pgDatabase,
 		DBSSLMode:           sslMode,
-		Port:                "8080",
+		Port:                "11764",
 		Timezone:            "UTC",
 	}
 }

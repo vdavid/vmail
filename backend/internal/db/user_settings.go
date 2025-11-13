@@ -61,11 +61,6 @@ func GetUserSettings(ctx context.Context, pool *pgxpool.Pool, userID string) (*m
 			smtp_server_hostname,
 			smtp_username,
 			encrypted_smtp_password,
-			archive_folder_name,
-			sent_folder_name,
-			drafts_folder_name,
-			trash_folder_name,
-			spam_folder_name,
 			created_at,
 			updated_at
 		FROM user_settings
@@ -80,11 +75,6 @@ func GetUserSettings(ctx context.Context, pool *pgxpool.Pool, userID string) (*m
 		&settings.SMTPServerHostname,
 		&settings.SMTPUsername,
 		&settings.EncryptedSMTPPassword,
-		&settings.ArchiveFolderName,
-		&settings.SentFolderName,
-		&settings.DraftsFolderName,
-		&settings.TrashFolderName,
-		&settings.SpamFolderName,
 		&settings.CreatedAt,
 		&settings.UpdatedAt,
 	)
@@ -112,13 +102,8 @@ func SaveUserSettings(ctx context.Context, pool *pgxpool.Pool, settings *models.
 			encrypted_imap_password,
 			smtp_server_hostname,
 			smtp_username,
-			encrypted_smtp_password,
-			archive_folder_name,
-			sent_folder_name,
-			drafts_folder_name,
-			trash_folder_name,
-			spam_folder_name
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+			encrypted_smtp_password
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		ON CONFLICT (user_id) DO UPDATE SET
 			undo_send_delay_seconds = EXCLUDED.undo_send_delay_seconds,
 			pagination_threads_per_page = EXCLUDED.pagination_threads_per_page,
@@ -128,11 +113,6 @@ func SaveUserSettings(ctx context.Context, pool *pgxpool.Pool, settings *models.
 			smtp_server_hostname = EXCLUDED.smtp_server_hostname,
 			smtp_username = EXCLUDED.smtp_username,
 			encrypted_smtp_password = EXCLUDED.encrypted_smtp_password,
-			archive_folder_name = EXCLUDED.archive_folder_name,
-			sent_folder_name = EXCLUDED.sent_folder_name,
-			drafts_folder_name = EXCLUDED.drafts_folder_name,
-			trash_folder_name = EXCLUDED.trash_folder_name,
-			spam_folder_name = EXCLUDED.spam_folder_name,
 			updated_at = NOW()
 	`,
 		settings.UserID,
@@ -144,11 +124,6 @@ func SaveUserSettings(ctx context.Context, pool *pgxpool.Pool, settings *models.
 		settings.SMTPServerHostname,
 		settings.SMTPUsername,
 		settings.EncryptedSMTPPassword,
-		settings.ArchiveFolderName,
-		settings.SentFolderName,
-		settings.DraftsFolderName,
-		settings.TrashFolderName,
-		settings.SpamFolderName,
 	)
 
 	if err != nil {

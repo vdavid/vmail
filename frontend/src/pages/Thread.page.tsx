@@ -2,25 +2,37 @@ import { useQuery } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
 
 import Message from '../components/Message'
-import { api } from '../lib/api'
+import { api, decodeThreadIdFromUrl } from '../lib/api'
 
 export default function ThreadPage() {
-    const { threadId } = useParams<{ threadId: string }>()
+    const { threadId: encodedThreadId } = useParams<{ threadId: string }>()
     const navigate = useNavigate()
+
+    // Decode the base64 URL-safe thread ID to get the raw Message-ID
+    let rawThreadId: string | null = null
+    let decodeError: Error | null = null
+
+    if (encodedThreadId) {
+        try {
+            rawThreadId = decodeThreadIdFromUrl(encodedThreadId)
+        } catch (e) {
+            decodeError = e instanceof Error ? e : new Error(String(e))
+        }
+    }
 
     const {
         data: thread,
         isLoading,
         error,
     } = useQuery({
-        queryKey: ['thread', threadId],
+        queryKey: ['thread', rawThreadId],
         queryFn: () => {
-            if (!threadId) {
+            if (!rawThreadId) {
                 throw new Error('Thread ID is required')
             }
-            return api.getThread(threadId)
+            return api.getThread(rawThreadId)
         },
-        enabled: !!threadId,
+        enabled: !!rawThreadId && !decodeError,
     })
 
     const handleBack = () => {
@@ -41,6 +53,20 @@ export default function ThreadPage() {
         )
     }
 
+    if (decodeError) {
+        return (
+            <div className='p-6'>
+                <button
+                    onClick={handleBack}
+                    className='mb-4 text-sm text-blue-600 hover:text-blue-800'
+                >
+                    ← Back to Inbox
+                </button>
+                <p className='mt-4 text-red-600'>Error decoding thread ID: {decodeError.message}</p>
+            </div>
+        )
+    }
+
     if (error) {
         return (
             <div className='p-6'>
@@ -56,6 +82,8 @@ export default function ThreadPage() {
     }
 
     if (!thread) {
+        // If we've passed all the error/loading checks but still have no thread,
+        // it means the thread doesn't exist
         return (
             <div className='p-6'>
                 <button

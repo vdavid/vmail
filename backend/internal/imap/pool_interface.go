@@ -2,6 +2,7 @@ package imap
 
 import (
 	"github.com/emersion/go-imap/client"
+	"github.com/vdavid/vmail/backend/internal/models"
 )
 
 // IMAPClient defines the interface for IMAP client operations needed by handlers.
@@ -10,8 +11,8 @@ import (
 //
 //goland:noinspection GoNameStartsWithPackageName
 type IMAPClient interface {
-	// ListFolders lists all folders on the IMAP server.
-	ListFolders() ([]string, error)
+	// ListFolders lists all folders on the IMAP server with their roles determined by SPECIAL-USE attributes.
+	ListFolders() ([]*models.Folder, error)
 }
 
 // IMAPPool defines the interface for the IMAP connection pool.
@@ -35,8 +36,8 @@ type ClientWrapper struct {
 	client *client.Client
 }
 
-// ListFolders lists all folders on the IMAP server.
-func (w *ClientWrapper) ListFolders() ([]string, error) {
+// ListFolders lists all folders on the IMAP server with their roles determined by SPECIAL-USE attributes.
+func (w *ClientWrapper) ListFolders() ([]*models.Folder, error) {
 	return ListFolders(w.client)
 }
 

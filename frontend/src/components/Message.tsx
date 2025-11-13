@@ -41,7 +41,7 @@ export default function Message({ message }: MessageProps) {
                     <div className='mt-2 font-semibold text-gray-900'>{message.subject}</div>
                 )}
             </div>
-            {message.attachments.length > 0 && (
+            {message.attachments && message.attachments.length > 0 && (
                 <div className='mb-4'>
                     <div className='text-sm font-semibold text-gray-700'>Attachments:</div>
                     <ul className='mt-1 space-y-1'>

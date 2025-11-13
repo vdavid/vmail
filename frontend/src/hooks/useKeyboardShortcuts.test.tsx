@@ -24,12 +24,16 @@ vi.mock('react-router-dom', async () => {
 })
 
 // Mock the API
-vi.mock('../lib/api', () => ({
-    api: {
-        getSettings: vi.fn(),
-        getThreads: vi.fn(),
-    },
-}))
+vi.mock('../lib/api', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../lib/api')>()
+    return {
+        ...actual,
+        api: {
+            getSettings: vi.fn(),
+            getThreads: vi.fn(),
+        },
+    }
+})
 
 const createWrapper = (queryClient?: QueryClient) => {
     const client =
@@ -314,7 +318,10 @@ describe('useKeyboardShortcuts', () => {
         dispatchKeydown('o')
 
         await waitFor(() => {
-            expect(mockNavigate).toHaveBeenCalledWith('/thread/thread-1')
+            // Should be called with base64-encoded thread ID
+            expect(mockNavigate).toHaveBeenCalled()
+            const callArgs = mockNavigate.mock.calls[0]
+            expect(callArgs[0]).toMatch(/^\/thread\/[A-Za-z0-9_-]+$/)
         })
     })
 
@@ -339,7 +346,10 @@ describe('useKeyboardShortcuts', () => {
         dispatchKeydown('Enter')
 
         await waitFor(() => {
-            expect(mockNavigate).toHaveBeenCalledWith('/thread/thread-1')
+            // Should be called with base64-encoded thread ID
+            expect(mockNavigate).toHaveBeenCalled()
+            const callArgs = mockNavigate.mock.calls[0]
+            expect(callArgs[0]).toMatch(/^\/thread\/[A-Za-z0-9_-]+$/)
         })
     })
 

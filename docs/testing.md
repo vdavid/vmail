@@ -79,7 +79,7 @@ pnpm test:e2e
 The test server (`backend/cmd/test-server`) automatically:
 - Starts a test IMAP server on `localhost:1143`
 - Starts a test SMTP server on `localhost:1025`
-- Starts the backend server on `localhost:8080`
+- Starts the backend server on `localhost:11765` (E2E test port)
 - Seeds test data (sample emails)
 - Sets `VMAIL_TEST_MODE=true` for non-TLS connections
 
@@ -92,6 +92,6 @@ These match the values in `e2e/fixtures/test-data.ts`.
 
 **Troubleshooting:**
 
-- If tests fail to connect, ensure ports 8080, 1143, and 1025 are not in use
+- If tests fail to connect, ensure ports 11765, 7557, 1143, and 1025 are not in use
 - If the database connection fails, ensure Docker Compose is running: `docker compose up -d db`
 - Check the test server logs for detailed error messages

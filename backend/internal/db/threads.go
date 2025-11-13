@@ -91,7 +91,17 @@ func GetThreadByID(ctx context.Context, pool *pgxpool.Pool, threadID string) (*m
 // It returns threads that have at least one message in the specified folder.
 func GetThreadsForFolder(ctx context.Context, pool *pgxpool.Pool, userID, folderName string, limit, offset int) ([]*models.Thread, error) {
 	rows, err := pool.Query(ctx, `
-        SELECT t.id, t.user_id, t.stable_thread_id, t.subject, MAX(m2.sent_at) AS last_sent_at
+        SELECT 
+            t.id, 
+            t.user_id, 
+            t.stable_thread_id, 
+            t.subject, 
+            MAX(m2.sent_at) AS last_sent_at,
+            (SELECT m3.from_address 
+             FROM messages m3 
+             WHERE m3.thread_id = t.id 
+             ORDER BY m3.sent_at NULLS LAST 
+             LIMIT 1) AS first_message_from_address
         FROM threads t
         INNER JOIN messages m ON t.id = m.thread_id
         LEFT JOIN messages m2 ON m2.thread_id = t.id
@@ -110,14 +120,19 @@ func GetThreadsForFolder(ctx context.Context, pool *pgxpool.Pool, userID, folder
 	for rows.Next() {
 		var thread models.Thread
 		var _lastSentAt *time.Time
+		var firstMessageFromAddress *string
 		if err := rows.Scan(
 			&thread.ID,
 			&thread.UserID,
 			&thread.StableThreadID,
 			&thread.Subject,
 			&_lastSentAt,
+			&firstMessageFromAddress,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan thread: %w", err)
+		}
+		if firstMessageFromAddress != nil {
+			thread.FirstMessageFromAddress = *firstMessageFromAddress
 		}
 		threads = append(threads, &thread)
 	}
@@ -230,6 +245,52 @@ func UpdateThreadCount(ctx context.Context, pool *pgxpool.Pool, userID, folderNa
 
 	if err != nil {
 		return fmt.Errorf("failed to update thread count: %w", err)
+	}
+
+	return nil
+}
+
+// EnrichThreadsWithFirstMessageFromAddress enriches threads with the first message's from_address.
+// This is useful for search results and other cases where threads don't have messages populated.
+func EnrichThreadsWithFirstMessageFromAddress(ctx context.Context, pool *pgxpool.Pool, threads []*models.Thread) error {
+	if len(threads) == 0 {
+		return nil
+	}
+
+	// Build a map of thread IDs for efficient lookup
+	threadIDMap := make(map[string]*models.Thread)
+	threadIDs := make([]string, 0, len(threads))
+	for _, thread := range threads {
+		threadIDMap[thread.ID] = thread
+		threadIDs = append(threadIDs, thread.ID)
+	}
+
+	// Query all first message from_addresses in one query
+	rows, err := pool.Query(ctx, `
+		SELECT DISTINCT ON (thread_id) thread_id, from_address
+		FROM messages
+		WHERE thread_id = ANY($1)
+		ORDER BY thread_id, sent_at NULLS LAST
+	`, threadIDs)
+
+	if err != nil {
+		return fmt.Errorf("failed to get first message from addresses: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var threadID string
+		var fromAddress string
+		if err := rows.Scan(&threadID, &fromAddress); err != nil {
+			return fmt.Errorf("failed to scan from address: %w", err)
+		}
+		if thread, exists := threadIDMap[threadID]; exists {
+			thread.FirstMessageFromAddress = fromAddress
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("error iterating from addresses: %w", err)
 	}
 
 	return nil

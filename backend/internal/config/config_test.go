@@ -109,8 +109,8 @@ func TestNewConfigWithDefaults(t *testing.T) {
 		t.Errorf("expected default DBName 'vmail', got '%s'", config.DBName)
 	}
 
-	if config.Port != "8080" {
-		t.Errorf("expected default Port '8080', got '%s'", config.Port)
+	if config.Port != "11764" {
+		t.Errorf("expected default Port '11764', got '%s'", config.Port)
 	}
 
 	if config.Timezone != "UTC" {

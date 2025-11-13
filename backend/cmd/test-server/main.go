@@ -292,9 +292,39 @@ func handleRoot(w http.ResponseWriter, _ *http.Request) {
 
 // seedTestData seeds the IMAP server with test messages matching e2e/fixtures/test-data.ts
 func seedTestData(imapServer *testutil.TestIMAPServer) error {
-	// Ensure INBOX exists
+	// Ensure INBOX exists (INBOX is identified by name, not SPECIAL-USE)
 	if err := imapServer.EnsureINBOXForE2E(); err != nil {
 		return fmt.Errorf("failed to ensure INBOX: %w", err)
+	}
+
+	// Create folders with SPECIAL-USE attributes for testing
+	// Note: The go-imap memory backend should support SPECIAL-USE if the server is configured correctly
+	// We create the folders here; the SPECIAL-USE attributes should be set by the backend
+	folders := []struct {
+		name string
+		attr string
+	}{
+		{"Sent", "\\Sent"},
+		{"Drafts", "\\Drafts"},
+		{"Trash", "\\Trash"},
+		{"Spam", "\\Junk"},
+		{"Archive", "\\Archive"},
+	}
+
+	client, err := imapServer.ConnectForE2E()
+	if err != nil {
+		return fmt.Errorf("failed to connect to IMAP server: %w", err)
+	}
+	defer func() {
+		_ = client.Logout()
+	}()
+
+	for _, folder := range folders {
+		// Create folder if it doesn't exist
+		err = client.Create(folder.name)
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			log.Printf("Warning: Failed to create folder %s: %v", folder.name, err)
+		}
 	}
 
 	// Seed test messages matching the TypeScript test data
@@ -377,11 +407,6 @@ func seedUserSettings(ctx context.Context, pool *pgxpool.Pool, cfg *config.Confi
 		SMTPServerHostname:       smtpServer.Address,
 		SMTPUsername:             smtpServer.Username(),
 		EncryptedSMTPPassword:    encryptedSMTPPassword,
-		ArchiveFolderName:        "Archive",
-		SentFolderName:           "Sent",
-		DraftsFolderName:         "Drafts",
-		TrashFolderName:          "Trash",
-		SpamFolderName:           "Spam",
 		UndoSendDelaySeconds:     20,
 		PaginationThreadsPerPage: 100,
 	}

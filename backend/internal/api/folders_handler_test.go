@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -58,11 +59,11 @@ func TestFoldersHandler_GetFolders(t *testing.T) {
 
 // mockIMAPClient is a mock implementation of IMAPClient for testing
 type mockIMAPClient struct {
-	listFoldersResult []string
+	listFoldersResult []*models.Folder
 	listFoldersErr    error
 }
 
-func (m *mockIMAPClient) ListFolders() ([]string, error) {
+func (m *mockIMAPClient) ListFolders() ([]*models.Folder, error) {
 	return m.listFoldersResult, m.listFoldersErr
 }
 
@@ -159,8 +160,13 @@ func TestFoldersHandler_WithMocks(t *testing.T) {
 
 	t.Run("returns folders from IMAP", func(t *testing.T) {
 		mockClient := &mockIMAPClient{
-			listFoldersResult: []string{"INBOX", "Sent", "Drafts", "Archive"},
-			listFoldersErr:    nil,
+			listFoldersResult: []*models.Folder{
+				{Name: "INBOX", Role: "inbox"},
+				{Name: "Sent", Role: "sent"},
+				{Name: "Drafts", Role: "drafts"},
+				{Name: "Archive", Role: "archive"},
+			},
+			listFoldersErr: nil,
 		}
 
 		mockPool := &mockIMAPPool{
@@ -196,10 +202,21 @@ func TestFoldersHandler_WithMocks(t *testing.T) {
 			t.Errorf("Expected 4 folders, got %d", len(response))
 		}
 
-		expectedFolders := []string{"INBOX", "Sent", "Drafts", "Archive"}
+		expectedFolders := []struct {
+			name string
+			role string
+		}{
+			{"INBOX", "inbox"},
+			{"Sent", "sent"},
+			{"Drafts", "drafts"},
+			{"Archive", "archive"},
+		}
 		for i, expected := range expectedFolders {
-			if response[i].Name != expected {
-				t.Errorf("Expected folder %d to be '%s', got '%s'", i, expected, response[i].Name)
+			if response[i].Name != expected.name {
+				t.Errorf("Expected folder %d name to be '%s', got '%s'", i, expected.name, response[i].Name)
+			}
+			if response[i].Role != expected.role {
+				t.Errorf("Expected folder %d role to be '%s', got '%s'", i, expected.role, response[i].Role)
 			}
 		}
 	})
@@ -239,8 +256,11 @@ func TestFoldersHandler_WithMocks(t *testing.T) {
 
 	t.Run("recovers from broken pipe error with retry", func(t *testing.T) {
 		retryClient := &mockIMAPClient{
-			listFoldersResult: []string{"INBOX", "Sent"},
-			listFoldersErr:    nil,
+			listFoldersResult: []*models.Folder{
+				{Name: "INBOX", Role: "inbox"},
+				{Name: "Sent", Role: "sent"},
+			},
+			listFoldersErr: nil,
 		}
 
 		rr, mockPool := testRetryScenario(t, pool, encryptor, email, userID,
@@ -269,8 +289,10 @@ func TestFoldersHandler_WithMocks(t *testing.T) {
 
 	t.Run("handles connection reset error with retry", func(t *testing.T) {
 		retryClient := &mockIMAPClient{
-			listFoldersResult: []string{"INBOX"},
-			listFoldersErr:    nil,
+			listFoldersResult: []*models.Folder{
+				{Name: "INBOX", Role: "inbox"},
+			},
+			listFoldersErr: nil,
 		}
 
 		rr, _ := testRetryScenario(t, pool, encryptor, email, userID,
@@ -284,8 +306,11 @@ func TestFoldersHandler_WithMocks(t *testing.T) {
 
 	t.Run("handles EOF error with retry", func(t *testing.T) {
 		retryClient := &mockIMAPClient{
-			listFoldersResult: []string{"INBOX", "Drafts"},
-			listFoldersErr:    nil,
+			listFoldersResult: []*models.Folder{
+				{Name: "INBOX", Role: "inbox"},
+				{Name: "Drafts", Role: "drafts"},
+			},
+			listFoldersErr: nil,
 		}
 
 		rr, _ := testRetryScenario(t, pool, encryptor, email, userID,
@@ -344,6 +369,31 @@ func TestFoldersHandler_WithMocks(t *testing.T) {
 		// Verify GetClient was called only once
 		if mockPool.getClientCallCount != 1 {
 			t.Errorf("Expected GetClient to be called 1 time, got %d", mockPool.getClientCallCount)
+		}
+	})
+
+	t.Run("returns 400 when SPECIAL-USE not supported", func(t *testing.T) {
+		mockClient := &mockIMAPClient{
+			listFoldersResult: nil,
+			listFoldersErr:    fmt.Errorf("IMAP server does not support SPECIAL-USE extension (RFC 6154), which is required for V-Mail to identify folder types"),
+		}
+
+		mockPool := &mockIMAPPool{
+			getClientResult: mockClient,
+			getClientErr:    nil,
+		}
+
+		handler := NewFoldersHandler(pool, encryptor, mockPool)
+		rr := callGetFolders(t, handler, email)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("Expected status 400, got %d", rr.Code)
+		}
+
+		// Verify error message
+		body := rr.Body.String()
+		if !strings.Contains(body, "SPECIAL-USE") {
+			t.Errorf("Expected error message to mention SPECIAL-USE, got: %s", body)
 		}
 	})
 }

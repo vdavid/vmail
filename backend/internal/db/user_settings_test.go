@@ -82,11 +82,6 @@ func TestUserSettingsExist(t *testing.T) {
 			SMTPServerHostname:       "smtp.example.com",
 			SMTPUsername:             "user@example.com",
 			EncryptedSMTPPassword:    []byte("encrypted"),
-			ArchiveFolderName:        "Archive",
-			SentFolderName:           "Sent",
-			DraftsFolderName:         "Drafts",
-			TrashFolderName:          "Trash",
-			SpamFolderName:           "Spam",
 		}
 
 		err := SaveUserSettings(ctx, pool, settings)
@@ -128,11 +123,6 @@ func TestSaveAndGetUserSettings(t *testing.T) {
 			SMTPServerHostname:       "smtp.test.com",
 			SMTPUsername:             "test_user",
 			EncryptedSMTPPassword:    []byte("encrypted_smtp_pass"),
-			ArchiveFolderName:        "MyArchive",
-			SentFolderName:           "MySent",
-			DraftsFolderName:         "MyDrafts",
-			TrashFolderName:          "MyTrash",
-			SpamFolderName:           "MySpam",
 		}
 
 		err := SaveUserSettings(ctx, pool, settings)
@@ -170,11 +160,6 @@ func TestSaveAndGetUserSettings(t *testing.T) {
 			SMTPServerHostname:       "smtp.updated.com",
 			SMTPUsername:             "updated_user",
 			EncryptedSMTPPassword:    []byte("new_encrypted_smtp"),
-			ArchiveFolderName:        "NewArchive",
-			SentFolderName:           "NewSent",
-			DraftsFolderName:         "NewDrafts",
-			TrashFolderName:          "NewTrash",
-			SpamFolderName:           "NewSpam",
 		}
 
 		err := SaveUserSettings(ctx, pool, updatedSettings)
@@ -225,11 +210,6 @@ func TestSaveUserSettingsUpdatesTimestamp(t *testing.T) {
 		SMTPServerHostname:       "smtp.example.com",
 		SMTPUsername:             "user",
 		EncryptedSMTPPassword:    []byte("pass"),
-		ArchiveFolderName:        "Archive",
-		SentFolderName:           "Sent",
-		DraftsFolderName:         "Drafts",
-		TrashFolderName:          "Trash",
-		SpamFolderName:           "Spam",
 	}
 
 	err = SaveUserSettings(ctx, pool, settings)

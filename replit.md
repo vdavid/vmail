@@ -51,8 +51,8 @@ To run the frontend:
 2. Access it via the Webview at port 5000
 3. Run tests: `cd frontend && pnpm test`
 
-**Note**: The frontend is configured to proxy `/api/*` requests to the Go backend at `http://localhost:8080`. For the full application to work:
-1. The backend server needs to be running on port 8080
+**Note**: The frontend is configured to proxy `/api/*` requests to the Go backend at `http://localhost:11764`. For the full application to work:
+1. The backend server needs to be running on port 11764
 2. The backend requires environment variables to be set (see `.env.example`)
 3. The Postgres database must be accessible
 

@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useSearchParams } from 'react-router-dom'
 
-import { api } from '../lib/api'
+import { api, encodeThreadIdForUrl } from '../lib/api'
 import { useUIStore } from '../store/ui.store'
 
 export function useKeyboardShortcuts() {
@@ -51,6 +51,7 @@ export function useKeyboardShortcuts() {
             // j or ↓: Move to next item
             if (event.key === 'j' || event.key === 'ArrowDown') {
                 event.preventDefault()
+                event.stopPropagation()
                 if (isInbox && threads && threads.length > 0) {
                     incrementSelectedIndex(threads.length)
                 }
@@ -59,6 +60,7 @@ export function useKeyboardShortcuts() {
             // k or ↑: Move to previous item
             if (event.key === 'k' || event.key === 'ArrowUp') {
                 event.preventDefault()
+                event.stopPropagation()
                 if (isInbox) {
                     decrementSelectedIndex()
                 }
@@ -75,7 +77,9 @@ export function useKeyboardShortcuts() {
                     threads[selectedThreadIndex]
                 ) {
                     const selectedThread = threads[selectedThreadIndex]
-                    void navigate(`/thread/${selectedThread.stable_thread_id}`)
+                    void navigate(
+                        `/thread/${encodeThreadIdForUrl(selectedThread.stable_thread_id)}`,
+                    )
                     setSelectedThreadIndex(null)
                 }
             }

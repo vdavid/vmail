@@ -390,5 +390,12 @@ func (s *Service) Search(ctx context.Context, userID string, query string, page,
 	}
 
 	threads, totalCount := sortAndPaginateThreads(threadMap, threadToLatestSentAt, page, limit)
+
+	// Enrich threads with first message's from_address for display
+	if err := db.EnrichThreadsWithFirstMessageFromAddress(ctx, s.pool, threads); err != nil {
+		log.Printf("Warning: Failed to enrich threads with first message from address: %v", err)
+		// Continue anyway - threads will work without the from_address
+	}
+
 	return threads, totalCount, nil
 }
