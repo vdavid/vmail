@@ -32,28 +32,19 @@ type DailyData struct {
 func main() {
 	// Validate we're in a git repository
 	if err := validateGitRepo(); err != nil {
-		_, err := fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		if err != nil {
-			return
-		}
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Get all commits where ROADMAP.md changed
 	commits, err := getCommitsForRoadmap()
 	if err != nil {
-		_, err := fmt.Fprintf(os.Stderr, "Error getting commits: %v\n", err)
-		if err != nil {
-			return
-		}
+		_, _ = fmt.Fprintf(os.Stderr, "Error getting commits: %v\n", err)
 		os.Exit(1)
 	}
 
 	if len(commits) == 0 {
-		_, err := fmt.Fprintf(os.Stderr, "No commits found where ROADMAP.md changed\n")
-		if err != nil {
-			return
-		}
+		_, _ = fmt.Fprintf(os.Stderr, "No commits found where ROADMAP.md changed\n")
 		os.Exit(1)
 	}
 
@@ -290,10 +281,7 @@ func outputCSV(data []DailyData) {
 			d.Message,
 		}
 		if err := writer.Write(row); err != nil {
-			_, err := fmt.Fprintf(os.Stderr, "Error writing CSV row: %v\n", err)
-			if err != nil {
-				return
-			}
+			_, _ = fmt.Fprintf(os.Stderr, "Error writing CSV row: %v\n", err)
 			os.Exit(1)
 		}
 	}

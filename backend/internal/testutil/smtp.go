@@ -147,6 +147,7 @@ func NewTestSMTPServer(t *testing.T) *TestSMTPServer {
 	cleanup := func() {
 		err := s.Close()
 		if err != nil {
+			t.Logf("Failed to close SMTP server: %v", err)
 			return
 		}
 	}

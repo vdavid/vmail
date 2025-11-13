@@ -177,6 +177,7 @@ func NewTestIMAPServer(t *testing.T) *TestIMAPServer {
 	cleanup := func() {
 		err := s.Close()
 		if err != nil {
+			t.Logf("Failed to close IMAP server: %v", err)
 			return
 		}
 	}
