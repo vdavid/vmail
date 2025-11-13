@@ -37,9 +37,6 @@ func TestAuthHandler_GetAuthStatus(t *testing.T) {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if !response.IsAuthenticated {
-			t.Error("Expected isAuthenticated to be true")
-		}
 		if response.IsSetupComplete {
 			t.Error("Expected isSetupComplete to be false for new user")
 		}
@@ -85,9 +82,6 @@ func TestAuthHandler_GetAuthStatus(t *testing.T) {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if !response.IsAuthenticated {
-			t.Error("Expected isAuthenticated to be true")
-		}
 		if !response.IsSetupComplete {
 			t.Error("Expected isSetupComplete to be true for user with settings")
 		}

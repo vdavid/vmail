@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import * as React from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as apiModule from '../lib/api'
 import { useAuthStore } from '../store/auth.store'
@@ -59,7 +59,6 @@ describe('AuthWrapper', () => {
     it('should render children when setup is complete', async () => {
         // eslint-disable-next-line @typescript-eslint/unbound-method
         vi.mocked(apiModule.api.getAuthStatus).mockResolvedValue({
-            isAuthenticated: true,
             isSetupComplete: true,
         })
 
@@ -73,7 +72,6 @@ describe('AuthWrapper', () => {
     it('should redirect to settings when setup is not complete', async () => {
         // eslint-disable-next-line @typescript-eslint/unbound-method
         vi.mocked(apiModule.api.getAuthStatus).mockResolvedValue({
-            isAuthenticated: true,
             isSetupComplete: false,
         })
 
