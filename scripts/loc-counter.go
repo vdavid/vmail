@@ -173,7 +173,14 @@ func countLinesForCommit(commitHash string, messages []string) (*fileStats, erro
 		ext := strings.ToLower(filepath.Ext(file))
 		base := filepath.Base(file)
 
+		// Check path-based categorization first
 		switch {
+		case isGoTestPath(file):
+			stats.goTest += lines
+			stats.goTotal += lines
+		case isTSTestPath(file):
+			stats.tsTest += lines
+			stats.ts += lines
 		case strings.HasSuffix(base, "_test.go"):
 			stats.goTest += lines
 			stats.goTotal += lines
@@ -213,6 +220,18 @@ func getFilesAtCommit(commitHash string) ([]string, error) {
 	}
 
 	return files, scanner.Err()
+}
+
+// isGoTestPath checks if a file path should be categorized as Go test code
+func isGoTestPath(file string) bool {
+	return strings.HasPrefix(file, "backend/cmd/test-server/") ||
+		strings.HasPrefix(file, "backend/internal/testutil/")
+}
+
+// isTSTestPath checks if a file path should be categorized as TypeScript test code
+func isTSTestPath(file string) bool {
+	return strings.HasPrefix(file, "e2e/") ||
+		strings.HasPrefix(file, "frontend/src/test/")
 }
 
 func countFileLines(commitHash, filepath string) (int, error) {
