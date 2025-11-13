@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/vdavid/vmail/backend/internal/auth"
 	"github.com/vdavid/vmail/backend/internal/crypto"
+	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/imap"
 	"github.com/vdavid/vmail/backend/internal/models"
 	"github.com/vdavid/vmail/backend/internal/testutil"
@@ -55,6 +56,24 @@ func TestFoldersHandler_GetFolders(t *testing.T) {
 	// Note: Testing the actual IMAP connection would require a real IMAP server
 	// or a mock. For now, we test the error handling paths.
 	// Integration tests would test the full IMAP connection flow.
+
+	t.Run("returns 500 when GetOrCreateUser returns an error", func(t *testing.T) {
+		email := "dberror@example.com"
+
+		// Use a cancelled context to simulate database connection failure
+		cancelledCtx, cancel := context.WithCancel(context.Background())
+		cancel()
+		req := httptest.NewRequest("GET", "/api/v1/folders", nil)
+		reqCtx := context.WithValue(cancelledCtx, auth.UserEmailKey, email)
+		req = req.WithContext(reqCtx)
+
+		rr := httptest.NewRecorder()
+		handler.GetFolders(rr, req)
+
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("Expected status 500, got %d", rr.Code)
+		}
+	})
 }
 
 // mockIMAPClient is a mock implementation of IMAPClient for testing
@@ -396,4 +415,203 @@ func TestFoldersHandler_WithMocks(t *testing.T) {
 			t.Errorf("Expected error message to mention SPECIAL-USE, got: %s", body)
 		}
 	})
+
+	t.Run("returns 500 when decrypting IMAP password fails", func(t *testing.T) {
+		email := "decrypt-error@example.com"
+		ctx := context.Background()
+
+		// Create user
+		userID, err := db.GetOrCreateUser(ctx, pool, email)
+		if err != nil {
+			t.Fatalf("Failed to create user: %v", err)
+		}
+
+		// Create settings with corrupted encrypted password (invalid encrypted data)
+		corruptedPassword := []byte("not-valid-encrypted-data")
+		encryptedSMTPPassword, _ := encryptor.Encrypt("smtp_pass")
+
+		settings := &models.UserSettings{
+			UserID:                   userID,
+			UndoSendDelaySeconds:     20,
+			PaginationThreadsPerPage: 100,
+			IMAPServerHostname:       "imap.test.com",
+			IMAPUsername:             "user",
+			EncryptedIMAPPassword:    corruptedPassword,
+			SMTPServerHostname:       "smtp.test.com",
+			SMTPUsername:             "user",
+			EncryptedSMTPPassword:    encryptedSMTPPassword,
+		}
+		if err := db.SaveUserSettings(ctx, pool, settings); err != nil {
+			t.Fatalf("Failed to save settings: %v", err)
+		}
+
+		handler := NewFoldersHandler(pool, encryptor, imap.NewPool())
+		rr := callGetFolders(t, handler, email)
+
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("Expected status 500, got %d", rr.Code)
+		}
+	})
+
+	t.Run("handles timeout error with StatusServiceUnavailable", func(t *testing.T) {
+		email := "timeout-test@example.com"
+		setupTestUserAndSettings(t, pool, encryptor, email)
+
+		mockPool := &mockIMAPPool{
+			getClientResult: nil,
+			getClientErr:    fmt.Errorf("dial tcp 192.168.1.1:993: i/o timeout"),
+		}
+
+		handler := NewFoldersHandler(pool, encryptor, mockPool)
+		rr := callGetFolders(t, handler, email)
+
+		if rr.Code != http.StatusServiceUnavailable {
+			t.Errorf("Expected status 503, got %d", rr.Code)
+		}
+
+		// Verify error message
+		body := rr.Body.String()
+		if !strings.Contains(body, "timed out") {
+			t.Errorf("Expected error message to mention timeout, got: %s", body)
+		}
+		if !strings.Contains(body, "hostname") {
+			t.Errorf("Expected error message to mention hostname, got: %s", body)
+		}
+	})
+}
+
+// failingResponseWriter is a ResponseWriter that fails on Write to test error handling.
+type failingResponseWriter struct {
+	http.ResponseWriter
+	writeShouldFail bool
+}
+
+func (f *failingResponseWriter) Write(p []byte) (int, error) {
+	if f.writeShouldFail {
+		return 0, fmt.Errorf("write failed")
+	}
+	return f.ResponseWriter.Write(p)
+}
+
+func TestFoldersHandler_WriteResponseErrors(t *testing.T) {
+	pool := testutil.NewTestDB(t)
+	defer pool.Close()
+
+	encryptor := getTestEncryptor(t)
+	email := "write-error@example.com"
+	setupTestUserAndSettings(t, pool, encryptor, email)
+
+	t.Run("handles write failure gracefully", func(t *testing.T) {
+		mockClient := &mockIMAPClient{
+			listFoldersResult: []*models.Folder{
+				{Name: "INBOX", Role: "inbox"},
+			},
+			listFoldersErr: nil,
+		}
+
+		mockPool := &mockIMAPPool{
+			getClientResult: mockClient,
+			getClientErr:    nil,
+		}
+
+		handler := NewFoldersHandler(pool, encryptor, mockPool)
+
+		req := httptest.NewRequest("GET", "/api/v1/folders", nil)
+		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
+		req = req.WithContext(reqCtx)
+
+		// Create a ResponseWriter that fails on Write
+		rr := httptest.NewRecorder()
+		failingWriter := &failingResponseWriter{
+			ResponseWriter:  rr,
+			writeShouldFail: true,
+		}
+
+		handler.GetFolders(failingWriter, req)
+
+		// The handler should handle the write error gracefully (it logs but doesn't crash)
+		// We can't easily test the error path without checking logs, but we verify it doesn't panic
+	})
+}
+
+func TestSortFoldersByRole(t *testing.T) {
+	tests := []struct {
+		name     string
+		folders  []*models.Folder
+		expected []string // Expected folder names in order
+	}{
+		{
+			name: "sorts by role priority",
+			folders: []*models.Folder{
+				{Name: "Archive", Role: "archive"},
+				{Name: "INBOX", Role: "inbox"},
+				{Name: "Drafts", Role: "drafts"},
+				{Name: "Sent", Role: "sent"},
+			},
+			expected: []string{"INBOX", "Sent", "Drafts", "Archive"},
+		},
+		{
+			name: "sorts alphabetically within same role",
+			folders: []*models.Folder{
+				{Name: "Zebra", Role: "other"},
+				{Name: "Alpha", Role: "other"},
+				{Name: "Beta", Role: "other"},
+			},
+			expected: []string{"Alpha", "Beta", "Zebra"},
+		},
+		{
+			name: "sorts by role then alphabetically",
+			folders: []*models.Folder{
+				{Name: "Zebra", Role: "other"},
+				{Name: "INBOX", Role: "inbox"},
+				{Name: "Alpha", Role: "other"},
+				{Name: "Sent", Role: "sent"},
+				{Name: "Beta", Role: "other"},
+			},
+			expected: []string{"INBOX", "Sent", "Alpha", "Beta", "Zebra"},
+		},
+		{
+			name: "handles all role types",
+			folders: []*models.Folder{
+				{Name: "Trash", Role: "trash"},
+				{Name: "Spam", Role: "spam"},
+				{Name: "INBOX", Role: "inbox"},
+				{Name: "Sent", Role: "sent"},
+				{Name: "Drafts", Role: "drafts"},
+				{Name: "Archive", Role: "archive"},
+			},
+			expected: []string{"INBOX", "Sent", "Drafts", "Spam", "Trash", "Archive"},
+		},
+		{
+			name:     "handles empty list",
+			folders:  []*models.Folder{},
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Make a copy to avoid modifying the original
+			folders := make([]*models.Folder, len(tt.folders))
+			for i, f := range tt.folders {
+				folders[i] = &models.Folder{
+					Name: f.Name,
+					Role: f.Role,
+				}
+			}
+
+			sortFoldersByRole(folders)
+
+			if len(folders) != len(tt.expected) {
+				t.Errorf("Expected %d folders, got %d", len(tt.expected), len(folders))
+				return
+			}
+
+			for i, expectedName := range tt.expected {
+				if folders[i].Name != expectedName {
+					t.Errorf("Expected folder at index %d to be '%s', got '%s'", i, expectedName, folders[i].Name)
+				}
+			}
+		})
+	}
 }
