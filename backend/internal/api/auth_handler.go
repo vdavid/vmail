@@ -52,6 +52,8 @@ func (h *AuthHandler) GetAuthStatus(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// checkSetupComplete determines if the user has completed onboarding by checking
+// if user settings exist in the database.
 func (h *AuthHandler) checkSetupComplete(ctx context.Context, email string) (bool, error) {
 	userID, err := db.GetOrCreateUser(ctx, h.pool, email)
 	if err != nil {

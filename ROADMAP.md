@@ -30,7 +30,7 @@
 
 ### **2/7. 🔐 Authentication**
 
-- [ ] `ValidateToken` in `middleware.go` is currently a stub and it always returns "test@example.com" without
+- [ ] `ValidateToken` in `middleware.go` is currently a stub, and it always returns "test@example.com" without
   actually validating the Authelia JWT token. This must be implemented before deploying to production.
   The function should parse and validate the JWT token from Authelia, extract the user's email from the token claims,
   and verify the token's signature and expiration.
