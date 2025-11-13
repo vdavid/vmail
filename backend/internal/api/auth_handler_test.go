@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/vdavid/vmail/backend/internal/auth"
 	"github.com/vdavid/vmail/backend/internal/db"
@@ -95,6 +96,50 @@ func TestAuthHandler_GetAuthStatus(t *testing.T) {
 
 		if rr.Code != http.StatusUnauthorized {
 			t.Errorf("Expected status 401, got %d", rr.Code)
+		}
+	})
+
+	t.Run("returns 500 when GetOrCreateUser returns an error", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/auth/status", nil)
+
+		// Use a cancelled context to simulate database connection failure
+		cancelledCtx, cancel := context.WithCancel(context.Background())
+		cancel()
+		reqCtx := context.WithValue(cancelledCtx, auth.UserEmailKey, "test@example.com")
+		req = req.WithContext(reqCtx)
+
+		rr := httptest.NewRecorder()
+		handler.GetAuthStatus(rr, req)
+
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("Expected status 500, got %d", rr.Code)
+		}
+	})
+
+	t.Run("returns 500 when UserSettingsExist returns an error", func(t *testing.T) {
+		email := "erroruser@example.com"
+
+		// Create user first with valid context
+		ctx := context.Background()
+		_, err := db.GetOrCreateUser(ctx, pool, email)
+		if err != nil {
+			t.Fatalf("Failed to create user: %v", err)
+		}
+
+		// Use a context with a deadline that's already passed to cause UserSettingsExist to fail
+		// Note: GetOrCreateUser might succeed due to ON CONFLICT, but UserSettingsExist will fail
+		deadlineCtx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		defer cancel()
+		reqCtx := context.WithValue(deadlineCtx, auth.UserEmailKey, email)
+
+		req := httptest.NewRequest("GET", "/api/v1/auth/status", nil)
+		req = req.WithContext(reqCtx)
+
+		rr := httptest.NewRecorder()
+		handler.GetAuthStatus(rr, req)
+
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("Expected status 500, got %d", rr.Code)
 		}
 	})
 }

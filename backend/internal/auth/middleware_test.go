@@ -3,6 +3,7 @@ package auth
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 )
 
@@ -123,6 +124,64 @@ func TestValidateToken(t *testing.T) {
 		}
 		if email == "" {
 			t.Error("Expected non-empty email")
+		}
+	})
+
+	t.Run("extracts email from token when VMAIL_TEST_MODE=true", func(t *testing.T) {
+		originalValue := os.Getenv("VMAIL_TEST_MODE")
+		defer func(key, value string) {
+			err := os.Setenv(key, value)
+			if err != nil {
+				t.Fatalf("Failed to restore %s: %v", key, err)
+			}
+		}("VMAIL_TEST_MODE", originalValue)
+
+		err := os.Setenv("VMAIL_TEST_MODE", "true")
+		if err != nil {
+			t.Fatalf("Failed to set VMAIL_TEST_MODE: %v", err)
+			return
+		}
+
+		email, err := ValidateToken("email:testuser@example.com")
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+		if email != "testuser@example.com" {
+			t.Errorf("Expected email 'testuser@example.com', got %s", email)
+		}
+	})
+
+	t.Run("returns error for empty token", func(t *testing.T) {
+		testCases := []string{"", "   ", "\t", "\n"}
+		for _, token := range testCases {
+			_, err := ValidateToken(token)
+			if err == nil {
+				t.Errorf("Expected error for empty/whitespace token: %q", token)
+			}
+		}
+	})
+
+	t.Run("returns error when VMAIL_TEST_MODE=true and token is email: with empty email", func(t *testing.T) {
+		originalValue := os.Getenv("VMAIL_TEST_MODE")
+		defer func(key, value string) {
+			err := os.Setenv(key, value)
+			if err != nil {
+				t.Fatalf("Failed to restore %s: %v", key, err)
+			}
+		}("VMAIL_TEST_MODE", originalValue)
+
+		err := os.Setenv("VMAIL_TEST_MODE", "true")
+		if err != nil {
+			t.Fatalf("Failed to set VMAIL_TEST_MODE: %v", err)
+			return
+		}
+
+		testCases := []string{"email:", "email:   ", "email:\t"}
+		for _, token := range testCases {
+			_, err := ValidateToken(token)
+			if err == nil {
+				t.Errorf("Expected error for token with empty email: %q", token)
+			}
 		}
 	})
 }
