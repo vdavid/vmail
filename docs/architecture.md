@@ -134,6 +134,48 @@ The auth domain handles authentication and authorization for the V-Mail API.
 * `ValidateToken` is a stub that always returns "test@example.com" in production mode. It must be implemented to actually validate Authelia JWT tokens before deployment.
 * In test mode (`VMAIL_TEST_MODE=true`), tokens can be prefixed with "email:" to specify the test user email.
 
+#### Folders
+
+The folders domain handles listing IMAP folders for the authenticated user.
+
+**Components:**
+
+* **`internal/api/folders_handler.go`**: HTTP handler for the `/api/v1/folders` endpoint.
+  * `GetFolders`: Lists all IMAP folders for the current user, sorted by role priority.
+  * `getUserSettingsAndPassword`: Retrieves user settings and decrypts the IMAP password.
+  * `getIMAPClient`: Gets an IMAP client from the pool, with user-friendly error messages for timeouts.
+  * `listFoldersWithRetry`: Lists folders with automatic retry on connection errors.
+  * `retryListFolders`: Retries listing folders after removing a broken connection from the pool.
+  * `writeFoldersResponse`: Writes the sorted folders as JSON.
+  * `sortFoldersByRole`: Sorts folders by role priority (inbox, sent, drafts, spam, trash, archive, other), then alphabetically within the same role.
+
+* **`internal/imap/folder.go`**: IMAP folder listing implementation.
+  * `ListFolders`: Lists all folders on the IMAP server using SPECIAL-USE attributes (RFC 6154) to determine roles.
+  * `determineFolderRole`: Maps folder names and SPECIAL-USE attributes to role strings.
+
+**Flow:**
+
+1. Handler extracts user ID from request context.
+2. Retrieves and decrypts user settings (IMAP credentials).
+3. Gets an IMAP client from the connection pool.
+4. Lists folders from the IMAP server.
+5. If a connection error occurs (broken pipe, connection reset, EOF), removes the broken client from the pool and retries with a fresh connection.
+6. Sorts folders by role priority and alphabetically.
+7. Returns folders as JSON.
+
+**Error handling:**
+
+* Returns 404 if user settings are not found.
+* Returns 400 if the IMAP server doesn't support SPECIAL-USE extension (required for V-Mail).
+* Returns 503 (Service Unavailable) for connection timeout errors with a user-friendly message.
+* Returns 500 for other connection or internal errors.
+* Automatically retries on transient connection errors (broken pipe, connection reset, EOF).
+
+**Dependencies:**
+
+* Requires IMAP server support for SPECIAL-USE extension (RFC 6154) to identify folder roles.
+* Uses the IMAP connection pool to manage client connections efficiently.
+
 ### REST API
 
 **Base path:** `/api/v1`
@@ -147,7 +189,9 @@ unique identifier, such as the `Message-ID` header of the root/first message in 
   completed the setup/onboarding.
     * Response: `{"isSetupComplete": false}`.
     * `isSetupComplete: false` tells the React app to redirect to the `/settings` page for onboarding.
-* [ ] `GET /folders`: List all IMAP folders (Inbox, Sent, etc.).
+* [x] `GET /folders`: List all IMAP folders (Inbox, Sent, etc.).
+    * Response: Array of folder objects with `name` and `role` fields.
+    * Folders are sorted by role priority (inbox, sent, drafts, spam, trash, archive, other), then alphabetically within the same role.
 * [ ] `GET /threads?folder=Inbox&page=1&limit=100`: Get paginated threads for a folder.
 * [ ] `GET /threads/search?q=from:george&page=1`: Get paginated search results.
 * [ ] `GET /thread/{thread_id}`: Get all messages and content for one thread.
