@@ -29,10 +29,7 @@ func main() {
 	// Get all commits on the main branch
 	commits, err := getCommits()
 	if err != nil {
-		_, err := fmt.Fprintf(os.Stderr, "Error getting commits: %v\n", err)
-		if err != nil {
-			return
-		}
+		_, _ = fmt.Fprintf(os.Stderr, "Error getting commits: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -61,6 +58,7 @@ func main() {
 	defer writer.Flush()
 	err = writer.Write([]string{"date", "total", "ts", "go", "go prod", "go test", "ts prod", "ts test", "docs", "other", "comments"})
 	if err != nil {
+		_, err = fmt.Fprintf(os.Stderr, "Error writing CSV header: %v\n", err)
 		return
 	}
 
@@ -141,6 +139,7 @@ func main() {
 			comments,
 		})
 		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error writing CSV row: %v\n", err)
 			return
 		}
 	}

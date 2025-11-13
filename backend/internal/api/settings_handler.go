@@ -159,6 +159,7 @@ func (h *SettingsHandler) PostSettings(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write([]byte(`{"success": true}`))
 	if err != nil {
+		log.Printf("SettingsHandler: Failed to write response: %v", err)
 		return
 	}
 }
