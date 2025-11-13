@@ -21,12 +21,12 @@ var _ server.Extension = (*specialUseExtension)(nil)
 type specialUseExtension struct{}
 
 // Capabilities returns the SPECIAL-USE capability.
-func (e *specialUseExtension) Capabilities(c server.Conn) []string {
+func (e *specialUseExtension) Capabilities(server.Conn) []string {
 	return []string{"SPECIAL-USE"}
 }
 
 // Command returns nil (no custom commands needed for SPECIAL-USE).
-func (e *specialUseExtension) Command(name string) server.HandlerFactory {
+func (e *specialUseExtension) Command(string) server.HandlerFactory {
 	return nil
 }
 
@@ -452,7 +452,7 @@ Test message body.
 }
 
 // CreateFolderWithSpecialUse creates a folder with SPECIAL-USE attributes (non-test context).
-func (s *TestIMAPServer) CreateFolderWithSpecialUse(folderName string, specialUseAttr string) error {
+func (s *TestIMAPServer) CreateFolderWithSpecialUse(folderName string) error {
 	client, err := s.ConnectForE2E()
 	if err != nil {
 		return fmt.Errorf("failed to connect: %w", err)
