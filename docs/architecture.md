@@ -98,6 +98,42 @@ It communicates with the IMAP and the SMTP server and uses a **Postgres** databa
 * **Testing:** [`github.com/ory/dockertest`](https://github.com/ory/dockertest)
     * Useful for integration tests to spin up real Postgres containers.
 
+### Domains
+
+#### Auth
+
+The auth domain handles authentication and authorization for the V-Mail API.
+
+**Components:**
+
+* **`internal/api/auth_handler.go`**: HTTP handler for the `/api/v1/auth/status` endpoint.
+  * `GetAuthStatus`: Returns authentication and setup status for the current user.
+  * Checks if the user has completed onboarding by verifying user settings exist in the database.
+
+* **`internal/auth/middleware.go`**: Authentication middleware.
+  * `RequireAuth`: HTTP middleware that validates Bearer tokens in the Authorization header.
+  * `ValidateToken`: Validates Authelia JWT tokens and extracts the user's email (currently a stub for development).
+  * `GetUserEmailFromContext`: Helper to extract the authenticated user's email from the request context.
+
+* **`internal/db/user.go`**: Database operations for users.
+  * `GetOrCreateUser`: Gets or creates a user record by email address.
+
+* **`internal/db/user_settings.go`**: Database operations for user settings.
+  * `UserSettingsExist`: Checks if user settings exist for a given user ID.
+
+**Flow:**
+
+1. Frontend sends API requests with a Bearer token in the Authorization header.
+2. `RequireAuth` middleware validates the token and extracts the user's email.
+3. The email is stored in the request context for use by handlers.
+4. Handlers use `GetUserEmailFromContext` to retrieve the authenticated user's email.
+5. The auth handler checks if the user has completed setup by querying for user settings.
+
+**Current limitations:**
+
+* `ValidateToken` is a stub that always returns "test@example.com" in production mode. It must be implemented to actually validate Authelia JWT tokens before deployment.
+* In test mode (`VMAIL_TEST_MODE=true`), tokens can be prefixed with "email:" to specify the test user email.
+
 ### REST API
 
 **Base path:** `/api/v1`
@@ -105,7 +141,9 @@ It communicates with the IMAP and the SMTP server and uses a **Postgres** databa
 **Thread ID:** The `thread_id` we use in the API (e.g., `/api/v1/thread/{thread_id}`) is a stable,
 unique identifier, such as the `Message-ID` header of the root/first message in the thread.
 
-* [x] `GET /auth/status`: Checks the Authelia token and tells the front end if the user is authenticated, and has
+(The checked items are implemented)
+
+* [x] `GET /auth/status`: Checks the Authelia token and tells the front end if the user has
   completed the setup/onboarding.
     * Response: `{"isSetupComplete": false}`.
     * `isSetupComplete: false` tells the React app to redirect to the `/settings` page for onboarding.
