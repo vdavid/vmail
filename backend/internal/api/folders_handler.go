@@ -83,7 +83,8 @@ func (h *FoldersHandler) getUserSettingsAndPassword(ctx context.Context, w http.
 	return settings, imapPassword, true
 }
 
-// getIMAPClient gets an IMAP client, handling connection errors.
+// getIMAPClient gets an IMAP client from the pool, handling connection errors.
+// Returns a user-friendly error message for timeout errors to help users troubleshoot.
 func (h *FoldersHandler) getIMAPClient(w http.ResponseWriter, userID string, settings *models.UserSettings, imapPassword string) (imap.IMAPClient, bool) {
 	client, err := h.imapPool.GetClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
 	if err != nil {
@@ -126,14 +127,16 @@ func (h *FoldersHandler) handleListFoldersError(w http.ResponseWriter, userID st
 	return nil, false
 }
 
-// isBrokenConnectionError checks if the error indicates a broken connection.
+// isBrokenConnectionError checks if the error message indicates a broken connection
+// that can be recovered by retrying with a fresh IMAP client.
 func (h *FoldersHandler) isBrokenConnectionError(errMsg string) bool {
 	return strings.Contains(errMsg, "broken pipe") ||
 		strings.Contains(errMsg, "connection reset") ||
 		strings.Contains(errMsg, "EOF")
 }
 
-// retryListFolders retries listing folders after removing the broken connection.
+// retryListFolders retries listing folders after removing the broken connection from the pool.
+// This handles transient connection issues by getting a fresh IMAP client and retrying the operation.
 func (h *FoldersHandler) retryListFolders(w http.ResponseWriter, userID string, settings *models.UserSettings, imapPassword string) ([]*models.Folder, bool) {
 	h.imapPool.RemoveClient(userID)
 
