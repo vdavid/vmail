@@ -107,7 +107,7 @@ unique identifier, such as the `Message-ID` header of the root/first message in 
 
 * [x] `GET /auth/status`: Checks the Authelia token and tells the front end if the user is authenticated, and has
   completed the setup/onboarding.
-    * Response: `{"isAuthenticated": true, "isSetupComplete": false}`.
+    * Response: `{"isSetupComplete": false}`.
     * `isSetupComplete: false` tells the React app to redirect to the `/settings` page for onboarding.
 * [ ] `GET /folders`: List all IMAP folders (Inbox, Sent, etc.).
 * [ ] `GET /threads?folder=Inbox&page=1&limit=100`: Get paginated threads for a folder.

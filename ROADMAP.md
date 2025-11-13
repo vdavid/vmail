@@ -805,7 +805,7 @@ Done! 🎉 It works nicely. It's in `/backend/cmd/spike`. See `/backend/README.m
     * Create its handler function. This function should:
         * (For now) Assume auth is okay.
         * Check if a row exists in `user_settings` for this user.
-        * Return `{"isAuthenticated": true, "isSetupComplete": [true/false]}`.
+        * Return `{"isSetupComplete": [true/false]}`.
 * [x] **Create API: <code>settings</code> endpoints:**
     * In `/backend/internal/db`, create `user_settings.go`. Add `GetUserSettings(userID string)` and `SaveUserSettings(settings UserSettings)` functions.
     * Add the `GET /api/v1/settings` route and handler. It should call `GetUserSettings` and return the data (without passwords).

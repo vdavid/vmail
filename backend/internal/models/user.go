@@ -58,6 +58,5 @@ type UserSettingsResponse struct {
 
 // AuthStatusResponse represents the authentication and setup status of a user.
 type AuthStatusResponse struct {
-	IsAuthenticated bool `json:"isAuthenticated"`
 	IsSetupComplete bool `json:"isSetupComplete"`
 }

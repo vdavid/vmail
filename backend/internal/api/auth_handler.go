@@ -41,7 +41,6 @@ func (h *AuthHandler) GetAuthStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := models.AuthStatusResponse{
-		IsAuthenticated: true, // TODO: Check if user is authenticated
 		IsSetupComplete: isSetupComplete,
 	}
 

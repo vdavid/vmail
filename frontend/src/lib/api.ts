@@ -37,7 +37,6 @@ export function decodeThreadIdFromUrl(encoded: string): string {
 }
 
 export interface AuthStatus {
-    isAuthenticated: boolean
     isSetupComplete: boolean
 }
 
