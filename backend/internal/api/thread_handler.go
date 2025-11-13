@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/vdavid/vmail/backend/internal/auth"
 	"github.com/vdavid/vmail/backend/internal/crypto"
 	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/imap"
@@ -129,7 +128,7 @@ func convertMessagesToThreadMessages(messages []*models.Message) []models.Messag
 func (h *ThreadHandler) GetThread(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	userID, ok := h.getUserIDFromContext(ctx, w)
+	userID, ok := GetUserIDFromContext(ctx, w, h.pool)
 	if !ok {
 		return
 	}
@@ -193,22 +192,4 @@ func (h *ThreadHandler) GetThread(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-}
-
-func (h *ThreadHandler) getUserIDFromContext(ctx context.Context, w http.ResponseWriter) (string, bool) {
-	email, ok := auth.GetUserEmailFromContext(ctx)
-	if !ok {
-		log.Println("ThreadHandler: No user email in context")
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return "", false
-	}
-
-	userID, err := db.GetOrCreateUser(ctx, h.pool, email)
-	if err != nil {
-		log.Printf("ThreadHandler: Failed to get/create user: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return "", false
-	}
-
-	return userID, true
 }
