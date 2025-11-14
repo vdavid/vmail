@@ -15,6 +15,8 @@ type contextKey string
 const UserEmailKey contextKey = "user_email"
 
 // RequireAuth middleware checks for a valid bearer token in the Authorization header.
+// It extracts the token, validates it, and stores the user's email in the request context
+// for use by downstream handlers. Returns 401 Unauthorized if authentication fails.
 func RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
@@ -25,14 +27,31 @@ func RequireAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
+		// Parse Authorization header: "Bearer <token>" (RFC 7235)
+		// Use strings.Fields to handle multiple spaces and trim whitespace
+		// Bearer scheme is case-insensitive per RFC 7235
+		fields := strings.Fields(authHeader)
+		if len(fields) < 2 {
 			log.Println("Auth: Invalid Authorization header format")
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		token := parts[1]
+		// Check if the scheme is "Bearer" (case-insensitive)
+		if !strings.EqualFold(fields[0], "Bearer") {
+			log.Println("Auth: Invalid Authorization header format")
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Join remaining fields to handle tokens that may contain spaces
+		// (though typically tokens don't, this is more robust)
+		token := strings.TrimSpace(strings.Join(fields[1:], " "))
+		if token == "" {
+			log.Println("Auth: Empty token after Bearer")
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
 
 		userEmail, err := ValidateToken(token)
 		if err != nil {
