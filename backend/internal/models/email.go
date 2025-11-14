@@ -57,3 +57,16 @@ type Attachment struct {
 	IsInline  bool   `json:"is_inline"`
 	ContentID string `json:"content_id,omitempty"`
 }
+
+// ThreadsResponse represents the paginated response for thread listings.
+type ThreadsResponse struct {
+	Threads    []*Thread      `json:"threads"`
+	Pagination PaginationInfo `json:"pagination"`
+}
+
+// PaginationInfo contains pagination metadata for list responses.
+type PaginationInfo struct {
+	TotalCount int `json:"total_count"`
+	Page       int `json:"page"`
+	PerPage    int `json:"per_page"`
+}

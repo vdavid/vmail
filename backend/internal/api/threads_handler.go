@@ -83,22 +83,12 @@ func (h *ThreadsHandler) syncFolderIfNeeded(ctx context.Context, userID, folder 
 	}
 }
 
-// buildPaginationResponse builds the pagination response structure.
-func buildPaginationResponse(threads []*models.Thread, totalCount, page, limit int) interface{} {
-	return struct {
-		Threads    []*models.Thread `json:"threads"`
-		Pagination struct {
-			TotalCount int `json:"total_count"`
-			Page       int `json:"page"`
-			PerPage    int `json:"per_page"`
-		} `json:"pagination"`
-	}{
+// BuildPaginationResponse builds the pagination response structure.
+// This is a shared helper function used by multiple handlers for consistent response formatting.
+func BuildPaginationResponse(threads []*models.Thread, totalCount, page, limit int) *models.ThreadsResponse {
+	return &models.ThreadsResponse{
 		Threads: threads,
-		Pagination: struct {
-			TotalCount int `json:"total_count"`
-			Page       int `json:"page"`
-			PerPage    int `json:"per_page"`
-		}{
+		Pagination: models.PaginationInfo{
 			TotalCount: totalCount,
 			Page:       page,
 			PerPage:    limit,
