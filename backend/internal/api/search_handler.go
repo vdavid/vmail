@@ -43,7 +43,7 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 	// Empty query means return all emails
 
 	// Get pagination params
-	page, limitFromQuery := parsePaginationParams(r, 100)
+	page, limitFromQuery := ParsePaginationParams(r, 100)
 	limit := h.getPaginationLimit(ctx, userID, limitFromQuery)
 
 	// Call IMAP service search
@@ -61,7 +61,7 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build and send the response
-	response := buildPaginationResponse(threads, totalCount, page, limit)
+	response := BuildPaginationResponse(threads, totalCount, page, limit)
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("SearchHandler: Failed to encode response: %v", err)
