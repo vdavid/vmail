@@ -17,7 +17,7 @@ import (
 // ThreadsHandler handles thread-list-related API requests.
 type ThreadsHandler struct {
 	pool        *pgxpool.Pool
-	encryptor   *crypto.Encryptor
+	encryptor   *crypto.Encryptor // Not used directly, but required by imapService
 	imapService imap.IMAPService
 }
 
@@ -31,6 +31,8 @@ func NewThreadsHandler(pool *pgxpool.Pool, encryptor *crypto.Encryptor, imapServ
 }
 
 // getPaginationLimit gets the pagination limit, using user settings if available.
+// If a limit is provided in the query, it takes precedence. Otherwise, uses the user's
+// setting from the database, or defaults to 100 if settings are not found.
 func (h *ThreadsHandler) getPaginationLimit(ctx context.Context, userID string, limitFromQuery int) int {
 	if limitFromQuery > 0 {
 		return limitFromQuery
@@ -47,6 +49,8 @@ func (h *ThreadsHandler) getPaginationLimit(ctx context.Context, userID string, 
 }
 
 // syncFolderIfNeeded checks if the folder needs syncing and syncs if necessary.
+// If the sync check fails or sync itself fails, it logs the error but continues
+// to return cached data, ensuring the request doesn't fail due to sync issues.
 func (h *ThreadsHandler) syncFolderIfNeeded(ctx context.Context, userID, folder string) {
 	shouldSync, err := h.imapService.ShouldSyncFolder(ctx, userID, folder)
 	if err != nil {

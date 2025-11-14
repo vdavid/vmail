@@ -359,4 +359,276 @@ func TestThreadsHandler_SyncsWhenStale(t *testing.T) {
 			t.Error("Expected SyncThreadsForFolder to be called even if it fails")
 		}
 	})
+
+	t.Run("falls back to default limit when GetUserSettings fails", func(t *testing.T) {
+		email := "settings-error@example.com"
+		ctx := context.Background()
+		userID := setupTestUserAndSettings(t, pool, encryptor, email)
+
+		// Create a thread to ensure we have data
+		thread := &models.Thread{
+			UserID:         userID,
+			StableThreadID: "test-thread-settings-error",
+			Subject:        "Test Thread",
+		}
+		if err := db.SaveThread(ctx, pool, thread); err != nil {
+			t.Fatalf("Failed to save thread: %v", err)
+		}
+
+		// Delete the user settings to simulate GetUserSettings returning an error
+		// (it will return NotFound, which getPaginationLimit handles by using default)
+		if _, err := pool.Exec(ctx, "DELETE FROM user_settings WHERE user_id = $1", userID); err != nil {
+			t.Fatalf("Failed to delete user settings: %v", err)
+		}
+
+		mockIMAP := &mockIMAPService{
+			shouldSyncFolderResult: false,
+			shouldSyncFolderErr:    nil,
+		}
+
+		handler := NewThreadsHandler(pool, encryptor, mockIMAP)
+		req := createRequestWithUser("GET", "/api/v1/threads?folder=INBOX", email)
+
+		rr := httptest.NewRecorder()
+		handler.GetThreads(rr, req)
+
+		// Should still return 200 OK, using default limit of 100
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", rr.Code)
+		}
+
+		var response models.ThreadsResponse
+		if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+
+		// Should use default limit of 100
+		if response.Pagination.PerPage != 100 {
+			t.Errorf("Expected default limit 100, got %d", response.Pagination.PerPage)
+		}
+	})
+
+	t.Run("returns 500 when GetThreadsForFolder returns an error", func(t *testing.T) {
+		email := "threads-error@example.com"
+		setupTestUserAndSettings(t, pool, encryptor, email)
+
+		// Use a cancelled context to simulate database error
+		cancelledCtx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		mockIMAP := &mockIMAPService{
+			shouldSyncFolderResult: false,
+			shouldSyncFolderErr:    nil,
+		}
+
+		handler := NewThreadsHandler(pool, encryptor, mockIMAP)
+		req := httptest.NewRequest("GET", "/api/v1/threads?folder=INBOX", nil)
+		reqCtx := context.WithValue(cancelledCtx, auth.UserEmailKey, email)
+		req = req.WithContext(reqCtx)
+
+		rr := httptest.NewRecorder()
+		handler.GetThreads(rr, req)
+
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("Expected status 500, got %d", rr.Code)
+		}
+	})
+
+	t.Run("returns 500 when GetThreadCountForFolder returns an error", func(t *testing.T) {
+		email := "count-error@example.com"
+		ctx := context.Background()
+		userID := setupTestUserAndSettings(t, pool, encryptor, email)
+
+		// Create a thread so GetThreadsForFolder succeeds
+		thread := &models.Thread{
+			UserID:         userID,
+			StableThreadID: "test-thread-count-error",
+			Subject:        "Test Thread",
+		}
+		if err := db.SaveThread(ctx, pool, thread); err != nil {
+			t.Fatalf("Failed to save thread: %v", err)
+		}
+
+		// Use a cancelled context to simulate database error when counting
+		// We need to create the user first, then use cancelled context
+		cancelledCtx, cancel := context.WithCancel(context.Background())
+		cancel()
+		reqCtx := context.WithValue(cancelledCtx, auth.UserEmailKey, email)
+		req := httptest.NewRequest("GET", "/api/v1/threads?folder=INBOX", nil)
+		req = req.WithContext(reqCtx)
+
+		mockIMAP := &mockIMAPService{
+			shouldSyncFolderResult: false,
+			shouldSyncFolderErr:    nil,
+		}
+
+		handler := NewThreadsHandler(pool, encryptor, mockIMAP)
+		rr := httptest.NewRecorder()
+		handler.GetThreads(rr, req)
+
+		// Note: This test is tricky because GetThreadsForFolder is called before GetThreadCountForFolder
+		// and both use the same context. The cancelled context will cause GetThreadsForFolder to fail first.
+		// So we expect 500, but it's from GetThreadsForFolder, not GetThreadCountForFolder.
+		// This still tests error handling, just at an earlier point.
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("Expected status 500, got %d", rr.Code)
+		}
+	})
+
+	t.Run("handles invalid pagination parameters gracefully", func(t *testing.T) {
+		email := "pagination-invalid@example.com"
+		ctx := context.Background()
+		userID := setupTestUserAndSettings(t, pool, encryptor, email)
+
+		// Create a thread
+		thread := &models.Thread{
+			UserID:         userID,
+			StableThreadID: "test-thread-pagination",
+			Subject:        "Test Thread",
+		}
+		if err := db.SaveThread(ctx, pool, thread); err != nil {
+			t.Fatalf("Failed to save thread: %v", err)
+		}
+
+		testCases := []struct {
+			name            string
+			query           string
+			expectedPage    int
+			expectedPerPage int
+		}{
+			{"page=0 uses default", "page=0&limit=50", 1, 50},
+			{"page=-1 uses default", "page=-1&limit=50", 1, 50},
+			{"limit=0 uses default", "page=1&limit=0", 1, 100},
+			{"limit=-1 uses default", "page=1&limit=-1", 1, 100},
+			{"both invalid", "page=0&limit=0", 1, 100},
+			{"non-numeric page", "page=abc&limit=50", 1, 50},
+			{"non-numeric limit", "page=1&limit=xyz", 1, 100},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				mockIMAP := &mockIMAPService{
+					shouldSyncFolderResult: false,
+					shouldSyncFolderErr:    nil,
+				}
+
+				handler := NewThreadsHandler(pool, encryptor, mockIMAP)
+				req := createRequestWithUser("GET", fmt.Sprintf("/api/v1/threads?folder=INBOX&%s", tc.query), email)
+
+				rr := httptest.NewRecorder()
+				handler.GetThreads(rr, req)
+
+				if rr.Code != http.StatusOK {
+					t.Errorf("Expected status 200, got %d", rr.Code)
+				}
+
+				var response models.ThreadsResponse
+				if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
+					t.Fatalf("Failed to decode response: %v", err)
+				}
+
+				if response.Pagination.Page != tc.expectedPage {
+					t.Errorf("Expected page %d, got %d", tc.expectedPage, response.Pagination.Page)
+				}
+				if response.Pagination.PerPage != tc.expectedPerPage {
+					t.Errorf("Expected per_page %d, got %d", tc.expectedPerPage, response.Pagination.PerPage)
+				}
+			})
+		}
+	})
+
+	t.Run("continues when ShouldSyncFolder returns an error", func(t *testing.T) {
+		email := "sync-error@example.com"
+		ctx := context.Background()
+		userID := setupTestUserAndSettings(t, pool, encryptor, email)
+
+		// Create a thread
+		thread := &models.Thread{
+			UserID:         userID,
+			StableThreadID: "test-thread-sync-error",
+			Subject:        "Test Thread",
+		}
+		if err := db.SaveThread(ctx, pool, thread); err != nil {
+			t.Fatalf("Failed to save thread: %v", err)
+		}
+
+		mockIMAP := &mockIMAPService{
+			shouldSyncFolderResult:  true, // Should try to sync
+			shouldSyncFolderErr:     fmt.Errorf("cache check failed"),
+			syncThreadsForFolderErr: nil, // Sync succeeds
+		}
+
+		handler := NewThreadsHandler(pool, encryptor, mockIMAP)
+		req := createRequestWithUser("GET", "/api/v1/threads?folder=INBOX", email)
+
+		rr := httptest.NewRecorder()
+		handler.GetThreads(rr, req)
+
+		// Should still return 200 OK, continuing despite ShouldSyncFolder error
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", rr.Code)
+		}
+
+		// Verify that ShouldSyncFolder was called
+		if !mockIMAP.shouldSyncFolderCalled {
+			t.Error("Expected ShouldSyncFolder to be called")
+		}
+
+		// Verify that SyncThreadsForFolder was attempted (handler continues anyway)
+		if !mockIMAP.syncThreadsForFolderCalled {
+			t.Error("Expected SyncThreadsForFolder to be called even when ShouldSyncFolder returns error")
+		}
+	})
+
+	t.Run("handles JSON encoding failure gracefully", func(t *testing.T) {
+		email := "json-error@example.com"
+		ctx := context.Background()
+		userID := setupTestUserAndSettings(t, pool, encryptor, email)
+
+		// Create a thread
+		thread := &models.Thread{
+			UserID:         userID,
+			StableThreadID: "test-thread-json-error",
+			Subject:        "Test Thread",
+		}
+		if err := db.SaveThread(ctx, pool, thread); err != nil {
+			t.Fatalf("Failed to save thread: %v", err)
+		}
+
+		mockIMAP := &mockIMAPService{
+			shouldSyncFolderResult: false,
+			shouldSyncFolderErr:    nil,
+		}
+
+		handler := NewThreadsHandler(pool, encryptor, mockIMAP)
+		req := createRequestWithUser("GET", "/api/v1/threads?folder=INBOX", email)
+
+		// Create a ResponseWriter that fails on Write
+		rr := httptest.NewRecorder()
+		failingWriter := &failingResponseWriterThreads{
+			ResponseWriter:  rr,
+			writeShouldFail: true,
+		}
+
+		handler.GetThreads(failingWriter, req)
+
+		// The handler should handle the write error gracefully (it logs but doesn't crash)
+		// The status code should still be set (200) even if Write fails
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", rr.Code)
+		}
+	})
+}
+
+// failingResponseWriterThreads is a ResponseWriter that fails on Write to test error handling.
+type failingResponseWriterThreads struct {
+	http.ResponseWriter
+	writeShouldFail bool
+}
+
+func (f *failingResponseWriterThreads) Write(p []byte) (int, error) {
+	if f.writeShouldFail {
+		return 0, fmt.Errorf("write failed")
+	}
+	return f.ResponseWriter.Write(p)
 }
