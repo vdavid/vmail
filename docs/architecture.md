@@ -249,6 +249,55 @@ The folders domain handles listing IMAP folders for the authenticated user.
 * Requires IMAP server support for SPECIAL-USE extension (RFC 6154) to identify folder roles.
 * Uses the IMAP connection pool to manage client connections efficiently.
 
+#### Threads
+
+The threads domain handles listing email threads for a folder with pagination support.
+
+**Components:**
+
+* **`internal/api/threads_handler.go`**: HTTP handler for the `/api/v1/threads` endpoint.
+  * `GetThreads`: Returns a paginated list of email threads for a folder.
+  * `parsePaginationParams`: Parses page and limit query parameters with validation.
+  * `getPaginationLimit`: Gets pagination limit from user settings or defaults.
+  * `syncFolderIfNeeded`: Checks if folder needs syncing and syncs if necessary.
+  * `buildPaginationResponse`: Builds the paginated response structure.
+
+* **`internal/db/threads.go`**: Database operations for threads.
+  * `GetThreadsForFolder`: Retrieves paginated threads for a folder.
+  * `GetThreadCountForFolder`: Gets the total count of threads for pagination.
+  * `SaveThread`: Saves or updates a thread in the database.
+
+**Flow:**
+
+1. Handler extracts user ID from request context.
+2. Validates that the `folder` query parameter is provided.
+3. Parses pagination parameters (page, limit) from query string.
+4. Gets pagination limit from user settings if not provided in query.
+5. Checks if folder needs syncing and syncs from IMAP if stale.
+6. Retrieves threads from the database with pagination.
+7. Gets total thread count for pagination metadata.
+8. Returns paginated response with threads and pagination info.
+
+**Pagination:**
+
+* Default page: 1
+* Default limit: User's setting from `PaginationThreadsPerPage`, or 100 if not set.
+* Query parameters: `page` and `limit` can override defaults.
+* Invalid values (non-positive numbers) fall back to defaults.
+
+**Sync behavior:**
+
+* Automatically checks if folder cache is stale before returning threads.
+* If stale, syncs from IMAP server in the background.
+* If sync fails, continues and returns cached data (graceful degradation).
+* Sync errors are logged but don't fail the request.
+
+**Error handling:**
+
+* Returns 400 if folder parameter is missing.
+* Returns 500 for database errors (getting threads or count).
+* Returns 500 for JSON encoding errors.
+
 #### Settings
 
 The settings domain handles user settings management, including IMAP/SMTP credentials and application preferences.
@@ -313,7 +362,10 @@ unique identifier, such as the `Message-ID` header of the root/first message in 
 * [x] `GET /folders`: List all IMAP folders (Inbox, Sent, etc.).
     * Response: Array of folder objects with `name` and `role` fields.
     * Folders are sorted by role priority (inbox, sent, drafts, spam, trash, archive, other), then alphabetically within the same role.
-* [ ] `GET /threads?folder=Inbox&page=1&limit=100`: Get paginated threads for a folder.
+* [x] `GET /threads?folder=Inbox&page=1&limit=100`: Get paginated threads for a folder.
+    * Response: `{"threads": [...], "pagination": {"total_count": 100, "page": 1, "per_page": 100}}`.
+    * Automatically syncs the folder from IMAP if the cache is stale.
+    * Uses user's pagination setting from settings if no limit is provided.
 * [ ] `GET /threads/search?q=from:george&page=1`: Get paginated search results.
 * [ ] `GET /thread/{thread_id}`: Get all messages and content for one thread.
 * [ ] `GET /message/{message_id}/attachment/{attachment_id}`: Download an attachment.
