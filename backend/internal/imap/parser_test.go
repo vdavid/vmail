@@ -199,4 +199,125 @@ func TestParseMessage(t *testing.T) {
 			t.Error("Expected message to not be marked as read")
 		}
 	})
+
+	t.Run("handles message without Message-ID", func(t *testing.T) {
+		imapMsg := &imap.Message{
+			Uid:   300,
+			Flags: []string{},
+			Envelope: &imap.Envelope{
+				// No MessageId
+				Subject: "Test Subject",
+			},
+		}
+
+		msg, err := ParseMessage(imapMsg, "thread-id", "user-id", "INBOX")
+		if err != nil {
+			t.Fatalf("ParseMessage failed: %v", err)
+		}
+
+		if msg.MessageIDHeader != "" {
+			t.Errorf("Expected empty MessageIDHeader, got %s", msg.MessageIDHeader)
+		}
+		if msg.Subject != "Test Subject" {
+			t.Errorf("Expected Subject 'Test Subject', got %s", msg.Subject)
+		}
+	})
+
+	t.Run("handles message with empty body", func(t *testing.T) {
+		imapMsg := &imap.Message{
+			Uid:   400,
+			Flags: []string{},
+			Envelope: &imap.Envelope{
+				MessageId: "<empty-body@example.com>",
+			},
+			// No Body or BodyStructure
+		}
+
+		msg, err := ParseMessage(imapMsg, "thread-id", "user-id", "INBOX")
+		if err != nil {
+			t.Fatalf("ParseMessage failed: %v", err)
+		}
+
+		if msg.UnsafeBodyHTML != "" {
+			t.Errorf("Expected empty body HTML, got %s", msg.UnsafeBodyHTML)
+		}
+		if msg.BodyText != "" {
+			t.Errorf("Expected empty body text, got %s", msg.BodyText)
+		}
+	})
+
+	t.Run("handles body parsing errors gracefully", func(t *testing.T) {
+		// Create a message with invalid body structure
+		imapMsg := &imap.Message{
+			Uid:   500,
+			Flags: []string{},
+			Envelope: &imap.Envelope{
+				MessageId: "<invalid-body@example.com>",
+				Subject:   "Test Subject",
+			},
+			BodyStructure: &imap.BodyStructure{
+				MIMEType:    "text",
+				MIMESubType: "plain",
+			},
+			// Body is nil, which will cause parseBody to fail, but ParseMessage should continue
+		}
+
+		msg, err := ParseMessage(imapMsg, "thread-id", "user-id", "INBOX")
+		if err != nil {
+			t.Fatalf("ParseMessage should not fail on body parsing errors: %v", err)
+		}
+
+		// Should still have headers even if body parsing failed
+		if msg.Subject != "Test Subject" {
+			t.Errorf("Expected Subject 'Test Subject', got %s", msg.Subject)
+		}
+		if msg.MessageIDHeader != "<invalid-body@example.com>" {
+			t.Errorf("Expected MessageIDHeader '<invalid-body@example.com>', got %s", msg.MessageIDHeader)
+		}
+	})
+
+	t.Run("handles message with attachments", func(t *testing.T) {
+		// Note: Testing attachments requires a properly formatted MIME message
+		// For now, we test that the function handles messages with BodyStructure
+		// that indicates attachments. Full attachment parsing is tested through
+		// integration tests with real IMAP messages.
+		imapMsg := &imap.Message{
+			Uid:   600,
+			Flags: []string{},
+			Envelope: &imap.Envelope{
+				MessageId: "<with-attachments@example.com>",
+				Subject:   "Test with Attachments",
+			},
+			BodyStructure: &imap.BodyStructure{
+				MIMEType:    "multipart",
+				MIMESubType: "mixed",
+				Parts: []*imap.BodyStructure{
+					{
+						MIMEType:    "text",
+						MIMESubType: "plain",
+					},
+					{
+						MIMEType:    "application",
+						MIMESubType: "pdf",
+						Disposition: "attachment",
+						DispositionParams: map[string]string{
+							"filename": "test.pdf",
+						},
+					},
+				},
+			},
+		}
+
+		msg, err := ParseMessage(imapMsg, "thread-id", "user-id", "INBOX")
+		if err != nil {
+			t.Fatalf("ParseMessage failed: %v", err)
+		}
+
+		// Message should be parsed successfully
+		if msg.Subject != "Test with Attachments" {
+			t.Errorf("Expected Subject 'Test with Attachments', got %s", msg.Subject)
+		}
+		// Attachments would be parsed from the body if Body is available
+		// This is tested through integration tests
+	})
 }

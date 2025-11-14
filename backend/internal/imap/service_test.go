@@ -193,3 +193,48 @@ func TestGetFolderSyncInfoWithUID(t *testing.T) {
 // - performFullSync: Requires mock IMAP client with THREAD command
 // - processIncrementalMessage: Can be tested with mock IMAP message
 // - SearchUIDsSince: Requires mock IMAP client
+
+func TestService_updateThreadCountInBackground(t *testing.T) {
+	pool := testutil.NewTestDB(t)
+	defer pool.Close()
+
+	encryptor := getTestEncryptor(t)
+	service := NewService(pool, encryptor)
+	defer service.Close()
+
+	ctx := context.Background()
+	userID, err := db.GetOrCreateUser(ctx, pool, "thread-count-test@example.com")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	folderName := "INBOX"
+
+	t.Run("handles database error gracefully", func(t *testing.T) {
+		// Test that updateThreadCountInBackground handles database errors gracefully
+		// by using an invalid userID that will cause UpdateThreadCount to fail
+		// (it will try to update a non-existent folder_sync_timestamps row)
+		invalidUserID := "00000000-0000-0000-0000-000000000000"
+
+		// The function should log a warning but not crash
+		service.updateThreadCountInBackground(invalidUserID, "NonExistentFolder")
+
+		// Give the goroutine time to complete
+		time.Sleep(200 * time.Millisecond)
+
+		// Test should complete without panicking
+		// If there's a panic, the test will fail
+		// The function logs a warning for database errors, which is the expected behavior
+	})
+
+	t.Run("succeeds with valid database connection", func(t *testing.T) {
+		// Test that the function works correctly with a valid connection
+		service.updateThreadCountInBackground(userID, folderName)
+
+		// Give the goroutine time to complete
+		time.Sleep(100 * time.Millisecond)
+
+		// Test should complete without panicking
+		// If there's a panic, the test will fail
+	})
+}
