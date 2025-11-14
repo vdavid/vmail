@@ -81,13 +81,20 @@ func (h *ThreadHandler) syncMissingBodies(ctx context.Context, userID string, me
 	}
 
 	// Re-fetch all synced messages to get updated bodies
+	// Log warnings for messages that couldn't be refreshed after sync
+	var failedMessages []string
 	for _, msgToSync := range messagesToSync {
 		updatedMsg, err := db.GetMessageByUID(ctx, h.pool, userID, msgToSync.FolderName, msgToSync.IMAPUID)
 		if err == nil {
 			if idx, found := messageUIDToIndex[msgToSync.IMAPUID]; found {
 				messages[idx] = updatedMsg
 			}
+		} else {
+			failedMessages = append(failedMessages, fmt.Sprintf("%s:%d", msgToSync.FolderName, msgToSync.IMAPUID))
 		}
+	}
+	if len(failedMessages) > 0 {
+		log.Printf("ThreadHandler: Warning: %d message(s) couldn't be refreshed after sync: %v", len(failedMessages), failedMessages)
 	}
 }
 
