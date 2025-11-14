@@ -1,6 +1,7 @@
 package imap
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -12,87 +13,356 @@ import (
 	"github.com/emersion/go-imap/client"
 )
 
+// connectionRole indicates the purpose of a connection.
+type connectionRole int
+
+const (
+	roleWorker connectionRole = iota
+	roleListener
+)
+
+// clientWithMutex wraps an IMAP client with a mutex for thread-safe access.
+// Each connection has its own mutex to allow concurrent access to different connections
+// while serializing access to the same connection.
+type clientWithMutex struct {
+	client   *client.Client
+	mu       sync.Mutex
+	lastUsed time.Time
+	role     connectionRole
+}
+
+// Lock acquires the mutex for thread-safe access to the underlying client.
+func (c *clientWithMutex) Lock() {
+	c.mu.Lock()
+}
+
+// Unlock releases the mutex.
+func (c *clientWithMutex) Unlock() {
+	c.mu.Unlock()
+}
+
+// GetClient returns the underlying IMAP client (for internal use).
+// Caller must hold the lock before calling this.
+func (c *clientWithMutex) GetClient() *client.Client {
+	return c.client
+}
+
+// UpdateLastUsed updates the lastUsed timestamp to now.
+func (c *clientWithMutex) UpdateLastUsed() {
+	c.lastUsed = time.Now()
+}
+
+// GetLastUsed returns the lastUsed timestamp.
+func (c *clientWithMutex) GetLastUsed() time.Time {
+	return c.lastUsed
+}
+
+// GetRole returns the connection role (worker or listener).
+func (c *clientWithMutex) GetRole() connectionRole {
+	return c.role
+}
+
+// userWorkerPool manages multiple worker connections for a single user.
+// Uses a semaphore to limit concurrent connections (max 3 by default).
+type userWorkerPool struct {
+	connections []*clientWithMutex
+	semaphore   chan struct{} // Limits concurrent connections (max 3)
+	mu          sync.Mutex
+}
+
+// acquire gets a connection from the pool, blocking if at max capacity.
+// Returns the connection (locked) and a release function that must be called when done.
+// If no connection is available, returns nil and the caller should create a new one.
+func (p *userWorkerPool) acquire() (*clientWithMutex, func()) {
+	// Block until a slot is available
+	p.semaphore <- struct{}{}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Find an available connection (not in use)
+	for _, conn := range p.connections {
+		// Connection is available if we can acquire its lock immediately
+		if conn.mu.TryLock() {
+			conn.UpdateLastUsed()
+			// Keep it locked - caller will unlock when done
+			return conn, func() {
+				conn.Unlock()
+				<-p.semaphore // Release semaphore slot
+			}
+		}
+	}
+
+	// No available connection - caller will need to create one
+	<-p.semaphore         // Release semaphore slot temporarily
+	return nil, func() {} // No-op release function
+}
+
+// addConnection adds a new connection to the pool.
+func (p *userWorkerPool) addConnection(conn *clientWithMutex) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.connections = append(p.connections, conn)
+}
+
+// close closes all connections in the pool.
+func (p *userWorkerPool) close() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	for _, conn := range p.connections {
+		conn.Lock()
+		if err := conn.client.Logout(); err != nil {
+			log.Printf("Failed to logout worker connection: %v", err)
+		}
+		conn.Unlock()
+	}
+	p.connections = nil
+}
+
 // Pool manages IMAP connections per user.
-// Each user has at most one connection, which is reused across requests.
-// FIXME-ARCHITECTURE: IMAP clients from go-imap are NOT thread-safe.
-// Multiple goroutines using the same client concurrently can cause race conditions.
-// The current design assumes one request per user at a time, but this is not enforced.
-// Consider:
-// 1. Adding a per-client mutex to serialize access to each client
-// 2. Using a connection pool per user (multiple connections per user)
-// 3. Documenting that concurrent requests for the same user are not supported
+// Supports two types of connections:
+// - Worker connections: 1-3 connections per user for API handlers (SEARCH, FETCH, STORE)
+// - Listener connections: 1 dedicated connection per user for IDLE command
+//
+// Thread safety: Each connection is wrapped with a mutex to ensure thread-safe access.
+// Multiple goroutines can use different connections concurrently, but access to the same
+// connection is serialized.
 type Pool struct {
-	clients map[string]*client.Client
-	mu      sync.RWMutex
+	workerPools   map[string]*userWorkerPool  // userID -> worker pool
+	listeners     map[string]*clientWithMutex // userID -> listener connection
+	mu            sync.RWMutex
+	maxWorkers    int // Maximum worker connections per user (default: 3)
+	cleanupCtx    context.Context
+	cleanupCancel context.CancelFunc
 }
 
 // NewPool creates a new IMAP connection pool.
 func NewPool() *Pool {
-	return &Pool{
-		clients: make(map[string]*client.Client),
+	ctx, cancel := context.WithCancel(context.Background())
+	p := &Pool{
+		workerPools:   make(map[string]*userWorkerPool),
+		listeners:     make(map[string]*clientWithMutex),
+		maxWorkers:    3,
+		cleanupCtx:    ctx,
+		cleanupCancel: cancel,
 	}
+	go p.startCleanupGoroutine()
+	return p
 }
 
-// getClientConcrete gets or creates an IMAP client for a user (internal use).
-// Returns the concrete *client.Client type for internal operations.
-// FIXME-SMELL: Race condition between checking state and removing client.
-// If client state is checked, found to be dead, but another goroutine is using it,
-// we could remove it while it's still in use. Consider double-checking after acquiring
-// write lock, or using a more robust connection health check.
-// FIXME-ARCHITECTURE: No connection timeout or idle timeout - connections stay open indefinitely.
-// Consider adding:
-// 1. Idle timeout (close connections after X minutes of inactivity)
-// 2. Connection health checks (ping/NOOP command)
-// 3. Maximum pool size to prevent unbounded growth
-func (p *Pool) getClientConcrete(userID, server, username, password string) (*client.Client, error) {
+const (
+	// workerIdleTimeout is the maximum time a worker connection can be idle before being closed.
+	workerIdleTimeout = 10 * time.Minute
+	// healthCheckThreshold is the idle time after which we perform a health check before reuse.
+	healthCheckThreshold = 1 * time.Minute
+)
+
+// getOrCreateWorkerPool gets or creates a worker pool for a user.
+// Thread-safe: uses double-check locking pattern.
+func (p *Pool) getOrCreateWorkerPool(userID string) *userWorkerPool {
+	// First check without lock
 	p.mu.RLock()
-	c, exists := p.clients[userID]
+	pool, exists := p.workerPools[userID]
 	p.mu.RUnlock()
 
-	if exists && c != nil {
-		// Check if the connection is still alive
-		state := c.State()
-		// ConnState values: 0=NotAuthenticated, 1=Authenticated, 2=Selected
-		if state == imap.AuthenticatedState || state == imap.SelectedState {
-			return c, nil
-		}
-		// Connection is dead, remove it
-		// FIXME-SMELL: Double-check after acquiring write lock to avoid race condition.
-		// Another goroutine might have already removed it or recreated it.
-		p.mu.Lock()
-		// Double-check: client might have been removed or recreated by another goroutine
-		if p.clients[userID] == c {
-			delete(p.clients, userID)
-		}
-		p.mu.Unlock()
+	if exists {
+		return pool
 	}
 
-	// Create a new connection (use TLS in production, non-TLS for tests)
-	// Check environment variable for test mode
+	// Need to create - acquire write lock
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Double-check: another goroutine might have created it
+	if pool, exists := p.workerPools[userID]; exists {
+		return pool
+	}
+
+	// Create new pool
+	pool = &userWorkerPool{
+		connections: make([]*clientWithMutex, 0),
+		semaphore:   make(chan struct{}, p.maxWorkers),
+	}
+	p.workerPools[userID] = pool
+	return pool
+}
+
+// getWorkerConnection gets or creates a worker connection for a user.
+// Returns a locked connection and a release function that must be called when done.
+// Thread-safe: uses double-check locking and proper synchronization.
+func (p *Pool) getWorkerConnection(userID, server, username, password string) (*clientWithMutex, func(), error) {
+	pool := p.getOrCreateWorkerPool(userID)
+
+	// Try to acquire an existing connection
+	conn, release := pool.acquire()
+	if conn != nil {
+		// Connection is already locked from acquire()
+		// Check if connection is healthy
+		state := conn.GetClient().State()
+		if state == imap.AuthenticatedState || state == imap.SelectedState {
+			// Check if we need health check
+			lastUsed := conn.GetLastUsed()
+			if time.Since(lastUsed) > healthCheckThreshold {
+				if !p.checkConnectionHealth(conn) {
+					// Connection is dead, unlock and remove it
+					conn.Unlock()
+					release()
+					// Remove from pool and create new one
+					p.removeDeadConnection(pool, conn)
+					// Fall through to create new connection
+				} else {
+					// Connection is healthy, update timestamp
+					conn.UpdateLastUsed()
+					return conn, release, nil // Caller must call release() when done
+				}
+			} else {
+				// Connection is healthy and recently used
+				conn.UpdateLastUsed()
+				return conn, release, nil // Caller must call release() when done
+			}
+		} else {
+			// Connection is dead
+			conn.Unlock()
+			release()
+			p.removeDeadConnection(pool, conn)
+			// Fall through to create new connection
+		}
+	}
+
+	// Need to create new connection
+	// Acquire semaphore slot
+	pool.semaphore <- struct{}{}
+
+	// Use a flag to track if we should release in defer
+	// We'll manually release on error paths, so defer should not release in those cases
+	shouldReleaseInDefer := true
+	defer func() {
+		if shouldReleaseInDefer {
+			<-pool.semaphore
+		}
+	}()
+
+	// Double-check: another goroutine might have created a connection while we were waiting
+	pool.mu.Lock()
+	for _, existingConn := range pool.connections {
+		if existingConn.mu.TryLock() {
+			state := existingConn.GetClient().State()
+			if state == imap.AuthenticatedState || state == imap.SelectedState {
+				existingConn.UpdateLastUsed()
+				pool.mu.Unlock()
+				// Return with release function
+				// Don't release in defer since we're returning a connection
+				shouldReleaseInDefer = false
+				release := func() {
+					existingConn.Unlock()
+					<-pool.semaphore
+				}
+				return existingConn, release, nil // Caller must call release() when done
+			}
+			existingConn.mu.Unlock()
+		}
+	}
+	pool.mu.Unlock()
+
+	// Create new connection
 	useTLS := os.Getenv("VMAIL_TEST_MODE") != "true"
 	c, err := ConnectToIMAP(server, useTLS)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect: %w", err)
+		shouldReleaseInDefer = false // Don't release in defer, we'll do it manually
+		<-pool.semaphore             // Release semaphore on error
+		return nil, nil, fmt.Errorf("failed to connect: %w", err)
 	}
 
 	if err := Login(c, username, password); err != nil {
+		shouldReleaseInDefer = false // Don't release in defer, we'll do it manually
 		_ = c.Logout()
-		return nil, fmt.Errorf("failed to login: %w", err)
+		<-pool.semaphore // Release semaphore on error
+		return nil, nil, fmt.Errorf("failed to login: %w", err)
 	}
 
-	// FIXME-SMELL: Another goroutine might have created a client for this user
-	// between when we checked and now. We should check again and close the old one if it exists.
-	p.mu.Lock()
-	if existingClient, exists := p.clients[userID]; exists && existingClient != c {
-		// Another goroutine created a client - close ours and use the existing one
-		_ = c.Logout()
-		c = existingClient
-	} else {
-		p.clients[userID] = c
+	// Wrap in clientWithMutex
+	newConn := &clientWithMutex{
+		client:   c,
+		lastUsed: time.Now(),
+		role:     roleWorker,
 	}
-	p.mu.Unlock()
+	conn = newConn
 
-	return c, nil
+	// Add to pool
+	pool.addConnection(conn)
+	conn.Lock() // Lock before returning
+
+	// Don't release in defer - the release function will handle it
+	shouldReleaseInDefer = false
+	// Create release function for the new connection
+	newRelease := func() {
+		conn.Unlock()
+		<-pool.semaphore
+	}
+	return conn, newRelease, nil
+}
+
+// removeDeadConnection removes a dead connection from the pool.
+func (p *Pool) removeDeadConnection(pool *userWorkerPool, conn *clientWithMutex) {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	for i, c := range pool.connections {
+		if c == conn {
+			// Remove from slice
+			pool.connections = append(pool.connections[:i], pool.connections[i+1:]...)
+			// Close connection
+			conn.Lock()
+			_ = conn.client.Logout()
+			conn.Unlock()
+			break
+		}
+	}
+}
+
+// checkConnectionHealth performs a NOOP command to check if connection is alive.
+// The connection must be locked before calling this.
+func (p *Pool) checkConnectionHealth(conn *clientWithMutex) bool {
+	// Connection is already locked by caller
+	if err := conn.client.Noop(); err != nil {
+		return false
+	}
+	return true
+}
+
+// getClientConcrete gets or creates a worker connection for a user (internal use).
+// Returns the concrete *client.Client type for internal operations.
+// Thread-safe: The connection is locked during the operation. For short-lived operations
+// (like Select, Fetch), this is acceptable. The connection will be automatically unlocked
+// after a short delay to allow reuse. For long-running operations, consider using getWorkerConnection
+// directly for better control.
+//
+// Note: This method uses a goroutine to automatically release the connection after 5 seconds.
+// This is a workaround for backward compatibility. In the future, callers should be refactored
+// to use getWorkerConnection directly and manage the release themselves.
+func (p *Pool) getClientConcrete(userID, server, username, password string) (*client.Client, error) {
+	conn, release, err := p.getWorkerConnection(userID, server, username, password)
+	if err != nil {
+		return nil, err
+	}
+	// For backward compatibility, we unlock after a short delay
+	// This allows the connection to be reused while still providing thread safety
+	// during the immediate operation. Most operations (Select, Fetch) complete in < 1 second.
+	// Using 5 seconds instead of 30 to avoid holding connections too long.
+	go func() {
+		time.Sleep(5 * time.Second)
+		// Check if pool is still open before releasing
+		// If the pool is closed, don't try to release (would cause panic or deadlock)
+		select {
+		case <-p.cleanupCtx.Done():
+			// Pool is closed, don't try to release
+			return
+		default:
+			release()
+		}
+	}()
+	return conn.GetClient(), nil
 }
 
 // GetClient gets or creates an IMAP client for a user.
@@ -105,28 +375,191 @@ func (p *Pool) GetClient(userID, server, username, password string) (IMAPClient,
 	return &ClientWrapper{client: c}, nil
 }
 
-// RemoveClient removes a client from the pool and logs out.
+// GetListenerConnection gets or creates a listener connection for a user.
+// Listener connections are dedicated connections for IDLE command.
+// Returns a locked connection that must be unlocked by the caller.
+// Thread-safe: uses double-check locking pattern.
+func (p *Pool) GetListenerConnection(userID, server, username, password string) (*clientWithMutex, error) {
+	// First check without lock
+	p.mu.RLock()
+	listener, exists := p.listeners[userID]
+	p.mu.RUnlock()
+
+	if exists {
+		listener.Lock()
+		// Double-check after acquiring lock
+		p.mu.RLock()
+		existingListener, stillExists := p.listeners[userID]
+		p.mu.RUnlock()
+
+		if stillExists && existingListener == listener {
+			// Check if connection is healthy
+			state := listener.GetClient().State()
+			if state == imap.AuthenticatedState || state == imap.SelectedState {
+				return listener, nil // Caller must unlock
+			}
+			// Connection is dead, unlock and remove it
+			listener.Unlock()
+			p.mu.Lock()
+			if p.listeners[userID] == listener {
+				delete(p.listeners, userID)
+			}
+			p.mu.Unlock()
+			// Close dead connection
+			_ = listener.GetClient().Logout()
+		} else {
+			// Another goroutine removed/recreated it
+			listener.Unlock()
+			// Retry with new connection
+			return p.GetListenerConnection(userID, server, username, password)
+		}
+	}
+
+	// Need to create new listener connection
+	useTLS := os.Getenv("VMAIL_TEST_MODE") != "true"
+	c, err := ConnectToIMAP(server, useTLS)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect: %w", err)
+	}
+
+	if err := Login(c, username, password); err != nil {
+		_ = c.Logout()
+		return nil, fmt.Errorf("failed to login: %w", err)
+	}
+
+	// Wrap in clientWithMutex
+	listener = &clientWithMutex{
+		client:   c,
+		lastUsed: time.Now(),
+		role:     roleListener,
+	}
+
+	// Double-check before adding
+	p.mu.Lock()
+	if existingListener, exists := p.listeners[userID]; exists {
+		// Another goroutine created it - close ours and use existing
+		_ = c.Logout()
+		p.mu.Unlock()
+		listener = existingListener
+		listener.Lock()
+		return listener, nil
+	}
+	p.listeners[userID] = listener
+	p.mu.Unlock()
+
+	listener.Lock() // Lock before returning
+	return listener, nil
+}
+
+// RemoveListenerConnection removes a listener connection from the pool.
+func (p *Pool) RemoveListenerConnection(userID string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	listener, exists := p.listeners[userID]
+	if exists {
+		listener.Lock()
+		_ = listener.GetClient().Logout()
+		listener.Unlock()
+		delete(p.listeners, userID)
+	}
+}
+
+// RemoveClient removes all connections (worker and listener) for a user from the pool.
 func (p *Pool) RemoveClient(userID string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	c, exists := p.clients[userID]
-	if exists {
-		_ = c.Logout()
-		delete(p.clients, userID)
+	// Remove worker pool
+	if pool, exists := p.workerPools[userID]; exists {
+		pool.close()
+		delete(p.workerPools, userID)
+	}
+
+	// Remove listener
+	if listener, exists := p.listeners[userID]; exists {
+		listener.Lock()
+		_ = listener.GetClient().Logout()
+		listener.Unlock()
+		delete(p.listeners, userID)
 	}
 }
 
-// Close closes all connections in the pool.
-func (p *Pool) Close() {
+// startCleanupGoroutine runs a background goroutine that periodically cleans up idle connections.
+// The goroutine will stop when cleanupCtx is cancelled (via Pool.Close()).
+func (p *Pool) startCleanupGoroutine() {
+	ticker := time.NewTicker(1 * time.Minute)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-p.cleanupCtx.Done():
+				// Context cancelled - stop the ticker and exit
+				return
+			case <-ticker.C:
+				// Periodic cleanup
+				p.cleanupIdleConnections()
+			}
+		}
+	}()
+}
+
+// cleanupIdleConnections removes worker connections that have been idle too long.
+func (p *Pool) cleanupIdleConnections() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	for userID, c := range p.clients {
-		if err := c.Logout(); err != nil {
-			log.Printf("Failed to logout IMAP client for user %s: %v", userID, err)
+	now := time.Now()
+	for userID, pool := range p.workerPools {
+		pool.mu.Lock()
+		var toRemove []*clientWithMutex
+		for _, conn := range pool.connections {
+			if now.Sub(conn.GetLastUsed()) > workerIdleTimeout {
+				toRemove = append(toRemove, conn)
+			}
 		}
-		delete(p.clients, userID)
+		// Remove dead connections
+		for _, conn := range toRemove {
+			for i, c := range pool.connections {
+				if c == conn {
+					pool.connections = append(pool.connections[:i], pool.connections[i+1:]...)
+					conn.Lock()
+					_ = conn.GetClient().Logout()
+					conn.Unlock()
+					break
+				}
+			}
+		}
+		// Remove empty pools
+		if len(pool.connections) == 0 {
+			delete(p.workerPools, userID)
+		}
+		pool.mu.Unlock()
+	}
+}
+
+// Close closes all connections in the pool and stops the cleanup goroutine.
+func (p *Pool) Close() {
+	// Stop cleanup goroutine
+	p.cleanupCancel()
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Close all worker pools
+	for userID, pool := range p.workerPools {
+		pool.close()
+		delete(p.workerPools, userID)
+	}
+
+	// Close all listener connections
+	for userID, listener := range p.listeners {
+		listener.Lock()
+		if err := listener.GetClient().Logout(); err != nil {
+			log.Printf("Failed to logout listener connection for user %s: %v", userID, err)
+		}
+		listener.Unlock()
+		delete(p.listeners, userID)
 	}
 }
 

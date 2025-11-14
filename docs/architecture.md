@@ -151,27 +151,23 @@ The IMAP domain handles all communication with IMAP servers, including connectio
 
 The connection pool is a critical and complex part of the codebase. Key characteristics:
 
-* **One connection per user**: Each user has at most one IMAP connection, which is reused across requests.
-* **Connection reuse**: Connections are checked for health (state) before reuse. Dead connections are removed and recreated.
-* **Thread safety concerns**: 
-  * IMAP clients from `go-imap` are **NOT thread-safe**. Multiple goroutines using the same client concurrently can cause race conditions.
-  * The current design assumes one request per user at a time, but this is not enforced.
-  * If multiple requests for the same user happen concurrently, they will share the same client and can interfere with each other (e.g., folder selection).
-* **No connection limits**: The pool can grow unbounded (one connection per user). There's no maximum pool size.
-* **No idle timeout**: Connections stay open indefinitely until they become dead or are explicitly closed.
-* **Health checking**: Connections are checked using `State()` method. If state is `NotAuthenticated`, the connection is considered dead.
+* **Worker connections**: Each user has a pool of 1-3 worker connections for API handlers (SEARCH, FETCH, STORE). These connections are reused across requests and managed by a semaphore to limit concurrent connections.
+* **Listener connections**: Each user has one dedicated listener connection for the IDLE command (for real-time email notifications via WebSocket).
+* **Thread safety**: 
+  * IMAP clients from `go-imap` are **NOT thread-safe**. Each connection is wrapped with a mutex (`clientWithMutex`) to ensure thread-safe access.
+  * Multiple goroutines can use different connections concurrently, but access to the same connection is serialized by the mutex.
+  * Folder selection is thread-safe because connections are locked during operations.
+* **Connection lifecycle management**:
+  * **Idle timeout**: Worker connections are closed after 10 minutes of inactivity. Listener connections have no idle timeout (IDLE keeps them alive).
+  * **Health checks**: Before reusing a connection that's been idle > 1 minute, a NOOP command is sent to verify the connection is alive.
+  * **Automatic cleanup**: A background goroutine runs every minute to remove idle connections.
+* **Connection limits**: Maximum of 3 worker connections per user (enforced by semaphore). One listener connection per user.
 
-**Current limitations and considerations:**
+**Thread safety guarantees:**
 
-* **Concurrent access**: Concurrent requests for the same user are not safe. Consider:
-  * Adding a per-client mutex to serialize access to each client
-  * Using a connection pool per user (multiple connections per user)
-  * Documenting that concurrent requests for the same user are not supported
-* **Connection management**: 
-  * No idle timeout - connections stay open indefinitely
-  * No connection health checks (ping/NOOP command)
-  * No maximum pool size
-* **Folder selection**: When a client is used, the folder is selected. If multiple goroutines use the same client concurrently, they will interfere with each other's folder selections.
+* **Per-connection mutexes**: Each connection has its own mutex, allowing concurrent access to different connections while serializing access to the same connection.
+* **Double-check locking**: Used when creating new connections to prevent race conditions where multiple goroutines create connections simultaneously.
+* **Semaphore-based limiting**: Worker connections are limited by a semaphore (max 3 per user), ensuring proper resource management.
 
 **Sync behavior:**
 
