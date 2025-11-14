@@ -1,11 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"log"
 	"net/http"
-	"strconv"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/vdavid/vmail/backend/internal/crypto"
@@ -28,26 +28,6 @@ func NewThreadsHandler(pool *pgxpool.Pool, encryptor *crypto.Encryptor, imapServ
 		encryptor:   encryptor,
 		imapService: imapService,
 	}
-}
-
-// parsePaginationParams parses page and limit from query parameters.
-func parsePaginationParams(r *http.Request, defaultLimit int) (page, limit int) {
-	page = 1
-	limit = defaultLimit
-
-	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
-		if parsed, err := strconv.Atoi(pageStr); err == nil && parsed > 0 {
-			page = parsed
-		}
-	}
-
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
-			limit = parsed
-		}
-	}
-
-	return page, limit
 }
 
 // getPaginationLimit gets the pagination limit, using user settings if available.
@@ -113,7 +93,7 @@ func (h *ThreadsHandler) GetThreads(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get pagination params
-	page, limitFromQuery := parsePaginationParams(r, 100)
+	page, limitFromQuery := ParsePaginationParams(r, 100)
 	limit := h.getPaginationLimit(ctx, userID, limitFromQuery)
 	offset := (page - 1) * limit
 
