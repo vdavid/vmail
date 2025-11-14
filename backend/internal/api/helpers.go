@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
@@ -53,4 +55,22 @@ func ParsePaginationParams(r *http.Request, defaultLimit int) (page, limit int) 
 	}
 
 	return page, limit
+}
+
+// WriteJSONResponse writes a JSON response using a buffered approach to prevent partial writes.
+// If encoding fails, it writes an error response and returns false. Otherwise returns true.
+// This ensures atomic responses and consistent error handling across all handlers.
+func WriteJSONResponse(w http.ResponseWriter, data interface{}) bool {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(data); err != nil {
+		log.Printf("API: Failed to encode JSON response: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return false
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		log.Printf("API: Failed to write JSON response: %v", err)
+	}
+	return true
 }

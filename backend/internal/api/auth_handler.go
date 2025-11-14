@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"net/http"
 
@@ -44,10 +43,7 @@ func (h *AuthHandler) GetAuthStatus(w http.ResponseWriter, r *http.Request) {
 		IsSetupComplete: isSetupComplete,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("AuthHandler: Failed to encode response: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	if !WriteJSONResponse(w, response) {
 		return
 	}
 }
