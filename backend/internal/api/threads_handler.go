@@ -1,9 +1,7 @@
 package api
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"log"
 	"net/http"
 
@@ -124,17 +122,7 @@ func (h *ThreadsHandler) GetThreads(w http.ResponseWriter, r *http.Request) {
 	// Use a buffered approach to prevent partial writes if JSON encoding fails
 	response := BuildPaginationResponse(threads, totalCount, page, limit)
 
-	// Encode to buffer first to prevent partial writes
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		log.Printf("ThreadsHandler: Failed to encode response: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	if !WriteJSONResponse(w, response) {
 		return
-	}
-
-	// Only write headers and body if encoding succeeded
-	w.Header().Set("Content-Type", "application/json")
-	if _, err := w.Write(buf.Bytes()); err != nil {
-		log.Printf("ThreadsHandler: Failed to write response: %v", err)
 	}
 }

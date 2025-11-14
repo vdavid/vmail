@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
@@ -62,10 +61,7 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 
 	// Build and send the response
 	response := BuildPaginationResponse(threads, totalCount, page, limit)
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("SearchHandler: Failed to encode response: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	if !WriteJSONResponse(w, response) {
 		return
 	}
 }

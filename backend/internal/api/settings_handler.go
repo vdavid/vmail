@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"log"
@@ -58,18 +57,8 @@ func (h *SettingsHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 		SMTPPasswordSet:          len(settings.EncryptedSMTPPassword) > 0,
 	}
 
-	// Encode to buffer first to prevent partial writes
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		log.Printf("SettingsHandler: Failed to encode response: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	if !WriteJSONResponse(w, response) {
 		return
-	}
-
-	// Only write headers and body if encoding succeeded
-	w.Header().Set("Content-Type", "application/json")
-	if _, err := w.Write(buf.Bytes()); err != nil {
-		log.Printf("SettingsHandler: Failed to write response: %v", err)
 	}
 }
 
@@ -165,23 +154,13 @@ func (h *SettingsHandler) PostSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Encode success response to buffer first to prevent partial writes
 	successResponse := struct {
 		Success bool `json:"success"`
 	}{Success: true}
 
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(successResponse); err != nil {
-		log.Printf("SettingsHandler: Failed to encode response: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	// Only write headers and body if encoding succeeded
-	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(buf.Bytes()); err != nil {
-		log.Printf("SettingsHandler: Failed to write response: %v", err)
+	if !WriteJSONResponse(w, successResponse) {
+		return
 	}
 }
 

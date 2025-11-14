@@ -1,9 +1,7 @@
 package api
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -171,18 +169,8 @@ func (h *FoldersHandler) writeFoldersResponse(w http.ResponseWriter, folders []*
 		folderValues[i] = *f
 	}
 
-	// Encode to buffer first to prevent partial writes
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(folderValues); err != nil {
-		log.Printf("FoldersHandler: Failed to encode response: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	if !WriteJSONResponse(w, folderValues) {
 		return
-	}
-
-	// Only write headers and body if encoding succeeded
-	w.Header().Set("Content-Type", "application/json")
-	if _, err := w.Write(buf.Bytes()); err != nil {
-		log.Printf("FoldersHandler: Failed to write response: %v", err)
 	}
 }
 
