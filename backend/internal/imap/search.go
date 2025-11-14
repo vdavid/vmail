@@ -14,7 +14,8 @@ import (
 	"github.com/vdavid/vmail/backend/internal/models"
 )
 
-// parseHeaderFilter processes from:, to:, or subject: filters.
+// parseHeaderFilter processes header filters (from:, to:, subject:).
+// Returns (handled, error) where handled indicates if the token matched this filter type.
 func parseHeaderFilter(token, prefix, headerName string, criteria *imap.SearchCriteria) (bool, error) {
 	if !strings.HasPrefix(token, prefix) {
 		return false, nil
@@ -27,7 +28,9 @@ func parseHeaderFilter(token, prefix, headerName string, criteria *imap.SearchCr
 	return true, nil
 }
 
-// parseDateFilter processes after: or before: filters.
+// parseDateFilter processes date filters (after:, before:).
+// Returns (handled, error) where handled indicates if the token matched this filter type.
+// For before: filters, sets the time to end of day (23:59:59.999999999).
 func parseDateFilter(token, prefix string, criteria *imap.SearchCriteria) (bool, error) {
 	if !strings.HasPrefix(token, prefix) {
 		return false, nil
@@ -51,6 +54,8 @@ func parseDateFilter(token, prefix string, criteria *imap.SearchCriteria) (bool,
 }
 
 // parseFolderFilter processes folder: or label: filters.
+// Only the first folder: or label: filter is extracted; subsequent ones are ignored.
+// Returns (handled, folder, error) where handled indicates if the token matched this filter type.
 func parseFolderFilter(token string, folderFound *bool) (bool, string, error) {
 	if !strings.HasPrefix(token, "folder:") && !strings.HasPrefix(token, "label:") {
 		return false, "", nil
@@ -170,6 +175,8 @@ func ParseSearchQuery(query string) (*imap.SearchCriteria, string, error) {
 }
 
 // tokenizeQuery splits a query into tokens, respecting quoted strings.
+// Handles quoted strings (e.g., "John Doe") and combines filter prefixes with quoted values
+// (e.g., from:"John Doe" becomes a single token).
 func tokenizeQuery(query string) []string {
 	var tokens []string
 	var current strings.Builder
@@ -273,6 +280,8 @@ func parseFolderFromQuery(query string) (string, string) {
 }
 
 // buildThreadMapFromMessages processes IMAP messages and builds a map of threads.
+// Returns a map from stable thread ID to thread, and a map from stable thread ID to latest sent_at time.
+// Messages without Message-ID headers or not found in the database are skipped with warnings.
 func (s *Service) buildThreadMapFromMessages(ctx context.Context, userID string, messages []*imap.Message) (map[string]*models.Thread, map[string]*time.Time, error) {
 	threadMap := make(map[string]*models.Thread)
 	threadToLatestSentAt := make(map[string]*time.Time)
@@ -315,7 +324,8 @@ func (s *Service) buildThreadMapFromMessages(ctx context.Context, userID string,
 	return threadMap, threadToLatestSentAt, nil
 }
 
-// sortAndPaginateThreads sorts threads by latest sent_at and applies pagination.
+// sortAndPaginateThreads sorts threads by latest sent_at (newest first) and applies pagination.
+// Threads without sent_at are sorted to the end. Returns the paginated threads and total count.
 func sortAndPaginateThreads(threadMap map[string]*models.Thread, threadToLatestSentAt map[string]*time.Time, page, limit int) ([]*models.Thread, int) {
 	threads := make([]*models.Thread, 0, len(threadMap))
 	for _, thread := range threadMap {
@@ -350,8 +360,9 @@ func sortAndPaginateThreads(threadMap map[string]*models.Thread, threadToLatestS
 }
 
 // Search searches for threads matching the query in the specified folder.
-// Supports Gmail-like syntax via ParseSearchQuery.
-// Returns threads, total count, and error.
+// Supports Gmail-like syntax via ParseSearchQuery (from:, to:, subject:, after:, before:, folder:, label:).
+// If no folder is specified in the query, defaults to INBOX.
+// Returns threads sorted by latest sent_at (newest first), total count, and error.
 func (s *Service) Search(ctx context.Context, userID string, query string, page, limit int) ([]*models.Thread, int, error) {
 	// Parse the query using Gmail-like syntax
 	criteria, extractedFolder, err := ParseSearchQuery(query)
