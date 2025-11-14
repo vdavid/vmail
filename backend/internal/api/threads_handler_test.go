@@ -62,14 +62,7 @@ func TestThreadsHandler_GetThreads(t *testing.T) {
 			t.Errorf("Expected status 200, got %d", rr.Code)
 		}
 
-		var response struct {
-			Threads    []*models.Thread `json:"threads"`
-			Pagination struct {
-				TotalCount int `json:"total_count"`
-				Page       int `json:"page"`
-				PerPage    int `json:"per_page"`
-			} `json:"pagination"`
-		}
+		var response models.ThreadsResponse
 		if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
@@ -122,14 +115,7 @@ func TestThreadsHandler_GetThreads(t *testing.T) {
 			t.Errorf("Expected status 200, got %d", rr.Code)
 		}
 
-		var response struct {
-			Threads    []*models.Thread `json:"threads"`
-			Pagination struct {
-				TotalCount int `json:"total_count"`
-				Page       int `json:"page"`
-				PerPage    int `json:"per_page"`
-			} `json:"pagination"`
-		}
+		var response models.ThreadsResponse
 		if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
@@ -188,14 +174,7 @@ func TestThreadsHandler_GetThreads(t *testing.T) {
 			t.Errorf("Expected status 200, got %d", rr.Code)
 		}
 
-		var response struct {
-			Threads    []*models.Thread `json:"threads"`
-			Pagination struct {
-				TotalCount int `json:"total_count"`
-				Page       int `json:"page"`
-				PerPage    int `json:"per_page"`
-			} `json:"pagination"`
-		}
+		var response models.ThreadsResponse
 		if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
