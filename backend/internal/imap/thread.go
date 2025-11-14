@@ -9,6 +9,7 @@ import (
 )
 
 // RunThreadCommand runs the THREAD command and returns the thread structure.
+// Uses the REFERENCES algorithm to build thread relationships.
 func RunThreadCommand(c *client.Client) ([]*sortthread.Thread, error) {
 	if c == nil {
 		return nil, fmt.Errorf("client is nil")

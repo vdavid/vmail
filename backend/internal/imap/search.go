@@ -363,6 +363,8 @@ func sortAndPaginateThreads(threadMap map[string]*models.Thread, threadToLatestS
 // Supports Gmail-like syntax via ParseSearchQuery (from:, to:, subject:, after:, before:, folder:, label:).
 // If no folder is specified in the query, defaults to INBOX.
 // Returns threads sorted by latest sent_at (newest first), total count, and error.
+// Note: Error handling tests for getClientAndSelectFolder, UidSearch, and FetchMessageHeaders
+// require complex IMAP server mocking and are covered through integration tests.
 func (s *Service) Search(ctx context.Context, userID string, query string, page, limit int) ([]*models.Thread, int, error) {
 	// Parse the query using Gmail-like syntax
 	criteria, extractedFolder, err := ParseSearchQuery(query)

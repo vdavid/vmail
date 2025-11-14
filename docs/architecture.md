@@ -100,6 +100,95 @@ It communicates with the IMAP and the SMTP server and uses a **Postgres** databa
 
 ### Domains
 
+#### IMAP
+
+The IMAP domain handles all communication with IMAP servers, including connection pooling, folder listing, message syncing, and searching.
+
+**Components:**
+
+* **`internal/imap/client.go`**: Connection pool implementation.
+  * `Pool`: Manages IMAP connections per user (one connection per user, reused across requests).
+  * `getClientConcrete`: Gets or creates an IMAP client, checking connection health.
+  * `GetClient`: Public interface that returns an `IMAPClient` wrapper.
+  * `RemoveClient`: Removes a broken connection from the pool.
+  * `ConnectToIMAP`: Establishes connection with 5-second timeout.
+  * `Login`: Authenticates with the IMAP server.
+
+* **`internal/imap/pool_interface.go`**: Interfaces for testability.
+  * `IMAPClient`: Interface for IMAP client operations (currently only `ListFolders`).
+  * `IMAPPool`: Interface for connection pool operations.
+  * `ClientWrapper`: Wraps go-imap client to implement `IMAPClient`.
+
+* **`internal/imap/service.go`**: Main IMAP service implementation.
+  * `Service`: Handles IMAP operations and caching.
+  * `SyncThreadsForFolder`: Syncs threads from IMAP (incremental or full sync).
+  * `SyncFullMessage`: Syncs a single message body.
+  * `SyncFullMessages`: Batch syncs multiple message bodies.
+  * `Search`: Searches for threads matching a query.
+  * `ShouldSyncFolder`: Checks if folder cache is stale.
+
+* **`internal/imap/fetch.go`**: Message fetching operations.
+  * `FetchMessageHeaders`: Fetches headers for multiple messages.
+  * `FetchFullMessage`: Fetches full message body.
+  * `SearchUIDsSince`: Searches for UIDs >= minUID (for incremental sync).
+
+* **`internal/imap/folder.go`**: Folder listing operations.
+  * `ListFolders`: Lists folders with SPECIAL-USE attributes.
+  * `determineFolderRole`: Maps folder names and attributes to roles.
+
+* **`internal/imap/thread.go`**: Thread structure operations.
+  * `RunThreadCommand`: Executes IMAP THREAD command.
+
+* **`internal/imap/parser.go`**: Message parsing.
+  * `ParseMessage`: Converts IMAP message to internal model.
+  * `parseBody`: Parses email body using enmime library.
+
+* **`internal/imap/search.go`**: Search query parsing and execution.
+  * `ParseSearchQuery`: Parses Gmail-like search queries.
+  * `Search`: Performs IMAP search and returns threads.
+
+**Connection Pooling:**
+
+The connection pool is a critical and complex part of the codebase. Key characteristics:
+
+* **One connection per user**: Each user has at most one IMAP connection, which is reused across requests.
+* **Connection reuse**: Connections are checked for health (state) before reuse. Dead connections are removed and recreated.
+* **Thread safety concerns**: 
+  * IMAP clients from `go-imap` are **NOT thread-safe**. Multiple goroutines using the same client concurrently can cause race conditions.
+  * The current design assumes one request per user at a time, but this is not enforced.
+  * If multiple requests for the same user happen concurrently, they will share the same client and can interfere with each other (e.g., folder selection).
+* **No connection limits**: The pool can grow unbounded (one connection per user). There's no maximum pool size.
+* **No idle timeout**: Connections stay open indefinitely until they become dead or are explicitly closed.
+* **Health checking**: Connections are checked using `State()` method. If state is `NotAuthenticated`, the connection is considered dead.
+
+**Current limitations and considerations:**
+
+* **Concurrent access**: Concurrent requests for the same user are not safe. Consider:
+  * Adding a per-client mutex to serialize access to each client
+  * Using a connection pool per user (multiple connections per user)
+  * Documenting that concurrent requests for the same user are not supported
+* **Connection management**: 
+  * No idle timeout - connections stay open indefinitely
+  * No connection health checks (ping/NOOP command)
+  * No maximum pool size
+* **Folder selection**: When a client is used, the folder is selected. If multiple goroutines use the same client concurrently, they will interfere with each other's folder selections.
+
+**Sync behavior:**
+
+* **Incremental sync**: If a folder has been synced before, only new messages (UIDs > last synced UID) are fetched.
+* **Full sync**: If no sync info exists or incremental sync fails, all messages are fetched using THREAD command (or SEARCH as fallback).
+* **Thread structure**: Full sync uses IMAP THREAD command to build thread relationships. If THREAD is not supported, falls back to processing messages without threading.
+* **Lazy loading**: Message bodies are not always synced immediately. They are synced on-demand when a thread is viewed.
+
+**Error handling:**
+
+* Sync errors are logged but don't fail requests (graceful degradation).
+* Broken connections are removed from the pool and recreated on next use.
+* Folder selection errors are propagated to the caller.
+* Network errors during fetch are propagated to the caller.
+
+### Domains
+
 #### Config
 
 The config package handles loading and validating application configuration from environment variables.

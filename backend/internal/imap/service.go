@@ -517,6 +517,7 @@ func (s *Service) processIncrementalMessage(ctx context.Context, imapMsg *imap.M
 }
 
 // updateThreadCountInBackground updates the thread count in the background.
+// Uses a 30-second timeout to avoid hanging indefinitely.
 func (s *Service) updateThreadCountInBackground(userID, folderName string) {
 	// Use a new context with timeout to avoid hanging
 	bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
