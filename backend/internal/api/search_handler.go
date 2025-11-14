@@ -15,7 +15,7 @@ import (
 // SearchHandler handles search-related API requests.
 type SearchHandler struct {
 	pool        *pgxpool.Pool
-	encryptor   *crypto.Encryptor
+	encryptor   *crypto.Encryptor // Not used directly, but required by imapService
 	imapService imap.IMAPService
 }
 
@@ -48,6 +48,10 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 	// Call IMAP service search
 	threads, totalCount, err := h.imapService.Search(ctx, userID, query, page, limit)
 	if err != nil {
+		// FIXME-SMELL: Error handling uses strings.Contains which is fragile.
+		// If the error message changes or is wrapped differently, this check will fail.
+		// Consider using error wrapping with a sentinel error type in the IMAP package
+		// (e.g., ErrInvalidSearchQuery) and checking with errors.Is() instead.
 		// Check if it's a query parsing error (should return 400)
 		if strings.Contains(err.Error(), "invalid search query") {
 			log.Printf("SearchHandler: Invalid query: %v", err)
@@ -66,6 +70,12 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// getPaginationLimit gets the pagination limit, using user settings if available.
+// If limitFromQuery is provided (> 0), it takes precedence.
+// Otherwise, it uses the user's setting from the database, or defaults to 100.
+// FIXME-SIMPLIFY: This function is duplicated in threads_handler.go.
+// Consider extracting it to helpers.go as a shared function (e.g., GetPaginationLimit)
+// that takes the pool and context as parameters.
 func (h *SearchHandler) getPaginationLimit(ctx context.Context, userID string, limitFromQuery int) int {
 	if limitFromQuery > 0 {
 		return limitFromQuery
