@@ -13,6 +13,7 @@ import (
 )
 
 // Pool manages IMAP connections per user.
+// Each user has at most one connection, which is reused across requests.
 type Pool struct {
 	clients map[string]*client.Client
 	mu      sync.RWMutex

@@ -8,6 +8,7 @@ import (
 )
 
 // FetchMessageHeaders fetches message headers for the given UIDs.
+// Returns envelope, body structure, flags, and UID for each message.
 func FetchMessageHeaders(c *client.Client, uids []uint32) ([]*imap.Message, error) {
 	if c == nil {
 		return nil, fmt.Errorf("client is nil")
@@ -50,6 +51,7 @@ func FetchMessageHeaders(c *client.Client, uids []uint32) ([]*imap.Message, erro
 }
 
 // FetchFullMessage fetches the full message body for the given UID.
+// First fetches headers and body structure, then fetches the actual body content.
 func FetchFullMessage(c *client.Client, uid uint32) (*imap.Message, error) {
 	if c == nil {
 		return nil, fmt.Errorf("client is nil")

@@ -11,6 +11,7 @@ import (
 )
 
 // ParseMessage converts an IMAP message to our Message model.
+// Extracts headers, flags, and body (if available). Body parsing errors are logged but don't fail the parse.
 func ParseMessage(imapMsg *imap.Message, threadID, userID, folderName string) (*models.Message, error) {
 	if imapMsg == nil {
 		return nil, fmt.Errorf("imap message is nil")
