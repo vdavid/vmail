@@ -141,4 +141,118 @@ func TestDecryptInvalidCiphertext(t *testing.T) {
 			t.Error("Expected error for corrupted ciphertext, got nil")
 		}
 	})
+
+	t.Run("wrong key", func(t *testing.T) {
+		// Create first encryptor with one key
+		key1 := make([]byte, 32)
+		for i := range key1 {
+			key1[i] = byte(i)
+		}
+		base64Key1 := base64.StdEncoding.EncodeToString(key1)
+		encryptor1, err := NewEncryptor(base64Key1)
+		if err != nil {
+			t.Fatalf("Failed to create encryptor1: %v", err)
+		}
+
+		// Create second encryptor with a different key
+		key2 := make([]byte, 32)
+		for i := range key2 {
+			key2[i] = byte(i + 100) // Different key
+		}
+		base64Key2 := base64.StdEncoding.EncodeToString(key2)
+		encryptor2, err := NewEncryptor(base64Key2)
+		if err != nil {
+			t.Fatalf("Failed to create encryptor2: %v", err)
+		}
+
+		// Encrypt with first encryptor
+		plaintext := "secret password"
+		ciphertext, err := encryptor1.Encrypt(plaintext)
+		if err != nil {
+			t.Fatalf("Failed to encrypt: %v", err)
+		}
+
+		// Try to decrypt with second encryptor (wrong key) - should fail
+		_, err = encryptor2.Decrypt(ciphertext)
+		if err == nil {
+			t.Error("Expected error when decrypting with wrong key, got nil")
+		}
+	})
+}
+
+func TestDecryptWithDifferentInstanceSameKey(t *testing.T) {
+	// Create a shared key
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	base64Key := base64.StdEncoding.EncodeToString(key)
+
+	// Create first encryptor instance
+	encryptor1, err := NewEncryptor(base64Key)
+	if err != nil {
+		t.Fatalf("Failed to create encryptor1: %v", err)
+	}
+
+	// Create second encryptor instance with the same key
+	encryptor2, err := NewEncryptor(base64Key)
+	if err != nil {
+		t.Fatalf("Failed to create encryptor2: %v", err)
+	}
+
+	plaintext := "shared secret"
+	ciphertext, err := encryptor1.Encrypt(plaintext)
+	if err != nil {
+		t.Fatalf("Failed to encrypt with encryptor1: %v", err)
+	}
+
+	// Decrypt with second encryptor instance (same key) - should succeed
+	decrypted, err := encryptor2.Decrypt(ciphertext)
+	if err != nil {
+		t.Fatalf("Failed to decrypt with encryptor2: %v", err)
+	}
+
+	if decrypted != plaintext {
+		t.Errorf("Expected %q, got %q", plaintext, decrypted)
+	}
+}
+
+func TestEncryptDecryptLargePlaintext(t *testing.T) {
+	key := make([]byte, 32)
+	base64Key := base64.StdEncoding.EncodeToString(key)
+
+	encryptor, err := NewEncryptor(base64Key)
+	if err != nil {
+		t.Fatalf("Failed to create encryptor: %v", err)
+	}
+
+	// Create a very large plaintext (1MB)
+	largePlaintext := make([]byte, 1024*1024)
+	for i := range largePlaintext {
+		largePlaintext[i] = byte(i % 256)
+	}
+	plaintextStr := string(largePlaintext)
+
+	ciphertext, err := encryptor.Encrypt(plaintextStr)
+	if err != nil {
+		t.Fatalf("Failed to encrypt large plaintext: %v", err)
+	}
+
+	if len(ciphertext) == 0 {
+		t.Fatal("Expected non-empty ciphertext")
+	}
+
+	decrypted, err := encryptor.Decrypt(ciphertext)
+	if err != nil {
+		t.Fatalf("Failed to decrypt large plaintext: %v", err)
+	}
+
+	if decrypted != plaintextStr {
+		t.Error("Decrypted plaintext does not match original")
+	}
+
+	// Verify length matches
+	if len(decrypted) != len(plaintextStr) {
+		t.Errorf("Expected decrypted length %d, got %d", len(plaintextStr), len(decrypted))
+	}
 }

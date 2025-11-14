@@ -9,7 +9,9 @@ import (
 	"io"
 )
 
-// Encryptor provides encryption and decryption functionality using AES-GCM.
+// Encryptor provides encryption and decryption functionality using AES-GCM (Galois/Counter Mode).
+// AES-GCM provides both confidentiality and authenticity, making it suitable for encrypting
+// sensitive data like user passwords. The key is stored in memory as plain bytes.
 type Encryptor struct {
 	key []byte
 }
@@ -29,6 +31,9 @@ func NewEncryptor(base64Key string) (*Encryptor, error) {
 }
 
 // Encrypt encrypts the given plaintext using AES-GCM.
+// The returned ciphertext format is: [nonce][encrypted_data][auth_tag]
+// where the nonce is prepended to the ciphertext for use during decryption.
+// Each encryption uses a random nonce, ensuring the same plaintext produces different ciphertexts.
 func (e *Encryptor) Encrypt(plaintext string) ([]byte, error) {
 	block, err := aes.NewCipher(e.key)
 	if err != nil {
@@ -50,6 +55,9 @@ func (e *Encryptor) Encrypt(plaintext string) ([]byte, error) {
 }
 
 // Decrypt decrypts the given ciphertext using AES-GCM.
+// The ciphertext format is expected to be: [nonce][encrypted_data][auth_tag]
+// where the nonce is prepended. Returns an error if the ciphertext is invalid,
+// corrupted, or was encrypted with a different key (authentication failure).
 func (e *Encryptor) Decrypt(ciphertext []byte) (string, error) {
 	block, err := aes.NewCipher(e.key)
 	if err != nil {
