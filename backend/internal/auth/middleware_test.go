@@ -82,6 +82,68 @@ func TestRequireAuth(t *testing.T) {
 			t.Errorf("Expected status 401, got %d", rr.Code)
 		}
 	})
+
+	t.Run("handles multiple spaces between Bearer and token", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Authorization", "Bearer    valid_token_12345")
+
+		rr := httptest.NewRecorder()
+		authHandler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", rr.Code)
+		}
+	})
+
+	t.Run("handles case-insensitive Bearer scheme", func(t *testing.T) {
+		testCases := []string{
+			"bearer valid_token_12345",
+			"BEARER valid_token_12345",
+			"BeArEr valid_token_12345",
+			"Bearer valid_token_12345",
+		}
+
+		for _, authHeader := range testCases {
+			t.Run(authHeader, func(t *testing.T) {
+				req := httptest.NewRequest("GET", "/test", nil)
+				req.Header.Set("Authorization", authHeader)
+
+				rr := httptest.NewRecorder()
+				authHandler.ServeHTTP(rr, req)
+
+				if rr.Code != http.StatusOK {
+					t.Errorf("Expected status 200 for %s, got %d", authHeader, rr.Code)
+				}
+			})
+		}
+	})
+
+	t.Run("handles token with leading/trailing whitespace", func(t *testing.T) {
+		testCases := []struct {
+			name  string
+			token string
+		}{
+			{"leading space", " Bearer valid_token_12345"},
+			{"trailing space", "Bearer valid_token_12345 "},
+			{"both spaces", "Bearer  valid_token_12345  "},
+			{"tabs", "Bearer\tvalid_token_12345\t"},
+			{"newlines", "Bearer\nvalid_token_12345\n"},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				req := httptest.NewRequest("GET", "/test", nil)
+				req.Header.Set("Authorization", tc.token)
+
+				rr := httptest.NewRecorder()
+				authHandler.ServeHTTP(rr, req)
+
+				if rr.Code != http.StatusOK {
+					t.Errorf("Expected status 200 for %s, got %d", tc.name, rr.Code)
+				}
+			})
+		}
+	})
 }
 
 func TestGetUserEmailFromContext(t *testing.T) {
