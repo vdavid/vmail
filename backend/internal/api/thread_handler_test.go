@@ -23,6 +23,7 @@ func TestThreadHandler_GetThread(t *testing.T) {
 
 	encryptor := getTestEncryptor(t)
 	imapService := imap.NewService(pool, encryptor)
+	defer imapService.Close()
 	handler := NewThreadHandler(pool, encryptor, imapService)
 
 	t.Run("returns 401 when no user email in context", func(t *testing.T) {
