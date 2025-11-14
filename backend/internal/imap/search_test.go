@@ -1,11 +1,17 @@
 package imap
 
 import (
+	"context"
+	"encoding/base64"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/emersion/go-imap"
+	"github.com/vdavid/vmail/backend/internal/crypto"
+	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/models"
+	"github.com/vdavid/vmail/backend/internal/testutil"
 )
 
 func TestParseFolderFromQuery(t *testing.T) {
@@ -293,4 +299,247 @@ func TestSortAndPaginateThreads(t *testing.T) {
 			t.Errorf("Expected total count 2, got %d", count)
 		}
 	})
+}
+
+func TestTokenizeQuery(t *testing.T) {
+	t.Run("handles unclosed quotes", func(t *testing.T) {
+		// Unclosed quote should treat the rest as part of the token
+		tokens := tokenizeQuery(`from:"John Doe`)
+		// The tokenizer should handle this gracefully - the quote starts but never closes
+		// So "John Doe" (without closing quote) should be part of the token
+		if len(tokens) == 0 {
+			t.Error("Expected at least one token for unclosed quote")
+		}
+		// Verify the behavior: the unclosed quote should be included in the token
+		found := false
+		for _, token := range tokens {
+			if strings.Contains(token, "John Doe") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("Expected token to contain 'John Doe', got tokens: %v", tokens)
+		}
+	})
+
+	t.Run("handles empty quoted strings", func(t *testing.T) {
+		tokens := tokenizeQuery(`from:"" test`)
+		// Empty quoted strings are skipped (not tokenized) - this is the current behavior
+		// The tokenizer processes from: and test, skipping the empty quotes
+		if len(tokens) != 2 {
+			t.Errorf("Expected 2 tokens (from: and test), got %d: %v", len(tokens), tokens)
+		}
+		if tokens[0] != "from:" {
+			t.Errorf("Expected first token 'from:', got '%s'", tokens[0])
+		}
+		if tokens[1] != "test" {
+			t.Errorf("Expected second token 'test', got '%s'", tokens[1])
+		}
+	})
+
+	t.Run("handles multiple spaces between tokens", func(t *testing.T) {
+		tokens := tokenizeQuery("from:george    to:alice")
+		// Multiple spaces should be collapsed (treated as single separator)
+		if len(tokens) != 2 {
+			t.Errorf("Expected 2 tokens, got %d: %v", len(tokens), tokens)
+		}
+		if tokens[0] != "from:george" {
+			t.Errorf("Expected first token 'from:george', got '%s'", tokens[0])
+		}
+		if tokens[1] != "to:alice" {
+			t.Errorf("Expected second token 'to:alice', got '%s'", tokens[1])
+		}
+	})
+
+	t.Run("handles nested quotes (quotes inside quotes)", func(t *testing.T) {
+		// The current implementation doesn't handle escaped quotes, but we test the behavior
+		tokens := tokenizeQuery(`from:"John "Doe" Smith"`)
+		// The tokenizer treats each quote as a toggle, so nested quotes will be tokenized
+		// This is expected behavior - the tokenizer doesn't handle escaped quotes
+		if len(tokens) == 0 {
+			t.Error("Expected at least one token for nested quotes")
+		}
+	})
+
+	t.Run("handles quoted strings with spaces", func(t *testing.T) {
+		tokens := tokenizeQuery(`from:"John Doe" test`)
+		if len(tokens) != 2 {
+			t.Errorf("Expected 2 tokens, got %d: %v", len(tokens), tokens)
+		}
+		// The quoted string should be combined with the prefix if applicable
+		// Check that "John Doe" is in one of the tokens
+		found := false
+		for _, token := range tokens {
+			if strings.Contains(token, "John Doe") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("Expected token to contain 'John Doe', got tokens: %v", tokens)
+		}
+	})
+
+	t.Run("handles filter prefix with quoted value", func(t *testing.T) {
+		tokens := tokenizeQuery(`from: "John Doe"`)
+		// The tokenizer should combine "from:" with the following quoted string
+		if len(tokens) == 0 {
+			t.Error("Expected at least one token")
+		}
+		// Check that from: and "John Doe" are combined
+		found := false
+		for _, token := range tokens {
+			if strings.Contains(token, "from:") && strings.Contains(token, "John Doe") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("Expected 'from:' and 'John Doe' to be combined, got tokens: %v", tokens)
+		}
+	})
+}
+
+func TestService_buildThreadMapFromMessages(t *testing.T) {
+	pool := testutil.NewTestDB(t)
+	defer pool.Close()
+
+	encryptor := getTestEncryptorForSearch(t)
+	service := NewService(pool, encryptor)
+	defer service.Close()
+
+	ctx := context.Background()
+	userID, err := db.GetOrCreateUser(ctx, pool, "build-thread-test@example.com")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	t.Run("returns error when GetMessageByMessageID returns non-NotFound error", func(t *testing.T) {
+		// Create a cancelled context to simulate a database error
+		cancelledCtx, cancel := context.WithCancel(ctx)
+		cancel() // Cancel immediately to cause context error
+
+		imapMsg := &imap.Message{
+			Uid: 1,
+			Envelope: &imap.Envelope{
+				MessageId: "<test-message@example.com>",
+			},
+		}
+
+		_, _, err := service.buildThreadMapFromMessages(cancelledCtx, userID, []*imap.Message{imapMsg})
+		if err == nil {
+			t.Error("Expected error when GetMessageByMessageID returns non-NotFound error")
+		}
+		if !strings.Contains(err.Error(), "failed to get message from DB") {
+			t.Errorf("Expected error message about 'failed to get message from DB', got: %v", err)
+		}
+	})
+
+	t.Run("continues gracefully when GetThreadByID returns error", func(t *testing.T) {
+		// Create a thread and message
+		messageID := "<thread-error-test@example.com>"
+		thread := &models.Thread{
+			UserID:         userID,
+			StableThreadID: messageID,
+			Subject:        "Test Thread",
+		}
+		if err := db.SaveThread(ctx, pool, thread); err != nil {
+			t.Fatalf("Failed to save thread: %v", err)
+		}
+
+		// Create a message linked to this thread
+		message := &models.Message{
+			ThreadID:        thread.ID,
+			UserID:          userID,
+			IMAPUID:         1,
+			IMAPFolderName:  "INBOX",
+			MessageIDHeader: messageID,
+			FromAddress:     "from@example.com",
+			Subject:         "Test Subject",
+		}
+		if err := db.SaveMessage(ctx, pool, message); err != nil {
+			t.Fatalf("Failed to save message: %v", err)
+		}
+
+		// Delete the thread to simulate GetThreadByID returning an error
+		_, err := pool.Exec(ctx, "DELETE FROM threads WHERE id = $1", thread.ID)
+		if err != nil {
+			t.Fatalf("Failed to delete thread: %v", err)
+		}
+
+		// Now buildThreadMapFromMessages should skip this message and continue
+		imapMsg := &imap.Message{
+			Uid: 1,
+			Envelope: &imap.Envelope{
+				MessageId: messageID,
+			},
+		}
+
+		threadMap, sentAtMap, err := service.buildThreadMapFromMessages(ctx, userID, []*imap.Message{imapMsg})
+		if err != nil {
+			t.Errorf("Expected no error (should skip message with missing thread), got: %v", err)
+		}
+		// The thread should not be in the map because GetThreadByID failed
+		if len(threadMap) != 0 {
+			t.Errorf("Expected empty thread map (thread was deleted), got: %v", threadMap)
+		}
+		if len(sentAtMap) != 0 {
+			t.Errorf("Expected empty sentAt map, got: %v", sentAtMap)
+		}
+	})
+
+	t.Run("skips messages not found in database", func(t *testing.T) {
+		// Message that doesn't exist in DB
+		imapMsg := &imap.Message{
+			Uid: 999,
+			Envelope: &imap.Envelope{
+				MessageId: "<non-existent@example.com>",
+			},
+		}
+
+		threadMap, sentAtMap, err := service.buildThreadMapFromMessages(ctx, userID, []*imap.Message{imapMsg})
+		if err != nil {
+			t.Errorf("Expected no error (should skip message not found), got: %v", err)
+		}
+		if len(threadMap) != 0 {
+			t.Errorf("Expected empty thread map, got: %v", threadMap)
+		}
+		if len(sentAtMap) != 0 {
+			t.Errorf("Expected empty sentAt map, got: %v", sentAtMap)
+		}
+	})
+
+	t.Run("skips messages without Message-ID", func(t *testing.T) {
+		imapMsg := &imap.Message{
+			Uid:      1,
+			Envelope: &imap.Envelope{
+				// No MessageId
+			},
+		}
+
+		threadMap, sentAtMap, err := service.buildThreadMapFromMessages(ctx, userID, []*imap.Message{imapMsg})
+		if err != nil {
+			t.Errorf("Expected no error (should skip message without Message-ID), got: %v", err)
+		}
+		if len(threadMap) != 0 {
+			t.Errorf("Expected empty thread map, got: %v", threadMap)
+		}
+		if len(sentAtMap) != 0 {
+			t.Errorf("Expected empty sentAt map, got: %v", sentAtMap)
+		}
+	})
+}
+
+func getTestEncryptorForSearch(t *testing.T) *crypto.Encryptor {
+	t.Helper()
+
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	base64Key := base64.StdEncoding.EncodeToString(key)
+
+	encryptor, err := crypto.NewEncryptor(base64Key)
+	if err != nil {
+		t.Fatalf("Failed to create encryptor: %v", err)
+	}
+	return encryptor
 }
