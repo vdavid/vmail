@@ -19,7 +19,7 @@ import (
 // ThreadHandler handles individual thread-related API requests.
 type ThreadHandler struct {
 	pool        *pgxpool.Pool
-	encryptor   *crypto.Encryptor
+	encryptor   *crypto.Encryptor // Not used directly, but required by imapService
 	imapService imap.IMAPService
 }
 
@@ -49,7 +49,8 @@ func getStableThreadIDFromPath(path string) (string, error) {
 	return decoded, nil
 }
 
-// collectMessagesToSync collects messages that need syncing and returns them with a UID-to-index map.
+// collectMessagesToSync collects messages that need syncing (those without body content)
+// and returns them along with a map from IMAP UID to message index for efficient updates.
 func collectMessagesToSync(messages []*models.Message) ([]imap.MessageToSync, map[int64]int) {
 	messagesToSync := make([]imap.MessageToSync, 0)
 	messageUIDToIndex := make(map[int64]int)
@@ -65,7 +66,9 @@ func collectMessagesToSync(messages []*models.Message) ([]imap.MessageToSync, ma
 	return messagesToSync, messageUIDToIndex
 }
 
-// syncMissingBodies syncs missing message bodies and updates the messages slice.
+// syncMissingBodies syncs missing message bodies in batch and updates the messages slice.
+// If sync fails, it logs the error but continues (graceful degradation - returns messages
+// without bodies rather than failing the entire request).
 func (h *ThreadHandler) syncMissingBodies(ctx context.Context, userID string, messages []*models.Message, messagesToSync []imap.MessageToSync, messageUIDToIndex map[int64]int) {
 	if len(messagesToSync) == 0 {
 		return
@@ -89,6 +92,7 @@ func (h *ThreadHandler) syncMissingBodies(ctx context.Context, userID string, me
 }
 
 // assignAttachments assigns attachments from the batch-fetched map to messages.
+// Ensures that each message's Attachments field is initialized (never nil).
 func assignAttachments(messages []*models.Message, attachmentsMap map[string][]*models.Attachment) {
 	for _, msg := range messages {
 		attachments := attachmentsMap[msg.ID]
@@ -107,8 +111,8 @@ func assignAttachments(messages []*models.Message, attachmentsMap map[string][]*
 	}
 }
 
-// convertMessagesToThreadMessages converts []*Message to []Message.
-// Ensures that Attachments is always an array, never nil.
+// convertMessagesToThreadMessages converts []*Message to []Message for the response.
+// Ensures that Attachments is always an array, never nil, and filters out nil messages.
 func convertMessagesToThreadMessages(messages []*models.Message) []models.Message {
 	threadMessages := make([]models.Message, 0, len(messages))
 	for _, msg := range messages {
@@ -171,6 +175,7 @@ func (h *ThreadHandler) GetThread(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch all attachments in a single query (fixes N+1 query bug)
+	// If fetching attachments fails, continue with empty attachments rather than failing the request.
 	attachmentsMap, err := db.GetAttachmentsForMessages(ctx, h.pool, messageIDs)
 	if err != nil {
 		log.Printf("ThreadHandler: Failed to get attachments: %v", err)
