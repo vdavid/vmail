@@ -17,6 +17,9 @@ import (
 )
 
 // Service handles IMAP operations and caching.
+// FIXME-ARCHITECTURE: Service creates its own Pool instance, but multiple Service instances
+// would each have their own pool. This is fine for the current design, but consider
+// whether a shared pool across services would be more efficient.
 type Service struct {
 	pool       *pgxpool.Pool
 	clientPool *Pool
@@ -51,6 +54,12 @@ func (s *Service) getSettingsAndPassword(ctx context.Context, userID string) (*m
 
 // getClientAndSelectFolder gets user settings, decrypts the password, gets the IMAP client, and selects the folder.
 // Returns the client and mailbox status, or an error.
+// FIXME-ARCHITECTURE: Folder selection is not thread-safe if multiple goroutines use the same client.
+// If two requests for the same user select different folders concurrently, they will interfere with each other.
+// Consider:
+// 1. Adding a per-client mutex to serialize folder selection
+// 2. Selecting the folder before each operation (more overhead but safer)
+// 3. Documenting that concurrent requests for the same user are not supported
 func (s *Service) getClientAndSelectFolder(ctx context.Context, userID, folderName string) (*imapclient.Client, *imap.MailboxStatus, error) {
 	settings, imapPassword, err := s.getSettingsAndPassword(ctx, userID)
 	if err != nil {
@@ -456,6 +465,12 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 // For simplicity, we use the message's own Message-ID to match threads.
 // If the Message-ID matches a thread's stable ID, it's the root message of that thread.
 // Otherwise, we create a new thread. Full sync will correct any threading issues.
+// FIXME-TEST: Add test cases for:
+// - Message that matches existing thread by Message-ID
+// - Message that matches existing thread by being a reply (existing message in DB)
+// - Message that creates a new thread
+// - Message without Message-ID (should skip)
+// - Database errors during thread/message save
 func (s *Service) processIncrementalMessage(ctx context.Context, imapMsg *imap.Message, userID, folderName string) error {
 	if imapMsg.Envelope == nil || len(imapMsg.Envelope.MessageId) == 0 {
 		log.Printf("Warning: Message UID %d has no Message-ID, skipping", imapMsg.Uid)
@@ -542,6 +557,9 @@ func (s *Service) SyncFullMessage(ctx context.Context, userID, folderName string
 
 // SyncFullMessages syncs multiple message bodies from IMAP in a batch.
 // It groups messages by folder and syncs them efficiently to reduce network calls.
+// FIXME-SMELL: If multiple goroutines call SyncFullMessages for the same user concurrently,
+// they will share the same IMAP client and interfere with each other's folder selections.
+// Consider adding synchronization or documenting that concurrent syncs are not supported.
 func (s *Service) SyncFullMessages(ctx context.Context, userID string, messages []MessageToSync) error {
 	if len(messages) == 0 {
 		return nil

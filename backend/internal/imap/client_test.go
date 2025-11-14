@@ -89,6 +89,18 @@ func TestPool_GetClient_ReconnectionLogic(t *testing.T) {
 		imap.NotAuthenticatedState, imap.AuthenticatedState, imap.SelectedState)
 }
 
+// FIXME-TEST: Add test cases for concurrent access scenarios:
+// - Multiple goroutines calling GetClient for the same user simultaneously
+// - One goroutine removing a client while another is using it
+// - Connection state check race condition (client becomes dead between check and use)
+// - Multiple goroutines creating clients for the same user simultaneously (should only create one)
+
+// FIXME-TEST: Add test cases for connection pool edge cases:
+// - Pool with many users (test unbounded growth)
+// - Client that becomes dead while in use
+// - Close() being called while clients are in use
+// - RemoveClient() being called while client is in use
+
 func TestPool_Close(t *testing.T) {
 	pool := NewPool()
 
