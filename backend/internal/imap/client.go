@@ -14,6 +14,13 @@ import (
 
 // Pool manages IMAP connections per user.
 // Each user has at most one connection, which is reused across requests.
+// FIXME-ARCHITECTURE: IMAP clients from go-imap are NOT thread-safe.
+// Multiple goroutines using the same client concurrently can cause race conditions.
+// The current design assumes one request per user at a time, but this is not enforced.
+// Consider:
+// 1. Adding a per-client mutex to serialize access to each client
+// 2. Using a connection pool per user (multiple connections per user)
+// 3. Documenting that concurrent requests for the same user are not supported
 type Pool struct {
 	clients map[string]*client.Client
 	mu      sync.RWMutex
@@ -28,6 +35,15 @@ func NewPool() *Pool {
 
 // getClientConcrete gets or creates an IMAP client for a user (internal use).
 // Returns the concrete *client.Client type for internal operations.
+// FIXME-SMELL: Race condition between checking state and removing client.
+// If client state is checked, found to be dead, but another goroutine is using it,
+// we could remove it while it's still in use. Consider double-checking after acquiring
+// write lock, or using a more robust connection health check.
+// FIXME-ARCHITECTURE: No connection timeout or idle timeout - connections stay open indefinitely.
+// Consider adding:
+// 1. Idle timeout (close connections after X minutes of inactivity)
+// 2. Connection health checks (ping/NOOP command)
+// 3. Maximum pool size to prevent unbounded growth
 func (p *Pool) getClientConcrete(userID, server, username, password string) (*client.Client, error) {
 	p.mu.RLock()
 	c, exists := p.clients[userID]
@@ -41,8 +57,13 @@ func (p *Pool) getClientConcrete(userID, server, username, password string) (*cl
 			return c, nil
 		}
 		// Connection is dead, remove it
+		// FIXME-SMELL: Double-check after acquiring write lock to avoid race condition.
+		// Another goroutine might have already removed it or recreated it.
 		p.mu.Lock()
-		delete(p.clients, userID)
+		// Double-check: client might have been removed or recreated by another goroutine
+		if p.clients[userID] == c {
+			delete(p.clients, userID)
+		}
 		p.mu.Unlock()
 	}
 
@@ -59,8 +80,16 @@ func (p *Pool) getClientConcrete(userID, server, username, password string) (*cl
 		return nil, fmt.Errorf("failed to login: %w", err)
 	}
 
+	// FIXME-SMELL: Another goroutine might have created a client for this user
+	// between when we checked and now. We should check again and close the old one if it exists.
 	p.mu.Lock()
-	p.clients[userID] = c
+	if existingClient, exists := p.clients[userID]; exists && existingClient != c {
+		// Another goroutine created a client - close ours and use the existing one
+		_ = c.Logout()
+		c = existingClient
+	} else {
+		p.clients[userID] = c
+	}
 	p.mu.Unlock()
 
 	return c, nil

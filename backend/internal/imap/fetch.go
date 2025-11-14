@@ -9,6 +9,11 @@ import (
 
 // FetchMessageHeaders fetches message headers for the given UIDs.
 // Returns envelope, body structure, flags, and UID for each message.
+// FIXME-TEST: Add test cases for:
+// - Empty UIDs slice (should return empty slice, not error)
+// - Nil client (already checked, but test it)
+// - Network errors during fetch
+// - Partial fetch failures (some messages succeed, some fail)
 func FetchMessageHeaders(c *client.Client, uids []uint32) ([]*imap.Message, error) {
 	if c == nil {
 		return nil, fmt.Errorf("client is nil")
@@ -52,6 +57,11 @@ func FetchMessageHeaders(c *client.Client, uids []uint32) ([]*imap.Message, erro
 
 // FetchFullMessage fetches the full message body for the given UID.
 // First fetches headers and body structure, then fetches the actual body content.
+// FIXME-TEST: Add test cases for:
+// - Nil client (already checked, but test it)
+// - Network errors during fetch
+// - Message without body structure
+// - Message with empty body
 func FetchFullMessage(c *client.Client, uid uint32) (*imap.Message, error) {
 	if c == nil {
 		return nil, fmt.Errorf("client is nil")
@@ -109,6 +119,15 @@ func FetchFullMessage(c *client.Client, uid uint32) (*imap.Message, error) {
 
 // SearchUIDsSince searches for all UIDs greater than or equal to the given UID.
 // This is used for incremental sync to find only new messages.
+// FIXME-SMELL: This function fetches ALL UIDs and then filters them client-side.
+// For mailboxes with many messages, this is inefficient. Consider using IMAP's
+// UID SEARCH with a range if the server supports it, or using a more efficient
+// approach (e.g., fetching UIDs in batches).
+// FIXME-TEST: Add test cases for:
+// - Nil client (already checked, but test it)
+// - minUID = 0 (should return all UIDs)
+// - minUID higher than all UIDs (should return empty slice)
+// - Large mailbox with many UIDs (performance test)
 func SearchUIDsSince(c *client.Client, minUID uint32) ([]uint32, error) {
 	if c == nil {
 		return nil, fmt.Errorf("client is nil")
