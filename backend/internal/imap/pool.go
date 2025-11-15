@@ -91,11 +91,16 @@ func (p *Pool) Close() {
 
 	// Close all listener connections
 	for userID, listener := range p.listeners {
-		listener.Lock()
-		if err := listener.GetClient().Logout(); err != nil {
-			log.Printf("Failed to logout listener connection for user %s: %v", userID, err)
+		// Try to lock - if we can't, the listener is in use
+		if listener.TryLock() {
+			if err := listener.GetClient().Logout(); err != nil {
+				log.Printf("Failed to logout listener connection for user %s: %v", userID, err)
+			}
+			listener.Unlock()
+		} else {
+			// Listener is locked (in use) - try to close anyway during shutdown
+			_ = listener.GetClient().Logout()
 		}
-		listener.Unlock()
 		delete(p.listeners, userID)
 	}
 }

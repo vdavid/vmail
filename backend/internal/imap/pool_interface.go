@@ -41,5 +41,21 @@ func (w *ClientWrapper) ListFolders() ([]*models.Folder, error) {
 	return ListFolders(w.client)
 }
 
+// ListenerClient defines the interface for listener client operations.
+// This allows the IDLE feature to work with the thread-safe wrapper
+// without exposing implementation details.
+type ListenerClient interface {
+	// Lock acquires the mutex for thread-safe access to the underlying client.
+	Lock()
+	// Unlock releases the mutex.
+	Unlock()
+	// GetClient returns the underlying IMAP client.
+	// Caller must hold the lock before calling this.
+	GetClient() *client.Client
+}
+
 // Ensure Pool implements IMAPPool interface
 var _ IMAPPool = (*Pool)(nil)
+
+// Ensure threadSafeClient implements ListenerClient interface
+var _ ListenerClient = (*threadSafeClient)(nil)
