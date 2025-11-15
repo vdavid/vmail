@@ -1,4 +1,3 @@
-
 # Testing guidelines
 
 ## Unit tests
