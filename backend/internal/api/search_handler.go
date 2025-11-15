@@ -1,14 +1,12 @@
 package api
 
 import (
-	"context"
+	"errors"
 	"log"
 	"net/http"
-	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/vdavid/vmail/backend/internal/crypto"
-	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/imap"
 )
 
@@ -43,17 +41,13 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 
 	// Get pagination params
 	page, limitFromQuery := ParsePaginationParams(r, 100)
-	limit := h.getPaginationLimit(ctx, userID, limitFromQuery)
+	limit := GetPaginationLimit(ctx, h.pool, userID, limitFromQuery)
 
 	// Call IMAP service search
 	threads, totalCount, err := h.imapService.Search(ctx, userID, query, page, limit)
 	if err != nil {
-		// FIXME-SMELL: Error handling uses strings.Contains which is fragile.
-		// If the error message changes or is wrapped differently, this check will fail.
-		// Consider using error wrapping with a sentinel error type in the IMAP package
-		// (e.g., ErrInvalidSearchQuery) and checking with errors.Is() instead.
 		// Check if it's a query parsing error (should return 400)
-		if strings.Contains(err.Error(), "invalid search query") {
+		if errors.Is(err, imap.ErrInvalidSearchQuery) {
 			log.Printf("SearchHandler: Invalid query: %v", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -68,23 +62,4 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 	if !WriteJSONResponse(w, response) {
 		return
 	}
-}
-
-// getPaginationLimit gets the pagination limit, using user settings if available.
-// If limitFromQuery is provided (> 0), it takes precedence.
-// Otherwise, it uses the user's setting from the database, or defaults to 100.
-// FIXME-SIMPLIFY: This function is duplicated in threads_handler.go.
-// Consider extracting it to helpers.go as a shared function (e.g., GetPaginationLimit)
-// that takes the pool and context as parameters.
-func (h *SearchHandler) getPaginationLimit(ctx context.Context, userID string, limitFromQuery int) int {
-	if limitFromQuery > 0 {
-		return limitFromQuery
-	}
-
-	settings, err := db.GetUserSettings(ctx, h.pool, userID)
-	if err == nil {
-		return settings.PaginationThreadsPerPage
-	}
-
-	return 100
 }

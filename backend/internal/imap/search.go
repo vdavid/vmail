@@ -14,6 +14,9 @@ import (
 	"github.com/vdavid/vmail/backend/internal/models"
 )
 
+// ErrInvalidSearchQuery is returned when a search query cannot be parsed.
+var ErrInvalidSearchQuery = errors.New("invalid search query")
+
 // parseHeaderFilter processes header filters (from:, to:, subject:).
 // Returns (handled, error) where handled indicates if the token matched this filter type.
 func parseHeaderFilter(token, prefix, headerName string, criteria *imap.SearchCriteria) (bool, error) {
@@ -369,7 +372,7 @@ func (s *Service) Search(ctx context.Context, userID string, query string, page,
 	// Parse the query using Gmail-like syntax
 	criteria, extractedFolder, err := ParseSearchQuery(query)
 	if err != nil {
-		return nil, 0, fmt.Errorf("invalid search query: %w", err)
+		return nil, 0, fmt.Errorf("%w: %v", ErrInvalidSearchQuery, err)
 	}
 
 	// Use extracted folder or default to INBOX

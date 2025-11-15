@@ -28,24 +28,6 @@ func NewThreadsHandler(pool *pgxpool.Pool, encryptor *crypto.Encryptor, imapServ
 	}
 }
 
-// getPaginationLimit gets the pagination limit, using user settings if available.
-// If a limit is provided in the query, it takes precedence. Otherwise, uses the user's
-// setting from the database, or defaults to 100 if settings are not found.
-func (h *ThreadsHandler) getPaginationLimit(ctx context.Context, userID string, limitFromQuery int) int {
-	if limitFromQuery > 0 {
-		return limitFromQuery
-	}
-
-	// If no limit provided, use the user's setting as default
-	settings, err := db.GetUserSettings(ctx, h.pool, userID)
-	if err == nil {
-		return settings.PaginationThreadsPerPage
-	}
-
-	// If settings not found, use default 100
-	return 100
-}
-
 // syncFolderIfNeeded checks if the folder needs syncing and syncs if necessary.
 // If the sync check fails or sync itself fails, it logs the error but continues
 // to return cached data, ensuring the request doesn't fail due to sync issues.
@@ -96,7 +78,7 @@ func (h *ThreadsHandler) GetThreads(w http.ResponseWriter, r *http.Request) {
 
 	// Get pagination params
 	page, limitFromQuery := ParsePaginationParams(r, 100)
-	limit := h.getPaginationLimit(ctx, userID, limitFromQuery)
+	limit := GetPaginationLimit(ctx, h.pool, userID, limitFromQuery)
 	offset := (page - 1) * limit
 
 	// Sync folder if needed

@@ -143,8 +143,8 @@ func TestSearchHandler_Search(t *testing.T) {
 		email := "searchuser5@example.com"
 		setupTestUserAndSettings(t, pool, encryptor, email)
 
-		// Mock IMAP service to return parser error
-		mockIMAP.searchErr = &imapError{message: "invalid search query: empty from: value"}
+		// Mock IMAP service to return parser error wrapped with ErrInvalidSearchQuery
+		mockIMAP.searchErr = fmt.Errorf("%w: empty from: value", imap.ErrInvalidSearchQuery)
 
 		req := createRequestWithUser("GET", "/api/v1/search?q=from:", email)
 		rr := httptest.NewRecorder()
