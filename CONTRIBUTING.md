@@ -33,11 +33,19 @@ This setup lets you run the Go backend and the React frontend locally for debugg
 
 The project includes several utility scripts in the `scripts/` directory. See [`scripts/README.md`](../scripts/README.md) for detailed documentation.
 
-**Available scripts:**
+## Testing
+`scripts/check.sh`uns all formatting, linting, and tests.
+Always use `./scripts/check.sh` before committing new code and ensure all checks pass locally.
 
-- **`check.sh`** - Runs all formatting, linting, and tests. Use `./scripts/check.sh` before committing new code and ensure all checks pass locally.
-- **`roadmap-burndown.go`** - Analyzes git history of `ROADMAP.md` to generate a CSV burndown chart showing task completion over time.
+More ideas to make it efficient:
 
+```bash
+./scripts/check.sh # Run all checks (backend and frontend)
+./scripts/check.sh --backend # Run only backend checks
+./scripts/check.sh --frontend # Run only frontend checks
+./scripts/check.sh --check <check-name> # Run a specific check
+./scripts/check.sh --help # Show help, including a list of available checks
+```
 
 ### Dev process
 
