@@ -52,39 +52,34 @@ func (s *Service) getSettingsAndPassword(ctx context.Context, userID string) (*m
 	return settings, imapPassword, nil
 }
 
-// getClientAndSelectFolder gets user settings, decrypts the password, gets the IMAP client, and selects the folder.
-// Returns the client and mailbox status, or an error.
+// withClientAndSelectFolder gets user settings, gets an IMAP client, selects the folder, and calls the callback.
+// The client is automatically released when the callback returns.
 // Thread-safe: The connection is locked during folder selection to prevent concurrent folder selections
-// from interfering with each other. The connection will be automatically unlocked after the operation.
-func (s *Service) getClientAndSelectFolder(ctx context.Context, userID, folderName string) (*imapclient.Client, *imap.MailboxStatus, error) {
+// from interfering with each other.
+func (s *Service) withClientAndSelectFolder(ctx context.Context, userID, folderName string, fn func(*imapclient.Client, *imap.MailboxStatus) error) error {
 	settings, imapPassword, err := s.getSettingsAndPassword(ctx, userID)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
 
-	// Get IMAP client (internal use - need concrete type)
-	// The connection is locked when returned, ensuring thread-safe folder selection.
-	clientIface, release, err := s.imapPool.GetClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get IMAP client: %w", err)
-	}
-	defer release()
+	// Use WithClient to ensure the client is always released
+	return s.imapPool.WithClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword, func(clientIface IMAPClient) error {
+		wrapper, ok := clientIface.(*ClientWrapper)
+		if !ok || wrapper.client == nil {
+			return fmt.Errorf("failed to unwrap IMAP client")
+		}
+		client := wrapper.client
 
-	wrapper, ok := clientIface.(*ClientWrapper)
-	if !ok || wrapper.client == nil {
-		return nil, nil, fmt.Errorf("failed to unwrap IMAP client")
-	}
-	client := wrapper.client
+		// Select the folder - connection is locked, so this is thread-safe
+		// Even if multiple goroutines call this concurrently, they will use different connections
+		// from the pool, or the same connection will be serialized by the lock
+		mbox, err := client.Select(folderName, false)
+		if err != nil {
+			return fmt.Errorf("failed to select folder %s: %w", folderName, err)
+		}
 
-	// Select the folder - connection is locked, so this is thread-safe
-	// Even if multiple goroutines call this concurrently, they will use different connections
-	// from the pool, or the same connection will be serialized by the lock
-	mbox, err := client.Select(folderName, false)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to select folder %s: %w", folderName, err)
-	}
-
-	return client, mbox, nil
+		return fn(client, mbox)
+	})
 }
 
 // threadMaps contains the maps needed for thread processing.
@@ -386,84 +381,81 @@ func (s *Service) processFullSyncMessages(ctx context.Context, messages []*imap.
 // SyncThreadsForFolder syncs threads from IMAP for a specific folder.
 // Uses incremental sync if possible (only syncs new messages since last sync).
 func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName string) error {
-	client, mbox, err := s.getClientAndSelectFolder(ctx, userID, folderName)
-	if err != nil {
-		return err
-	}
+	return s.withClientAndSelectFolder(ctx, userID, folderName, func(client *imapclient.Client, mbox *imap.MailboxStatus) error {
+		log.Printf("Selected folder %s: %d messages", folderName, mbox.Messages)
 
-	log.Printf("Selected folder %s: %d messages", folderName, mbox.Messages)
+		// Check if we can do incremental sync
+		syncInfo, err := db.GetFolderSyncInfo(ctx, s.dbPool, userID, folderName)
+		if err != nil {
+			log.Printf("Warning: Failed to get folder sync info: %v", err)
+			syncInfo = nil // Fall back to full sync
+		}
 
-	// Check if we can do incremental sync
-	syncInfo, err := db.GetFolderSyncInfo(ctx, s.dbPool, userID, folderName)
-	if err != nil {
-		log.Printf("Warning: Failed to get folder sync info: %v", err)
-		syncInfo = nil // Fall back to full sync
-	}
+		// Try incremental sync first
+		incResult, isIncremental := s.tryIncrementalSync(ctx, client, userID, folderName, syncInfo)
+		if isIncremental {
+			if incResult.shouldReturn {
+				return nil
+			}
+			// Incremental sync path: process messages without thread structure
+			messages, err := FetchMessageHeaders(client, incResult.uidsToSync)
+			if err != nil {
+				return fmt.Errorf("failed to fetch message headers: %w", err)
+			}
+			log.Printf("Fetched %d message headers", len(messages))
+			s.processIncrementalMessages(ctx, messages, userID, folderName)
 
-	// Try incremental sync first
-	incResult, isIncremental := s.tryIncrementalSync(ctx, client, userID, folderName, syncInfo)
-	if isIncremental {
-		if incResult.shouldReturn {
+			// Update sync info with the highest UID
+			highestUIDInt64 := int64(incResult.highestUID)
+			if err := db.SetFolderSyncInfo(ctx, s.dbPool, userID, folderName, &highestUIDInt64); err != nil {
+				log.Printf("Warning: Failed to set folder sync info: %v", err)
+			}
+			go s.updateThreadCountInBackground(userID, folderName)
 			return nil
 		}
-		// Incremental sync path: process messages without thread structure
-		messages, err := FetchMessageHeaders(client, incResult.uidsToSync)
+
+		// Full sync path: get thread structure first
+		fullResult, err := s.performFullSync(ctx, client, userID, folderName)
+		if err != nil {
+			return err
+		}
+		if fullResult.shouldReturn {
+			return nil
+		}
+
+		// Fetch message headers for UIDs we need to sync
+		messages, err := FetchMessageHeaders(client, fullResult.uidsToSync)
 		if err != nil {
 			return fmt.Errorf("failed to fetch message headers: %w", err)
 		}
+
 		log.Printf("Fetched %d message headers", len(messages))
-		s.processIncrementalMessages(ctx, messages, userID, folderName)
+
+		// Process messages: use thread structure if available, otherwise use incremental processing
+		threadMaps := fullResult.threadMaps
+		if threadMaps == nil {
+			// THREAD command not supported - process messages without thread structure
+			// (same as incremental sync)
+			s.processIncrementalMessages(ctx, messages, userID, folderName)
+		} else {
+			// Process messages using thread structure
+			if err := s.processFullSyncMessages(ctx, messages, threadMaps, userID, folderName); err != nil {
+				return err
+			}
+		}
 
 		// Update sync info with the highest UID
-		highestUIDInt64 := int64(incResult.highestUID)
+		highestUIDInt64 := int64(fullResult.highestUID)
 		if err := db.SetFolderSyncInfo(ctx, s.dbPool, userID, folderName, &highestUIDInt64); err != nil {
 			log.Printf("Warning: Failed to set folder sync info: %v", err)
+			// Don't fail the entire sync if timestamp update fails
 		}
+
+		// Trigger background thread count update
 		go s.updateThreadCountInBackground(userID, folderName)
+
 		return nil
-	}
-
-	// Full sync path: get thread structure first
-	fullResult, err := s.performFullSync(ctx, client, userID, folderName)
-	if err != nil {
-		return err
-	}
-	if fullResult.shouldReturn {
-		return nil
-	}
-
-	// Fetch message headers for UIDs we need to sync
-	messages, err := FetchMessageHeaders(client, fullResult.uidsToSync)
-	if err != nil {
-		return fmt.Errorf("failed to fetch message headers: %w", err)
-	}
-
-	log.Printf("Fetched %d message headers", len(messages))
-
-	// Process messages: use thread structure if available, otherwise use incremental processing
-	threadMaps := fullResult.threadMaps
-	if threadMaps == nil {
-		// THREAD command not supported - process messages without thread structure
-		// (same as incremental sync)
-		s.processIncrementalMessages(ctx, messages, userID, folderName)
-	} else {
-		// Process messages using thread structure
-		if err := s.processFullSyncMessages(ctx, messages, threadMaps, userID, folderName); err != nil {
-			return err
-		}
-	}
-
-	// Update sync info with the highest UID
-	highestUIDInt64 := int64(fullResult.highestUID)
-	if err := db.SetFolderSyncInfo(ctx, s.dbPool, userID, folderName, &highestUIDInt64); err != nil {
-		log.Printf("Warning: Failed to set folder sync info: %v", err)
-		// Don't fail the entire sync if timestamp update fails
-	}
-
-	// Trigger background thread count update
-	go s.updateThreadCountInBackground(userID, folderName)
-
-	return nil
+	})
 }
 
 // processIncrementalMessage processes a single message during incremental sync.
@@ -547,12 +539,9 @@ func (s *Service) updateThreadCountInBackground(userID, folderName string) {
 
 // SyncFullMessage syncs the full message body from IMAP.
 func (s *Service) SyncFullMessage(ctx context.Context, userID, folderName string, imapUID int64) error {
-	client, _, err := s.getClientAndSelectFolder(ctx, userID, folderName)
-	if err != nil {
-		return err
-	}
-
-	return s.syncSingleMessage(ctx, client, userID, folderName, imapUID)
+	return s.withClientAndSelectFolder(ctx, userID, folderName, func(client *imapclient.Client, _ *imap.MailboxStatus) error {
+		return s.syncSingleMessage(ctx, client, userID, folderName, imapUID)
+	})
 }
 
 // SyncFullMessages syncs multiple message bodies from IMAP in a batch.
@@ -578,38 +567,37 @@ func (s *Service) SyncFullMessages(ctx context.Context, userID string, messages 
 
 	// Sync messages grouped by folder
 	for folderName, uids := range folderToUIDs {
-		// Get IMAP client (internal use - need concrete type)
-		clientIface, release, err := s.imapPool.GetClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
+		// Use WithClient to ensure the client is always released
+		err := s.imapPool.WithClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword, func(clientIface IMAPClient) error {
+			wrapper, ok := clientIface.(*ClientWrapper)
+			if !ok || wrapper.client == nil {
+				log.Printf("Warning: Failed to unwrap IMAP client for folder %s", folderName)
+				return nil // Continue with next folder
+			}
+
+			client := wrapper.client
+
+			// Select the folder once for all messages in this folder
+			if _, err := client.Select(folderName, false); err != nil {
+				log.Printf("Warning: Failed to select folder %s: %v", folderName, err)
+				return nil // Continue with next folder
+			}
+
+			// Sync each message in this folder
+			for _, imapUID := range uids {
+				if err := s.syncSingleMessage(ctx, client, userID, folderName, imapUID); err != nil {
+					log.Printf("Warning: Failed to sync message UID %d in folder %s: %v", imapUID, folderName, err)
+					// Continue with other messages
+				}
+			}
+
+			return nil
+		})
+
 		if err != nil {
 			log.Printf("Warning: Failed to get IMAP client for folder %s: %v", folderName, err)
-			continue
+			// Continue with next folder
 		}
-
-		wrapper, ok := clientIface.(*ClientWrapper)
-		if !ok || wrapper.client == nil {
-			log.Printf("Warning: Failed to unwrap IMAP client for folder %s", folderName)
-			release()
-			continue
-		}
-
-		client := wrapper.client
-
-		// Select the folder once for all messages in this folder
-		if _, err := client.Select(folderName, false); err != nil {
-			log.Printf("Warning: Failed to select folder %s: %v", folderName, err)
-			release()
-			continue
-		}
-
-		// Sync each message in this folder
-		for _, imapUID := range uids {
-			if err := s.syncSingleMessage(ctx, client, userID, folderName, imapUID); err != nil {
-				log.Printf("Warning: Failed to sync message UID %d in folder %s: %v", imapUID, folderName, err)
-				// Continue with other messages
-			}
-		}
-
-		release()
 	}
 
 	return nil

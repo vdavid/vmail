@@ -51,15 +51,18 @@ func NewPoolWithMaxWorkers(maxWorkers int) *Pool {
 	return p
 }
 
-// GetClient gets or creates an IMAP client for a user.
-// Implements IMAPPool interface - returns IMAPClient and a release function
-// that must be called when the caller is done with the client.
-func (p *Pool) GetClient(userID, server, username, password string) (IMAPClient, func(), error) {
+// WithClient gets an IMAP client for a user and calls the provided function with it.
+// The client is automatically released when the function returns.
+// Implements IMAPPool interface.
+func (p *Pool) WithClient(userID, server, username, password string, fn func(IMAPClient) error) error {
 	tsClient, release, err := p.getWorkerConnection(userID, server, username, password)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
-	return &ClientWrapper{client: tsClient.GetClient()}, release, nil
+	defer release()
+
+	client := &ClientWrapper{client: tsClient.GetClient()}
+	return fn(client)
 }
 
 // RemoveClient removes all connections (worker and listener) for a user from the pool.

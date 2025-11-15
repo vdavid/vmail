@@ -118,10 +118,10 @@ func TestPool_ConcurrentAccess(t *testing.T) {
 		results := make(chan error, numGoroutines)
 		for i := 0; i < numGoroutines; i++ {
 			go func() {
-				_, release, err := pool.GetClient(userID, server.Address, server.Username(), server.Password())
-				if release != nil {
-					release()
-				}
+				err := pool.WithClient(userID, server.Address, server.Username(), server.Password(), func(client IMAPClient) error {
+					// Client is automatically released when this function returns
+					return nil
+				})
 				results <- err
 			}()
 		}
@@ -129,7 +129,7 @@ func TestPool_ConcurrentAccess(t *testing.T) {
 		// All should succeed without errors
 		for i := 0; i < numGoroutines; i++ {
 			if err := <-results; err != nil {
-				t.Errorf("GetClient failed: %v", err)
+				t.Errorf("WithClient failed: %v", err)
 			}
 		}
 	})
@@ -137,21 +137,18 @@ func TestPool_ConcurrentAccess(t *testing.T) {
 	t.Run("remove client while another goroutine is using it", func(t *testing.T) {
 		const userID = "remove-while-using-user"
 
-		// Get a client first
-		client, release, err := pool.GetClient(userID, server.Address, server.Username(), server.Password())
-		if err != nil {
-			t.Fatalf("Failed to get client: %v", err)
-		}
-		if release != nil {
-			defer release()
-		}
-
-		// Start a goroutine that uses the client
+		// Use WithClient to get a client
 		done := make(chan bool, 1)
 		go func() {
-			// Simulate using the client
-			_ = client
-			done <- true
+			err := pool.WithClient(userID, server.Address, server.Username(), server.Password(), func(client IMAPClient) error {
+				// Simulate using the client
+				_ = client
+				done <- true
+				return nil
+			})
+			if err != nil {
+				t.Errorf("WithClient failed: %v", err)
+			}
 		}()
 
 		// Remove the client while it might be in use
@@ -186,12 +183,12 @@ func TestPool_EdgeCases(t *testing.T) {
 		const numUsers = 100
 		for i := 0; i < numUsers; i++ {
 			userID := fmt.Sprintf("user-%d", i)
-			_, release, err := pool.GetClient(userID, server.Address, server.Username(), server.Password())
+			err := pool.WithClient(userID, server.Address, server.Username(), server.Password(), func(client IMAPClient) error {
+				// Client is automatically released when this function returns
+				return nil
+			})
 			if err != nil {
 				t.Errorf("Failed to get client for user %s: %v", userID, err)
-			}
-			if release != nil {
-				release()
 			}
 		}
 
@@ -206,13 +203,13 @@ func TestPool_EdgeCases(t *testing.T) {
 	t.Run("close while clients are in use", func(t *testing.T) {
 		pool := NewPool()
 
-		// Get a client
-		_, release, err := pool.GetClient("close-user", server.Address, server.Username(), server.Password())
+		// Use WithClient to get a client
+		err := pool.WithClient("close-user", server.Address, server.Username(), server.Password(), func(client IMAPClient) error {
+			// Client is automatically released when this function returns
+			return nil
+		})
 		if err != nil {
 			t.Fatalf("Failed to get client: %v", err)
-		}
-		if release != nil {
-			defer release()
 		}
 
 		// Close while the client might be in use
@@ -226,12 +223,12 @@ func TestPool_EdgeCases(t *testing.T) {
 		defer pool.Close()
 
 		userID := "remove-in-use-user"
-		_, release, err := pool.GetClient(userID, server.Address, server.Username(), server.Password())
+		err := pool.WithClient(userID, server.Address, server.Username(), server.Password(), func(client IMAPClient) error {
+			// Client is automatically released when this function returns
+			return nil
+		})
 		if err != nil {
 			t.Fatalf("Failed to get client: %v", err)
-		}
-		if release != nil {
-			defer release()
 		}
 
 		// Remove while might be in use
