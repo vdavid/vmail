@@ -17,29 +17,29 @@ import (
 )
 
 // Service handles IMAP operations and caching.
-// Each Service instance has its own Pool. Since only one Service instance is created
-// per server (in main.go), this design is appropriate. If multiple Service instances
-// are needed in the future, consider injecting a shared Pool via dependency injection.
+// The IMAP pool is injected so that a single shared pool can be used across
+// handlers and services, ensuring per-user connection limits are enforced
+// consistently.
 type Service struct {
-	pool       *pgxpool.Pool
-	clientPool *Pool
-	encryptor  *crypto.Encryptor
-	cacheTTL   time.Duration
+	dbPool    *pgxpool.Pool
+	imapPool  IMAPPool
+	encryptor *crypto.Encryptor
+	cacheTTL  time.Duration
 }
 
 // NewService creates a new IMAP service.
-func NewService(pool *pgxpool.Pool, encryptor *crypto.Encryptor) *Service {
+func NewService(dbPool *pgxpool.Pool, imapPool IMAPPool, encryptor *crypto.Encryptor) *Service {
 	return &Service{
-		pool:       pool,
-		clientPool: NewPool(),
-		encryptor:  encryptor,
-		cacheTTL:   5 * time.Minute, // Default cache TTL
+		dbPool:    dbPool,
+		imapPool:  imapPool,
+		encryptor: encryptor,
+		cacheTTL:  5 * time.Minute, // Default cache TTL
 	}
 }
 
 // getSettingsAndPassword gets user settings and decrypts the IMAP password.
 func (s *Service) getSettingsAndPassword(ctx context.Context, userID string) (*models.UserSettings, string, error) {
-	settings, err := db.GetUserSettings(ctx, s.pool, userID)
+	settings, err := db.GetUserSettings(ctx, s.dbPool, userID)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to get user settings: %w", err)
 	}
@@ -63,11 +63,18 @@ func (s *Service) getClientAndSelectFolder(ctx context.Context, userID, folderNa
 	}
 
 	// Get IMAP client (internal use - need concrete type)
-	// The connection is locked when returned, ensuring thread-safe folder selection
-	client, err := s.clientPool.getClientConcrete(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
+	// The connection is locked when returned, ensuring thread-safe folder selection.
+	clientIface, release, err := s.imapPool.GetClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get IMAP client: %w", err)
 	}
+	defer release()
+
+	wrapper, ok := clientIface.(*ClientWrapper)
+	if !ok || wrapper.client == nil {
+		return nil, nil, fmt.Errorf("failed to unwrap IMAP client")
+	}
+	client := wrapper.client
 
 	// Select the folder - connection is locked, so this is thread-safe
 	// Even if multiple goroutines call this concurrently, they will use different connections
@@ -164,7 +171,7 @@ func getStableThreadID(rootUID uint32, rootUIDToStableID map[uint32]string, uidT
 
 // getOrCreateThread gets an existing thread or creates a new one.
 func (s *Service) getOrCreateThread(ctx context.Context, userID, stableThreadID string, rootUID uint32, uidToMessageMap map[uint32]*imap.Message) (*models.Thread, error) {
-	threadModel, err := db.GetThreadByStableID(ctx, s.pool, userID, stableThreadID)
+	threadModel, err := db.GetThreadByStableID(ctx, s.dbPool, userID, stableThreadID)
 	if err != nil {
 		if !errors.Is(err, db.ErrThreadNotFound) {
 			return nil, fmt.Errorf("failed to get thread: %w", err)
@@ -183,7 +190,7 @@ func (s *Service) getOrCreateThread(ctx context.Context, userID, stableThreadID 
 			Subject:        subject,
 		}
 
-		if err := db.SaveThread(ctx, s.pool, threadModel); err != nil {
+		if err := db.SaveThread(ctx, s.dbPool, threadModel); err != nil {
 			return nil, fmt.Errorf("failed to save thread: %w", err)
 		}
 	}
@@ -204,7 +211,7 @@ func (s *Service) processMessage(ctx context.Context, imapMsg *imap.Message, roo
 		return nil // Continue processing other messages
 	}
 
-	if err := db.SaveMessage(ctx, s.pool, msg); err != nil {
+	if err := db.SaveMessage(ctx, s.dbPool, msg); err != nil {
 		return fmt.Errorf("failed to save message: %w", err)
 	}
 
@@ -237,7 +244,7 @@ func (s *Service) tryIncrementalSync(ctx context.Context, client *imapclient.Cli
 	if len(newUIDs) == 0 {
 		log.Printf("No new messages to sync")
 		// Update sync timestamp even though there's nothing new
-		if err := db.SetFolderSyncInfo(ctx, s.pool, userID, folderName, syncInfo.LastSyncedUID); err != nil {
+		if err := db.SetFolderSyncInfo(ctx, s.dbPool, userID, folderName, syncInfo.LastSyncedUID); err != nil {
 			log.Printf("Warning: Failed to update folder sync timestamp: %v", err)
 		}
 		// Trigger background thread count update
@@ -287,7 +294,7 @@ func (s *Service) performFullSync(ctx context.Context, client *imapclient.Client
 		if len(uidsToSync) == 0 {
 			log.Printf("No messages found in folder %s", folderName)
 			// Still update sync info
-			if err := db.SetFolderSyncInfo(ctx, s.pool, userID, folderName, nil); err != nil {
+			if err := db.SetFolderSyncInfo(ctx, s.dbPool, userID, folderName, nil); err != nil {
 				log.Printf("Warning: Failed to set folder sync info: %v", err)
 			}
 			return fullSyncResult{shouldReturn: true}, nil
@@ -318,7 +325,7 @@ func (s *Service) performFullSync(ctx context.Context, client *imapclient.Client
 	if len(uidsToSync) == 0 {
 		log.Printf("No messages found in folder %s", folderName)
 		// Still update sync info
-		if err := db.SetFolderSyncInfo(ctx, s.pool, userID, folderName, nil); err != nil {
+		if err := db.SetFolderSyncInfo(ctx, s.dbPool, userID, folderName, nil); err != nil {
 			log.Printf("Warning: Failed to set folder sync info: %v", err)
 		}
 		return fullSyncResult{shouldReturn: true}, nil
@@ -387,7 +394,7 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 	log.Printf("Selected folder %s: %d messages", folderName, mbox.Messages)
 
 	// Check if we can do incremental sync
-	syncInfo, err := db.GetFolderSyncInfo(ctx, s.pool, userID, folderName)
+	syncInfo, err := db.GetFolderSyncInfo(ctx, s.dbPool, userID, folderName)
 	if err != nil {
 		log.Printf("Warning: Failed to get folder sync info: %v", err)
 		syncInfo = nil // Fall back to full sync
@@ -409,7 +416,7 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 
 		// Update sync info with the highest UID
 		highestUIDInt64 := int64(incResult.highestUID)
-		if err := db.SetFolderSyncInfo(ctx, s.pool, userID, folderName, &highestUIDInt64); err != nil {
+		if err := db.SetFolderSyncInfo(ctx, s.dbPool, userID, folderName, &highestUIDInt64); err != nil {
 			log.Printf("Warning: Failed to set folder sync info: %v", err)
 		}
 		go s.updateThreadCountInBackground(userID, folderName)
@@ -448,7 +455,7 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 
 	// Update sync info with the highest UID
 	highestUIDInt64 := int64(fullResult.highestUID)
-	if err := db.SetFolderSyncInfo(ctx, s.pool, userID, folderName, &highestUIDInt64); err != nil {
+	if err := db.SetFolderSyncInfo(ctx, s.dbPool, userID, folderName, &highestUIDInt64); err != nil {
 		log.Printf("Warning: Failed to set folder sync info: %v", err)
 		// Don't fail the entire sync if timestamp update fails
 	}
@@ -479,17 +486,17 @@ func (s *Service) processIncrementalMessage(ctx context.Context, imapMsg *imap.M
 	// Note: This is a simplification - full sync will correct threading using THREAD command
 
 	// First, try to find the thread by Message-ID (this works for root messages)
-	threadModel, err := db.GetThreadByStableID(ctx, s.pool, userID, messageID)
+	threadModel, err := db.GetThreadByStableID(ctx, s.dbPool, userID, messageID)
 	if err != nil {
 		if !errors.Is(err, db.ErrThreadNotFound) {
 			return fmt.Errorf("failed to get thread: %w", err)
 		}
 
 		// Thread was not found - check if this message already exists (might be a reply to an existing thread)
-		existingMsg, err := db.GetMessageByMessageID(ctx, s.pool, userID, messageID)
+		existingMsg, err := db.GetMessageByMessageID(ctx, s.dbPool, userID, messageID)
 		if err == nil && existingMsg != nil {
 			// Message already exists, get its thread
-			threadModel, err = db.GetThreadByID(ctx, s.pool, existingMsg.ThreadID)
+			threadModel, err = db.GetThreadByID(ctx, s.dbPool, existingMsg.ThreadID)
 			if err != nil {
 				return fmt.Errorf("failed to get existing message's thread: %w", err)
 			}
@@ -505,7 +512,7 @@ func (s *Service) processIncrementalMessage(ctx context.Context, imapMsg *imap.M
 			if imapMsg.Envelope != nil {
 				threadModel.Subject = imapMsg.Envelope.Subject
 			}
-			if err := db.SaveThread(ctx, s.pool, threadModel); err != nil {
+			if err := db.SaveThread(ctx, s.dbPool, threadModel); err != nil {
 				return fmt.Errorf("failed to save thread: %w", err)
 			}
 		}
@@ -517,7 +524,7 @@ func (s *Service) processIncrementalMessage(ctx context.Context, imapMsg *imap.M
 		return fmt.Errorf("failed to parse message: %w", err)
 	}
 
-	if err := db.SaveMessage(ctx, s.pool, msg); err != nil {
+	if err := db.SaveMessage(ctx, s.dbPool, msg); err != nil {
 		return fmt.Errorf("failed to save message: %w", err)
 	}
 
@@ -531,7 +538,7 @@ func (s *Service) updateThreadCountInBackground(userID, folderName string) {
 	bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := db.UpdateThreadCount(bgCtx, s.pool, userID, folderName); err != nil {
+	if err := db.UpdateThreadCount(bgCtx, s.dbPool, userID, folderName); err != nil {
 		log.Printf("Warning: Failed to update thread count in background for folder %s: %v", folderName, err)
 	} else {
 		log.Printf("Updated thread count for folder %s", folderName)
@@ -572,15 +579,25 @@ func (s *Service) SyncFullMessages(ctx context.Context, userID string, messages 
 	// Sync messages grouped by folder
 	for folderName, uids := range folderToUIDs {
 		// Get IMAP client (internal use - need concrete type)
-		client, err := s.clientPool.getClientConcrete(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
+		clientIface, release, err := s.imapPool.GetClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
 		if err != nil {
 			log.Printf("Warning: Failed to get IMAP client for folder %s: %v", folderName, err)
 			continue
 		}
 
+		wrapper, ok := clientIface.(*ClientWrapper)
+		if !ok || wrapper.client == nil {
+			log.Printf("Warning: Failed to unwrap IMAP client for folder %s", folderName)
+			release()
+			continue
+		}
+
+		client := wrapper.client
+
 		// Select the folder once for all messages in this folder
 		if _, err := client.Select(folderName, false); err != nil {
 			log.Printf("Warning: Failed to select folder %s: %v", folderName, err)
+			release()
 			continue
 		}
 
@@ -591,6 +608,8 @@ func (s *Service) SyncFullMessages(ctx context.Context, userID string, messages 
 				// Continue with other messages
 			}
 		}
+
+		release()
 	}
 
 	return nil
@@ -605,7 +624,7 @@ func (s *Service) syncSingleMessage(ctx context.Context, client *imapclient.Clie
 	}
 
 	// Get existing message from DB
-	msg, err := db.GetMessageByUID(ctx, s.pool, userID, folderName, imapUID)
+	msg, err := db.GetMessageByUID(ctx, s.dbPool, userID, folderName, imapUID)
 	if err != nil {
 		return fmt.Errorf("failed to get message from DB: %w", err)
 	}
@@ -621,14 +640,14 @@ func (s *Service) syncSingleMessage(ctx context.Context, client *imapclient.Clie
 	msg.BodyText = parsedMsg.BodyText
 
 	// Save message with body
-	if err := db.SaveMessage(ctx, s.pool, msg); err != nil {
+	if err := db.SaveMessage(ctx, s.dbPool, msg); err != nil {
 		return fmt.Errorf("failed to save message: %w", err)
 	}
 
 	// Save attachments
 	for _, att := range parsedMsg.Attachments {
 		att.MessageID = msg.ID
-		if err := db.SaveAttachment(ctx, s.pool, &att); err != nil {
+		if err := db.SaveAttachment(ctx, s.dbPool, &att); err != nil {
 			log.Printf("Warning: Failed to save attachment: %v", err)
 		}
 	}
@@ -638,7 +657,7 @@ func (s *Service) syncSingleMessage(ctx context.Context, client *imapclient.Clie
 
 // ShouldSyncFolder checks if we should sync the folder based on cache TTL.
 func (s *Service) ShouldSyncFolder(ctx context.Context, userID, folderName string) (bool, error) {
-	syncInfo, err := db.GetFolderSyncInfo(ctx, s.pool, userID, folderName)
+	syncInfo, err := db.GetFolderSyncInfo(ctx, s.dbPool, userID, folderName)
 	if err != nil {
 		return false, err
 	}
@@ -654,5 +673,5 @@ func (s *Service) ShouldSyncFolder(ctx context.Context, userID, folderName strin
 
 // Close closes the service and cleans up connections.
 func (s *Service) Close() {
-	s.clientPool.Close()
+	s.imapPool.Close()
 }

@@ -21,7 +21,7 @@ func TestThreadsHandler_GetThreads(t *testing.T) {
 	defer pool.Close()
 
 	encryptor := getTestEncryptor(t)
-	imapService := imap.NewService(pool, encryptor)
+	imapService := imap.NewService(pool, imap.NewPool(), encryptor)
 	defer imapService.Close()
 	handler := NewThreadsHandler(pool, encryptor, imapService)
 

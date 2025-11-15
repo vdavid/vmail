@@ -33,7 +33,7 @@ func TestShouldSyncFolder(t *testing.T) {
 	}
 
 	encryptor := getTestEncryptor(t)
-	service := NewService(pool, encryptor)
+	service := NewService(pool, NewPool(), encryptor)
 	defer service.Close()
 
 	userID, err := db.GetOrCreateUser(ctx, pool, "sync-test@example.com")
@@ -199,7 +199,7 @@ func TestService_updateThreadCountInBackground(t *testing.T) {
 	defer pool.Close()
 
 	encryptor := getTestEncryptor(t)
-	service := NewService(pool, encryptor)
+	service := NewService(pool, NewPool(), encryptor)
 	defer service.Close()
 
 	ctx := context.Background()

@@ -403,7 +403,7 @@ func TestService_buildThreadMapFromMessages(t *testing.T) {
 	defer pool.Close()
 
 	encryptor := getTestEncryptorForSearch(t)
-	service := NewService(pool, encryptor)
+	service := NewService(pool, NewPool(), encryptor)
 	defer service.Close()
 
 	ctx := context.Background()
