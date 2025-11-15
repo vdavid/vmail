@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/emersion/go-imap"
@@ -273,13 +274,22 @@ type fullSyncResult struct {
 }
 
 // performFullSync performs a full sync of all threads in the folder.
-// Falls back to fetching all UIDs using SEARCH if THREAD command is not supported.
+// In non-test environments, the IMAP server is required to support the THREAD
+// extension (RFC 5256). In test mode (VMAIL_TEST_MODE=true), if THREAD is not
+// supported we fall back to fetching all UIDs using SEARCH so that E2E tests
+// can run against the in-memory IMAP server.
 func (s *Service) performFullSync(ctx context.Context, client *imapclient.Client, userID, folderName string) (fullSyncResult, error) {
 	log.Printf("Full sync: fetching all threads")
 	threads, err := RunThreadCommand(client)
 	if err != nil {
-		// THREAD command not supported (e.g., by test IMAP server) - fall back to SEARCH
-		log.Printf("THREAD command not supported, falling back to SEARCH: %v", err)
+		// In non-test environments, missing THREAD support is a hard error.
+		if os.Getenv("VMAIL_TEST_MODE") != "true" {
+			return fullSyncResult{}, fmt.Errorf("IMAP server must support THREAD extension (RFC 5256): %w", err)
+		}
+
+		// In test mode (used by E2E tests), THREAD is not supported by the
+		// in-memory test IMAP server, so we fall back to SEARCH.
+		log.Printf("THREAD command not supported in test mode, falling back to SEARCH, which is okay.")
 		// Fetch all UIDs using SEARCH (starting from UID 1)
 		uidsToSync, err := SearchUIDsSince(client, 1)
 		if err != nil {

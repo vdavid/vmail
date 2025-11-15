@@ -34,6 +34,7 @@ export default defineConfig({
             reuseExistingServer: false,
             timeout: 120 * 1000,
             env: {
+                VMAIL_ENV: 'test',
                 VMAIL_TEST_MODE: 'true',
                 PORT: '11765', // Use different port for E2E tests
                 VMAIL_IMAP_MAX_WORKERS: '50', // Increase max workers for faster tests
