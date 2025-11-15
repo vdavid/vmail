@@ -74,3 +74,20 @@ func WriteJSONResponse(w http.ResponseWriter, data interface{}) bool {
 	}
 	return true
 }
+
+// GetPaginationLimit gets the pagination limit, using user settings if available.
+// If limitFromQuery is provided (> 0), it takes precedence.
+// Otherwise, it uses the user's setting from the database, or defaults to 100.
+// This is a shared helper function used by multiple handlers for consistent pagination limit handling.
+func GetPaginationLimit(ctx context.Context, pool *pgxpool.Pool, userID string, limitFromQuery int) int {
+	if limitFromQuery > 0 {
+		return limitFromQuery
+	}
+
+	settings, err := db.GetUserSettings(ctx, pool, userID)
+	if err == nil {
+		return settings.PaginationThreadsPerPage
+	}
+
+	return 100
+}
