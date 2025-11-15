@@ -8,25 +8,25 @@ import (
 	"github.com/emersion/go-imap"
 )
 
-// GetListenerConnection gets or creates a listener connection for a user.
-// Listener connections are dedicated connections for IDLE command.
-// Returns a locked connection that must be unlocked by the caller.
+// getListenerConnection gets or creates a listener client for a user.
+// Listener clients are dedicated clients for IDLE command.
+// Returns a locked client that must be unlocked by the caller.
 // Thread-safe: uses double-check locking pattern.
-func (p *Pool) GetListenerConnection(userID, server, username, password string) (*clientWithMutex, error) {
-	// First check without lock
+func (p *Pool) getListenerConnection(userID, server, username, password string) (*threadSafeClient, error) {
+	// First check without a lock
 	p.mu.RLock()
 	listener, exists := p.listeners[userID]
 	p.mu.RUnlock()
 
 	if exists {
 		listener.Lock()
-		// Double-check after acquiring lock
+		// Double-check after acquiring a lock
 		p.mu.RLock()
 		existingListener, stillExists := p.listeners[userID]
 		p.mu.RUnlock()
 
 		if stillExists && existingListener == listener {
-			// Check if connection is healthy
+			// Check if the connection is healthy
 			state := listener.GetClient().State()
 			if state == imap.AuthenticatedState || state == imap.SelectedState {
 				return listener, nil // Caller must unlock
@@ -43,12 +43,12 @@ func (p *Pool) GetListenerConnection(userID, server, username, password string) 
 		} else {
 			// Another goroutine removed/recreated it
 			listener.Unlock()
-			// Retry with new connection
-			return p.GetListenerConnection(userID, server, username, password)
+			// Retry with a new connection
+			return p.getListenerConnection(userID, server, username, password)
 		}
 	}
 
-	// Need to create new listener connection
+	// Need to create a new listener connection
 	useTLS := os.Getenv("VMAIL_TEST_MODE") != "true"
 	c, err := ConnectToIMAP(server, useTLS)
 	if err != nil {
@@ -60,8 +60,8 @@ func (p *Pool) GetListenerConnection(userID, server, username, password string) 
 		return nil, fmt.Errorf("failed to login: %w", err)
 	}
 
-	// Wrap in clientWithMutex
-	listener = &clientWithMutex{
+	// Wrap in threadSafeClient
+	listener = &threadSafeClient{
 		client:   c,
 		lastUsed: time.Now(),
 		role:     roleListener,
