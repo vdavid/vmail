@@ -8,11 +8,11 @@ import (
 	"github.com/emersion/go-imap"
 )
 
-// getListenerConnection gets or creates a listener client for a user.
+// GetListenerConnection gets or creates a listener client for a user.
 // Listener clients are dedicated clients for IDLE command.
 // Returns a locked client that must be unlocked by the caller.
 // Thread-safe: uses double-check locking pattern.
-func (p *Pool) getListenerConnection(userID, server, username, password string) (*threadSafeClient, error) {
+func (p *Pool) GetListenerConnection(userID, server, username, password string) (ListenerClient, error) {
 	// First check without a lock
 	p.mu.RLock()
 	listener, exists := p.listeners[userID]
@@ -44,7 +44,7 @@ func (p *Pool) getListenerConnection(userID, server, username, password string) 
 			// Another goroutine removed/recreated it
 			listener.Unlock()
 			// Retry with a new connection
-			return p.getListenerConnection(userID, server, username, password)
+			return p.GetListenerConnection(userID, server, username, password)
 		}
 	}
 

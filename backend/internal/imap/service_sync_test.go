@@ -373,6 +373,68 @@ func TestProcessIncrementalMessage(t *testing.T) {
 		}
 	})
 
+	t.Run("matches existing thread by being a reply (message exists in DB)", func(t *testing.T) {
+		// Create a thread first
+		rootMessageID := "<root@test>"
+		thread := &models.Thread{
+			UserID:         userID,
+			StableThreadID: rootMessageID,
+			Subject:        "Root Thread",
+		}
+		err := db.SaveThread(ctx, pool, thread)
+		if err != nil {
+			t.Fatalf("Failed to save thread: %v", err)
+		}
+
+		// Create a message in that thread (simulating a previous sync)
+		replyMessageID := "<reply@test>"
+		existingMsg := &models.Message{
+			UserID:          userID,
+			ThreadID:        thread.ID,
+			MessageIDHeader: replyMessageID,
+			IMAPFolderName:  folderName,
+			IMAPUID:         4,
+			Subject:         "Re: Root Thread",
+			BodyText:        "Original body",
+			UnsafeBodyHTML:  "<p>Original body</p>",
+		}
+		err = db.SaveMessage(ctx, pool, existingMsg)
+		if err != nil {
+			t.Fatalf("Failed to save existing message: %v", err)
+		}
+
+		// Now process the same message again (simulating incremental sync finding it)
+		imapMsg := &imap.Message{
+			Uid: 4,
+			Envelope: &imap.Envelope{
+				MessageId: replyMessageID, // Same Message-ID as existing message
+				Subject:   "Re: Root Thread",
+				Date:      time.Now(),
+				From: []*imap.Address{
+					{MailboxName: "from", HostName: "test.com"},
+				},
+				To: []*imap.Address{
+					{MailboxName: "to", HostName: "test.com"},
+				},
+			},
+			Flags: []string{imap.SeenFlag},
+		}
+
+		err = service.processIncrementalMessage(ctx, imapMsg, userID, folderName)
+		if err != nil {
+			t.Fatalf("processIncrementalMessage failed: %v", err)
+		}
+
+		// Verify message is still in the same thread
+		msg, err := db.GetMessageByMessageID(ctx, pool, userID, replyMessageID)
+		if err != nil {
+			t.Fatalf("Failed to get message: %v", err)
+		}
+		if msg.ThreadID != thread.ID {
+			t.Errorf("Message should be in existing thread %s, got %s", thread.ID, msg.ThreadID)
+		}
+	})
+
 	t.Run("skips message without Message-ID", func(t *testing.T) {
 		imapMsg := &imap.Message{
 			Uid: 3,

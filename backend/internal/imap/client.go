@@ -39,6 +39,12 @@ func (c *threadSafeClient) Unlock() {
 	c.mu.Unlock()
 }
 
+// TryLock attempts to acquire the mutex without blocking.
+// Returns true if the lock was acquired, false otherwise.
+func (c *threadSafeClient) TryLock() bool {
+	return c.mu.TryLock()
+}
+
 // GetClient returns the underlying IMAP client (for internal use).
 // Caller must hold the lock before calling this.
 func (c *threadSafeClient) GetClient() *client.Client {

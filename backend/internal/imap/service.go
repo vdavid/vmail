@@ -464,12 +464,6 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 // For simplicity, we use the message's own Message-ID to match threads.
 // If the Message-ID matches a thread's stable ID, it's the root message of that thread.
 // Otherwise, we create a new thread. Full sync will correct any threading issues.
-// FIXME-TEST: Add test cases for:
-// - Message that matches existing thread by Message-ID
-// - Message that matches existing thread by being a reply (existing message in DB)
-// - Message that creates a new thread
-// - Message without Message-ID (should skip)
-// - Database errors during thread/message save
 func (s *Service) processIncrementalMessage(ctx context.Context, imapMsg *imap.Message, userID, folderName string) error {
 	if imapMsg.Envelope == nil || len(imapMsg.Envelope.MessageId) == 0 {
 		log.Printf("Warning: Message UID %d has no Message-ID, skipping", imapMsg.Uid)

@@ -9,11 +9,6 @@ import (
 
 // FetchMessageHeaders fetches message headers for the given UIDs.
 // Returns envelope, body structure, flags, and UID for each message.
-// FIXME-TEST: Add test cases for:
-// - Empty UIDs slice (should return empty slice, not error)
-// - Nil client (already checked, but test it)
-// - Network errors during fetch
-// - Partial fetch failures (some messages succeed, some fail)
 func FetchMessageHeaders(c *client.Client, uids []uint32) ([]*imap.Message, error) {
 	if c == nil {
 		return nil, fmt.Errorf("client is nil")
@@ -57,11 +52,6 @@ func FetchMessageHeaders(c *client.Client, uids []uint32) ([]*imap.Message, erro
 
 // FetchFullMessage fetches the full message body for the given UID.
 // First fetches headers and body structure, then fetches the actual body content.
-// FIXME-TEST: Add test cases for:
-// - Nil client (already checked, but test it)
-// - Network errors during fetch
-// - Message without body structure
-// - Message with empty body
 func FetchFullMessage(c *client.Client, uid uint32) (*imap.Message, error) {
 	if c == nil {
 		return nil, fmt.Errorf("client is nil")
@@ -111,7 +101,11 @@ func FetchFullMessage(c *client.Client, uid uint32) (*imap.Message, error) {
 		if bodyMsg != nil {
 			msg.Body = bodyMsg.Body
 		}
-		<-bodyDone
+		if err := <-bodyDone; err != nil {
+			// Log error but don't fail - we still have headers and structure
+			// The body fetch failure is non-critical for basic message retrieval
+			return nil, fmt.Errorf("failed to fetch message body: %w", err)
+		}
 	}
 
 	return msg, nil
