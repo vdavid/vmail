@@ -29,30 +29,30 @@ func (p *Pool) cleanupIdleConnections() {
 	defer p.mu.Unlock()
 
 	now := time.Now()
-	for userID, pool := range p.workerPools {
-		pool.mu.Lock()
-		var toRemove []*clientWithMutex
-		for _, conn := range pool.connections {
-			if now.Sub(conn.GetLastUsed()) > workerIdleTimeout {
-				toRemove = append(toRemove, conn)
+	for userID, set := range p.workerSets {
+		set.mu.Lock()
+		var toRemove []*threadSafeClient
+		for _, client := range set.clients {
+			if now.Sub(client.GetLastUsed()) > workerIdleTimeout {
+				toRemove = append(toRemove, client)
 			}
 		}
-		// Remove dead connections
-		for _, conn := range toRemove {
-			for i, c := range pool.connections {
-				if c == conn {
-					pool.connections = append(pool.connections[:i], pool.connections[i+1:]...)
-					conn.Lock()
-					_ = conn.GetClient().Logout()
-					conn.Unlock()
+		// Remove idle clients
+		for _, client := range toRemove {
+			for i, c := range set.clients {
+				if c == client {
+					set.clients = append(set.clients[:i], set.clients[i+1:]...)
+					client.Lock()
+					_ = client.GetClient().Logout()
+					client.Unlock()
 					break
 				}
 			}
 		}
-		// Remove empty pools
-		if len(pool.connections) == 0 {
-			delete(p.workerPools, userID)
+		// Remove empty sets
+		if len(set.clients) == 0 {
+			delete(p.workerSets, userID)
 		}
-		pool.mu.Unlock()
+		set.mu.Unlock()
 	}
 }

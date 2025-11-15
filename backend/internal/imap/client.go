@@ -9,54 +9,54 @@ import (
 	"github.com/emersion/go-imap/client"
 )
 
-// connectionRole indicates the purpose of a connection.
-type connectionRole int
+// clientRole indicates the purpose of a client.
+type clientRole int
 
 const (
-	// roleWorker indicates a worker connection. There can be multiple worker connections per user.
-	roleWorker connectionRole = iota
-	// roleListener indicates a listener connection. There can be only one listener connection per user.
+	// roleWorker indicates a worker client. There can be multiple worker clients per user.
+	roleWorker clientRole = iota
+	// roleListener indicates a listener client. There can be only one listener client per user.
 	roleListener
 )
 
-// clientWithMutex wraps an IMAP client with a mutex for thread-safe access.
-// Each connection has its own mutex to allow concurrent access to different connections
-// while serializing access to the same connection.
-type clientWithMutex struct {
+// threadSafeClient wraps an IMAP client with a mutex for thread-safe access.
+// Each client has its own mutex to allow concurrent access to different clients
+// while serializing access to the same client.
+type threadSafeClient struct {
 	client   *client.Client
 	mu       sync.Mutex
 	lastUsed time.Time
-	role     connectionRole
+	role     clientRole
 }
 
 // Lock acquires the mutex for thread-safe access to the underlying client.
-func (c *clientWithMutex) Lock() {
+func (c *threadSafeClient) Lock() {
 	c.mu.Lock()
 }
 
 // Unlock releases the mutex.
-func (c *clientWithMutex) Unlock() {
+func (c *threadSafeClient) Unlock() {
 	c.mu.Unlock()
 }
 
 // GetClient returns the underlying IMAP client (for internal use).
 // Caller must hold the lock before calling this.
-func (c *clientWithMutex) GetClient() *client.Client {
+func (c *threadSafeClient) GetClient() *client.Client {
 	return c.client
 }
 
 // UpdateLastUsed updates the lastUsed timestamp to now.
-func (c *clientWithMutex) UpdateLastUsed() {
+func (c *threadSafeClient) UpdateLastUsed() {
 	c.lastUsed = time.Now()
 }
 
 // GetLastUsed returns the lastUsed timestamp.
-func (c *clientWithMutex) GetLastUsed() time.Time {
+func (c *threadSafeClient) GetLastUsed() time.Time {
 	return c.lastUsed
 }
 
-// GetRole returns the connection role (worker or listener).
-func (c *clientWithMutex) GetRole() connectionRole {
+// GetRole returns the client role (worker or listener).
+func (c *threadSafeClient) GetRole() clientRole {
 	return c.role
 }
 

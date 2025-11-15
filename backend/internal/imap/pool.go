@@ -23,8 +23,8 @@ const (
 // Multiple goroutines can use different connections concurrently, but access to the same
 // connection is serialized.
 type Pool struct {
-	workerPools   map[string]*userWorkerPool  // userID -> worker pool
-	listeners     map[string]*clientWithMutex // userID -> listener connection
+	workerSets    map[string]*workerClientSet  // userID -> worker client set
+	listeners     map[string]*threadSafeClient // userID -> listener connection
 	mu            sync.RWMutex
 	maxWorkers    int // Maximum worker connections per user (default: 3)
 	cleanupCtx    context.Context
@@ -35,8 +35,8 @@ type Pool struct {
 func NewPool() *Pool {
 	ctx, cancel := context.WithCancel(context.Background())
 	p := &Pool{
-		workerPools:   make(map[string]*userWorkerPool),
-		listeners:     make(map[string]*clientWithMutex),
+		workerSets:    make(map[string]*workerClientSet),
+		listeners:     make(map[string]*threadSafeClient),
 		maxWorkers:    3,
 		cleanupCtx:    ctx,
 		cleanupCancel: cancel,
@@ -60,10 +60,10 @@ func (p *Pool) RemoveClient(userID string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// Remove worker pool
-	if pool, exists := p.workerPools[userID]; exists {
-		pool.close()
-		delete(p.workerPools, userID)
+	// Remove worker set
+	if set, exists := p.workerSets[userID]; exists {
+		set.close()
+		delete(p.workerSets, userID)
 	}
 
 	// Remove listener
@@ -83,10 +83,10 @@ func (p *Pool) Close() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// Close all worker pools
-	for userID, pool := range p.workerPools {
-		pool.close()
-		delete(p.workerPools, userID)
+	// Close all worker sets
+	for userID, set := range p.workerSets {
+		set.close()
+		delete(p.workerSets, userID)
 	}
 
 	// Close all listener connections
