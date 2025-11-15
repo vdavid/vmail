@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -46,6 +47,11 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 	// Call IMAP service search
 	threads, totalCount, err := h.imapService.Search(ctx, userID, query, page, limit)
 	if err != nil {
+		// Treat client cancellations as non-errors
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return
+		}
+
 		// Check if it's a query parsing error (should return 400)
 		if errors.Is(err, imap.ErrInvalidSearchQuery) {
 			log.Printf("SearchHandler: Invalid query: %v", err)
