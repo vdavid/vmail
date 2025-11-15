@@ -22,20 +22,6 @@ type FoldersHandler struct {
 	imapPool  imap.IMAPPool
 }
 
-// releasingIMAPClient wraps an IMAPClient and ensures the underlying pool
-// release function is called when ListFolders completes.
-type releasingIMAPClient struct {
-	imap.IMAPClient
-	release func()
-}
-
-// ListFolders proxies the call to the underlying IMAPClient and always calls
-// release afterwards to free the worker slot in the pool.
-func (c *releasingIMAPClient) ListFolders() ([]*models.Folder, error) {
-	defer c.release()
-	return c.IMAPClient.ListFolders()
-}
-
 // NewFoldersHandler creates a new FoldersHandler instance.
 func NewFoldersHandler(pool *pgxpool.Pool, encryptor *crypto.Encryptor, imapPool imap.IMAPPool) *FoldersHandler {
 	return &FoldersHandler{
@@ -59,17 +45,21 @@ func (h *FoldersHandler) GetFolders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client, ok := h.getIMAPClient(w, userID, settings, imapPassword)
-	if !ok {
-		return
-	}
+	// Use WithClient to ensure the client is always released
+	err := h.imapPool.WithClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword, func(client imap.IMAPClient) error {
+		folders, err := client.ListFolders()
+		if err != nil {
+			return h.handleListFoldersError(w, userID, err, settings, imapPassword)
+		}
 
-	folders, ok := h.listFoldersWithRetry(w, userID, client, settings, imapPassword)
-	if !ok {
-		return
-	}
+		h.writeFoldersResponse(w, folders)
+		return nil
+	})
 
-	h.writeFoldersResponse(w, folders)
+	if err != nil {
+		// Error handling is done inside the callback, so if we get here it's a connection error
+		h.handleConnectionError(w, err)
+	}
 }
 
 // getUserSettingsAndPassword retrieves user settings and decrypts the IMAP password.
@@ -95,44 +85,26 @@ func (h *FoldersHandler) getUserSettingsAndPassword(ctx context.Context, w http.
 	return settings, imapPassword, true
 }
 
-// getIMAPClient gets an IMAP client from the pool, handling connection errors.
-// Returns a user-friendly error message for timeout errors to help users troubleshoot.
-func (h *FoldersHandler) getIMAPClient(w http.ResponseWriter, userID string, settings *models.UserSettings, imapPassword string) (imap.IMAPClient, bool) {
-	client, release, err := h.imapPool.GetClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
-	if err != nil {
-		log.Printf("FoldersHandler: Failed to get IMAP client: %v", err)
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "i/o timeout") {
-			http.Error(w, "Connection to IMAP server timed out. Please double-check your server hostname in your Settings and try again.", http.StatusServiceUnavailable)
-		} else {
-			http.Error(w, "Failed to connect to IMAP server", http.StatusInternalServerError)
-		}
-		return nil, false
+// handleConnectionError handles errors when getting a client from the pool.
+func (h *FoldersHandler) handleConnectionError(w http.ResponseWriter, err error) {
+	log.Printf("FoldersHandler: Failed to get IMAP client: %v", err)
+	errMsg := err.Error()
+	if strings.Contains(errMsg, "i/o timeout") {
+		http.Error(w, "Connection to IMAP server timed out. Please double-check your server hostname in your Settings and try again.", http.StatusServiceUnavailable)
+	} else {
+		http.Error(w, "Failed to connect to IMAP server", http.StatusInternalServerError)
 	}
-
-	return &releasingIMAPClient{
-		IMAPClient: client,
-		release:    release,
-	}, true
-}
-
-// listFoldersWithRetry lists folders with automatic retry on connection errors.
-func (h *FoldersHandler) listFoldersWithRetry(w http.ResponseWriter, userID string, client imap.IMAPClient, settings *models.UserSettings, imapPassword string) ([]*models.Folder, bool) {
-	folders, err := client.ListFolders()
-	if err != nil {
-		return h.handleListFoldersError(w, userID, err, settings, imapPassword)
-	}
-	return folders, true
 }
 
 // handleListFoldersError handles errors from ListFolders, including retry logic.
-func (h *FoldersHandler) handleListFoldersError(w http.ResponseWriter, userID string, err error, settings *models.UserSettings, imapPassword string) ([]*models.Folder, bool) {
+// Returns an error to propagate to the WithClient callback.
+func (h *FoldersHandler) handleListFoldersError(w http.ResponseWriter, userID string, err error, settings *models.UserSettings, imapPassword string) error {
 	log.Printf("FoldersHandler: Failed to list folders: %v", err)
 	errMsg := err.Error()
 
 	if strings.Contains(errMsg, "SPECIAL-USE") {
 		http.Error(w, "Your IMAP server doesn't support the SPECIAL-USE extension (RFC 6154), which is required for V-Mail to identify folder types. Please contact your email provider or use a different IMAP server.", http.StatusBadRequest)
-		return nil, false
+		return err // Return error to stop processing
 	}
 
 	if h.isBrokenConnectionError(errMsg) {
@@ -140,7 +112,7 @@ func (h *FoldersHandler) handleListFoldersError(w http.ResponseWriter, userID st
 	}
 
 	http.Error(w, "Failed to list folders", http.StatusInternalServerError)
-	return nil, false
+	return err // Return error to stop processing
 }
 
 // isBrokenConnectionError checks if the error message indicates a broken connection
@@ -153,33 +125,26 @@ func (h *FoldersHandler) isBrokenConnectionError(errMsg string) bool {
 
 // retryListFolders retries listing folders after removing the broken connection from the pool.
 // This handles transient connection issues by getting a fresh IMAP client and retrying the operation.
-func (h *FoldersHandler) retryListFolders(w http.ResponseWriter, userID string, settings *models.UserSettings, imapPassword string) ([]*models.Folder, bool) {
+// Returns an error to propagate to the WithClient callback.
+func (h *FoldersHandler) retryListFolders(w http.ResponseWriter, userID string, settings *models.UserSettings, imapPassword string) error {
 	h.imapPool.RemoveClient(userID)
 
-	client, release, retryErr := h.imapPool.GetClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
-	if retryErr != nil {
-		log.Printf("FoldersHandler: Failed to get IMAP client on retry: %v", retryErr)
-		http.Error(w, "Failed to connect to IMAP server", http.StatusInternalServerError)
-		return nil, false
-	}
-
-	client = &releasingIMAPClient{
-		IMAPClient: client,
-		release:    release,
-	}
-
-	folders, err := client.ListFolders()
-	if err != nil {
-		log.Printf("FoldersHandler: Failed to list folders on retry: %v", err)
-		if strings.Contains(err.Error(), "SPECIAL-USE") {
-			http.Error(w, "Your IMAP server doesn't support the SPECIAL-USE extension (RFC 6154), which is required for V-Mail to identify folder types. Please contact your email provider or use a different IMAP server.", http.StatusBadRequest)
-			return nil, false
+	// Use WithClient for the retry to ensure release happens
+	return h.imapPool.WithClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword, func(client imap.IMAPClient) error {
+		folders, err := client.ListFolders()
+		if err != nil {
+			log.Printf("FoldersHandler: Failed to list folders on retry: %v", err)
+			if strings.Contains(err.Error(), "SPECIAL-USE") {
+				http.Error(w, "Your IMAP server doesn't support the SPECIAL-USE extension (RFC 6154), which is required for V-Mail to identify folder types. Please contact your email provider or use a different IMAP server.", http.StatusBadRequest)
+				return err
+			}
+			http.Error(w, "Failed to list folders", http.StatusInternalServerError)
+			return err
 		}
-		http.Error(w, "Failed to list folders", http.StatusInternalServerError)
-		return nil, false
-	}
 
-	return folders, true
+		h.writeFoldersResponse(w, folders)
+		return nil
+	})
 }
 
 // writeFoldersResponse writes the folders response as JSON.

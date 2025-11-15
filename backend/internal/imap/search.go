@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/emersion/go-imap"
+	imapclient "github.com/emersion/go-imap/client"
 	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/models"
 )
@@ -381,36 +382,44 @@ func (s *Service) Search(ctx context.Context, userID string, query string, page,
 		folder = "INBOX"
 	}
 
-	client, _, err := s.getClientAndSelectFolder(ctx, userID, folder)
+	var threads []*models.Thread
+	var totalCount int
+
+	err = s.withClientAndSelectFolder(ctx, userID, folder, func(client *imapclient.Client, _ *imap.MailboxStatus) error {
+		uids, err := client.UidSearch(criteria)
+		if err != nil {
+			return fmt.Errorf("failed to search IMAP: %w", err)
+		}
+
+		if len(uids) == 0 {
+			threads = nil
+			totalCount = 0
+			return nil
+		}
+
+		messages, err := FetchMessageHeaders(client, uids)
+		if err != nil {
+			return fmt.Errorf("failed to fetch message headers: %w", err)
+		}
+
+		threadMap, threadToLatestSentAt, err := s.buildThreadMapFromMessages(ctx, userID, messages)
+		if err != nil {
+			return err
+		}
+
+		threads, totalCount = sortAndPaginateThreads(threadMap, threadToLatestSentAt, page, limit)
+
+		// Enrich threads with first message's from_address for display
+		if err := db.EnrichThreadsWithFirstMessageFromAddress(ctx, s.dbPool, threads); err != nil {
+			log.Printf("Warning: Failed to enrich threads with first message from address: %v", err)
+			// Continue anyway - threads will work without the from_address
+		}
+
+		return nil
+	})
+
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get IMAP client: %w", err)
-	}
-
-	uids, err := client.UidSearch(criteria)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to search IMAP: %w", err)
-	}
-
-	if len(uids) == 0 {
-		return nil, 0, nil
-	}
-
-	messages, err := FetchMessageHeaders(client, uids)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to fetch message headers: %w", err)
-	}
-
-	threadMap, threadToLatestSentAt, err := s.buildThreadMapFromMessages(ctx, userID, messages)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	threads, totalCount := sortAndPaginateThreads(threadMap, threadToLatestSentAt, page, limit)
-
-	// Enrich threads with first message's from_address for display
-	if err := db.EnrichThreadsWithFirstMessageFromAddress(ctx, s.dbPool, threads); err != nil {
-		log.Printf("Warning: Failed to enrich threads with first message from address: %v", err)
-		// Continue anyway - threads will work without the from_address
 	}
 
 	return threads, totalCount, nil
