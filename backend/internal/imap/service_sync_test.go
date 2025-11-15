@@ -106,7 +106,7 @@ func TestTryIncrementalSync(t *testing.T) {
 	defer clientCleanup()
 
 	encryptor := getTestEncryptor(t)
-	service := NewService(pool, encryptor)
+	service := NewService(pool, NewPool(), encryptor)
 	defer service.Close()
 
 	userID, err := db.GetOrCreateUser(ctx, pool, "incremental-test@example.com")
@@ -272,7 +272,7 @@ func TestProcessIncrementalMessage(t *testing.T) {
 	}
 
 	encryptor := getTestEncryptor(t)
-	service := NewService(pool, encryptor)
+	service := NewService(pool, NewPool(), encryptor)
 	defer service.Close()
 
 	userID, err := db.GetOrCreateUser(ctx, pool, "process-test@example.com")

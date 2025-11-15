@@ -118,7 +118,10 @@ func TestPool_ConcurrentAccess(t *testing.T) {
 		results := make(chan error, numGoroutines)
 		for i := 0; i < numGoroutines; i++ {
 			go func() {
-				_, err := pool.GetClient(userID, server.Address, server.Username(), server.Password())
+				_, release, err := pool.GetClient(userID, server.Address, server.Username(), server.Password())
+				if release != nil {
+					release()
+				}
 				results <- err
 			}()
 		}
@@ -135,9 +138,12 @@ func TestPool_ConcurrentAccess(t *testing.T) {
 		const userID = "remove-while-using-user"
 
 		// Get a client first
-		client, err := pool.GetClient(userID, server.Address, server.Username(), server.Password())
+		client, release, err := pool.GetClient(userID, server.Address, server.Username(), server.Password())
 		if err != nil {
 			t.Fatalf("Failed to get client: %v", err)
+		}
+		if release != nil {
+			defer release()
 		}
 
 		// Start a goroutine that uses the client
@@ -180,9 +186,12 @@ func TestPool_EdgeCases(t *testing.T) {
 		const numUsers = 100
 		for i := 0; i < numUsers; i++ {
 			userID := fmt.Sprintf("user-%d", i)
-			_, err := pool.GetClient(userID, server.Address, server.Username(), server.Password())
+			_, release, err := pool.GetClient(userID, server.Address, server.Username(), server.Password())
 			if err != nil {
 				t.Errorf("Failed to get client for user %s: %v", userID, err)
+			}
+			if release != nil {
+				release()
 			}
 		}
 
@@ -198,9 +207,12 @@ func TestPool_EdgeCases(t *testing.T) {
 		pool := NewPool()
 
 		// Get a client
-		_, err := pool.GetClient("close-user", server.Address, server.Username(), server.Password())
+		_, release, err := pool.GetClient("close-user", server.Address, server.Username(), server.Password())
 		if err != nil {
 			t.Fatalf("Failed to get client: %v", err)
+		}
+		if release != nil {
+			defer release()
 		}
 
 		// Close while the client might be in use
@@ -214,9 +226,12 @@ func TestPool_EdgeCases(t *testing.T) {
 		defer pool.Close()
 
 		userID := "remove-in-use-user"
-		_, err := pool.GetClient(userID, server.Address, server.Username(), server.Password())
+		_, release, err := pool.GetClient(userID, server.Address, server.Username(), server.Password())
 		if err != nil {
 			t.Fatalf("Failed to get client: %v", err)
+		}
+		if release != nil {
+			defer release()
 		}
 
 		// Remove while might be in use

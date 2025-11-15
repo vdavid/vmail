@@ -194,7 +194,10 @@ func setupTestUser(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, 
 		return fmt.Errorf("failed to create encryptor: %w", err)
 	}
 
-	imapService := imap.NewService(pool, encryptor)
+	imapPool := imap.NewPool()
+	defer imapPool.Close()
+
+	imapService := imap.NewService(pool, imapPool, encryptor)
 	if err := imapService.SyncThreadsForFolder(ctx, userID, "INBOX"); err != nil {
 		log.Printf("Warning: Failed to sync INBOX folder: %v", err)
 	} else {
@@ -205,8 +208,8 @@ func setupTestUser(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, 
 }
 
 // startHTTPServer starts the HTTP server and waits for shutdown signals.
-func startHTTPServer(cfg *config.Config, pool *pgxpool.Pool, imapServer *testutil.TestIMAPServer, smtpServer *testutil.TestSMTPServer) error {
-	server := NewServer(cfg, pool)
+func startHTTPServer(cfg *config.Config, dbPool *pgxpool.Pool, imapServer *testutil.TestIMAPServer, smtpServer *testutil.TestSMTPServer) error {
+	server := NewServer(cfg, dbPool)
 	address := ":" + cfg.Port
 
 	log.Printf("V-Mail test server starting on %s", address)
@@ -234,21 +237,21 @@ func startHTTPServer(cfg *config.Config, pool *pgxpool.Pool, imapServer *testuti
 }
 
 // NewServer creates and returns a new HTTP handler for the V-Mail API server.
-func NewServer(cfg *config.Config, pool *pgxpool.Pool) http.Handler {
+func NewServer(cfg *config.Config, dbPool *pgxpool.Pool) http.Handler {
 	encryptor, err := crypto.NewEncryptor(cfg.EncryptionKeyBase64)
 	if err != nil {
 		log.Fatalf("Failed to create encryptor: %v", err)
 	}
 
-	imapPool := imap.NewPool()
-	imapService := imap.NewService(pool, encryptor)
+	imapPool := imap.NewPoolWithMaxWorkers(cfg.IMAPMaxWorkers)
+	imapService := imap.NewService(dbPool, imapPool, encryptor)
 
-	authHandler := api.NewAuthHandler(pool)
-	settingsHandler := api.NewSettingsHandler(pool, encryptor)
-	foldersHandler := api.NewFoldersHandler(pool, encryptor, imapPool)
-	threadsHandler := api.NewThreadsHandler(pool, encryptor, imapService)
-	threadHandler := api.NewThreadHandler(pool, encryptor, imapService)
-	searchHandler := api.NewSearchHandler(pool, encryptor, imapService)
+	authHandler := api.NewAuthHandler(dbPool)
+	settingsHandler := api.NewSettingsHandler(dbPool, encryptor)
+	foldersHandler := api.NewFoldersHandler(dbPool, encryptor, imapPool)
+	threadsHandler := api.NewThreadsHandler(dbPool, encryptor, imapService)
+	threadHandler := api.NewThreadHandler(dbPool, encryptor, imapService)
+	searchHandler := api.NewSearchHandler(dbPool, encryptor, imapService)
 
 	mux := http.NewServeMux()
 

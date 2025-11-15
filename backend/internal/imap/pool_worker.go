@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/emersion/go-imap"
-	"github.com/emersion/go-imap/client"
 )
 
 // getOrCreateWorkerSet gets or creates a worker client set for a user.
@@ -180,38 +179,4 @@ func (p *Pool) checkConnectionHealth(client *threadSafeClient) bool {
 		return false
 	}
 	return true
-}
-
-// getClientConcrete gets or creates a worker client for a user (internal use).
-// Returns the concrete *client.Client type for internal operations.
-// Thread-safe: The client is locked during the operation. For short-lived operations
-// (like Select, Fetch), this is acceptable. The client will be automatically unlocked
-// after a short delay to allow reuse. For long-running operations, consider using getWorkerConnection
-// directly for better control.
-//
-// Note: This method uses a goroutine to automatically release the client after 5 seconds.
-// This is a workaround for backward compatibility. In the future, callers should be refactored
-// to use getWorkerConnection directly and manage the release themselves.
-func (p *Pool) getClientConcrete(userID, server, username, password string) (*client.Client, error) {
-	tsClient, release, err := p.getWorkerConnection(userID, server, username, password)
-	if err != nil {
-		return nil, err
-	}
-	// For backward compatibility, we unlock after a short delay
-	// This allows the client to be reused while still providing thread safety
-	// during the immediate operation. Most operations (Select, Fetch) complete in < 1 second.
-	// Using 5 seconds instead of 30 to avoid holding clients too long.
-	go func() {
-		time.Sleep(5 * time.Second)
-		// Check if pool is still open before releasing
-		// If the pool is closed, don't try to release (would cause panic or deadlock)
-		select {
-		case <-p.cleanupCtx.Done():
-			// Pool is closed, don't try to release
-			return
-		default:
-			release()
-		}
-	}()
-	return tsClient.GetClient(), nil
 }

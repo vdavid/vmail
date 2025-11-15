@@ -36,6 +36,7 @@ export default defineConfig({
             env: {
                 VMAIL_TEST_MODE: 'true',
                 PORT: '11765', // Use different port for E2E tests
+                VMAIL_IMAP_MAX_WORKERS: '50', // Increase max workers for faster tests
             },
         },
         {

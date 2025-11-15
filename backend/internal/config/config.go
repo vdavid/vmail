@@ -37,6 +37,11 @@ type Config struct {
 	Port string
 	// Timezone is the application timezone (e.g., "UTC", "America/New_York"). Defaults to "UTC".
 	Timezone string
+	// IMAPMaxWorkers is the maximum number of IMAP worker connections per user.
+	// This controls concurrency against the IMAP server. In production this should
+	// be kept conservative to respect provider limits. In test environments it can
+	// be higher to speed up E2E tests.
+	IMAPMaxWorkers int
 }
 
 // NewConfig loads and returns a new Config instance from environment variables.
@@ -64,6 +69,7 @@ func NewConfig() (*Config, error) {
 		DBSSLMode:           getEnvOrDefault("VMAIL_DB_SSLMODE", "disable"),
 		Port:                getEnvOrDefault("PORT", "11764"),
 		Timezone:            getEnvOrDefault("TZ", "UTC"),
+		IMAPMaxWorkers:      getEnvOrDefaultInt("VMAIL_IMAP_MAX_WORKERS", 3),
 	}
 
 	if err := config.Validate(); err != nil {
@@ -154,4 +160,19 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// getEnvOrDefaultInt retrieves an environment variable as an int, returning the
+// default value if not set, empty, or invalid.
+func getEnvOrDefaultInt(key string, defaultValue int) int {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		log.Printf("Warning: %s is not a valid integer (%q), using default %d", key, value, defaultValue)
+		return defaultValue
+	}
+	return parsed
 }

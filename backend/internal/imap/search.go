@@ -297,7 +297,7 @@ func (s *Service) buildThreadMapFromMessages(ctx context.Context, userID string,
 
 		messageID := imapMsg.Envelope.MessageId
 
-		msg, err := db.GetMessageByMessageID(ctx, s.pool, userID, messageID)
+		msg, err := db.GetMessageByMessageID(ctx, s.dbPool, userID, messageID)
 		if err != nil {
 			if errors.Is(err, db.ErrMessageNotFound) {
 				log.Printf("Warning: Message with Message-ID %s not found in DB, skipping", messageID)
@@ -306,7 +306,7 @@ func (s *Service) buildThreadMapFromMessages(ctx context.Context, userID string,
 			return nil, nil, fmt.Errorf("failed to get message from DB: %w", err)
 		}
 
-		thread, err := db.GetThreadByID(ctx, s.pool, msg.ThreadID)
+		thread, err := db.GetThreadByID(ctx, s.dbPool, msg.ThreadID)
 		if err != nil {
 			log.Printf("Warning: Failed to get thread %s: %v", msg.ThreadID, err)
 			continue
@@ -408,7 +408,7 @@ func (s *Service) Search(ctx context.Context, userID string, query string, page,
 	threads, totalCount := sortAndPaginateThreads(threadMap, threadToLatestSentAt, page, limit)
 
 	// Enrich threads with first message's from_address for display
-	if err := db.EnrichThreadsWithFirstMessageFromAddress(ctx, s.pool, threads); err != nil {
+	if err := db.EnrichThreadsWithFirstMessageFromAddress(ctx, s.dbPool, threads); err != nil {
 		log.Printf("Warning: Failed to enrich threads with first message from address: %v", err)
 		// Continue anyway - threads will work without the from_address
 	}

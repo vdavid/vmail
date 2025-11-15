@@ -31,13 +31,19 @@ type Pool struct {
 	cleanupCancel context.CancelFunc
 }
 
-// NewPool creates a new IMAP connection pool.
+// NewPool creates a new IMAP connection pool with the default worker limit.
 func NewPool() *Pool {
+	return NewPoolWithMaxWorkers(3)
+}
+
+// NewPoolWithMaxWorkers creates a new IMAP connection pool with a configurable
+// maximum number of worker connections per user.
+func NewPoolWithMaxWorkers(maxWorkers int) *Pool {
 	ctx, cancel := context.WithCancel(context.Background())
 	p := &Pool{
 		workerSets:    make(map[string]*workerClientSet),
 		listeners:     make(map[string]*threadSafeClient),
-		maxWorkers:    3,
+		maxWorkers:    maxWorkers,
 		cleanupCtx:    ctx,
 		cleanupCancel: cancel,
 	}
@@ -46,13 +52,14 @@ func NewPool() *Pool {
 }
 
 // GetClient gets or creates an IMAP client for a user.
-// Implements IMAPPool interface - returns IMAPClient for testability.
-func (p *Pool) GetClient(userID, server, username, password string) (IMAPClient, error) {
-	c, err := p.getClientConcrete(userID, server, username, password)
+// Implements IMAPPool interface - returns IMAPClient and a release function
+// that must be called when the caller is done with the client.
+func (p *Pool) GetClient(userID, server, username, password string) (IMAPClient, func(), error) {
+	tsClient, release, err := p.getWorkerConnection(userID, server, username, password)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &ClientWrapper{client: c}, nil
+	return &ClientWrapper{client: tsClient.GetClient()}, release, nil
 }
 
 // RemoveClient removes all connections (worker and listener) for a user from the pool.

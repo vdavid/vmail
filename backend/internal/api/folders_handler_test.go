@@ -102,7 +102,7 @@ type mockIMAPPool struct {
 	retryClientErr error
 }
 
-func (m *mockIMAPPool) GetClient(userID, server, username, password string) (imap.IMAPClient, error) {
+func (m *mockIMAPPool) GetClient(userID, server, username, password string) (imap.IMAPClient, func(), error) {
 	m.getClientCalled = true
 	m.getClientCallCount++
 	m.getClientUserID = userID
@@ -112,10 +112,10 @@ func (m *mockIMAPPool) GetClient(userID, server, username, password string) (ima
 
 	// If this is a retry (second call) and we have a retry client configured, use it
 	if m.getClientCallCount > 1 && m.retryClient != nil {
-		return m.retryClient, m.retryClientErr
+		return m.retryClient, func() {}, m.retryClientErr
 	}
 
-	return m.getClientResult, m.getClientErr
+	return m.getClientResult, func() {}, m.getClientErr
 }
 
 func (m *mockIMAPPool) RemoveClient(userID string) {

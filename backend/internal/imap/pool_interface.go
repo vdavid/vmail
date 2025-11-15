@@ -22,7 +22,9 @@ type IMAPClient interface {
 //goland:noinspection GoNameStartsWithPackageName
 type IMAPPool interface {
 	// GetClient gets or creates an IMAP client for a user.
-	GetClient(userID, server, username, password string) (IMAPClient, error)
+	// Callers must always call the returned release function when they are done with the client.
+	// This ensures that worker slots are released promptly and avoids artificial minimum hold times.
+	GetClient(userID, server, username, password string) (IMAPClient, func(), error)
 
 	// RemoveClient removes a client from the pool (useful when a connection is broken).
 	RemoveClient(userID string)

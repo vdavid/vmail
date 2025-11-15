@@ -22,6 +22,20 @@ type FoldersHandler struct {
 	imapPool  imap.IMAPPool
 }
 
+// releasingIMAPClient wraps an IMAPClient and ensures the underlying pool
+// release function is called when ListFolders completes.
+type releasingIMAPClient struct {
+	imap.IMAPClient
+	release func()
+}
+
+// ListFolders proxies the call to the underlying IMAPClient and always calls
+// release afterwards to free the worker slot in the pool.
+func (c *releasingIMAPClient) ListFolders() ([]*models.Folder, error) {
+	defer c.release()
+	return c.IMAPClient.ListFolders()
+}
+
 // NewFoldersHandler creates a new FoldersHandler instance.
 func NewFoldersHandler(pool *pgxpool.Pool, encryptor *crypto.Encryptor, imapPool imap.IMAPPool) *FoldersHandler {
 	return &FoldersHandler{
@@ -84,7 +98,7 @@ func (h *FoldersHandler) getUserSettingsAndPassword(ctx context.Context, w http.
 // getIMAPClient gets an IMAP client from the pool, handling connection errors.
 // Returns a user-friendly error message for timeout errors to help users troubleshoot.
 func (h *FoldersHandler) getIMAPClient(w http.ResponseWriter, userID string, settings *models.UserSettings, imapPassword string) (imap.IMAPClient, bool) {
-	client, err := h.imapPool.GetClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
+	client, release, err := h.imapPool.GetClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
 	if err != nil {
 		log.Printf("FoldersHandler: Failed to get IMAP client: %v", err)
 		errMsg := err.Error()
@@ -95,7 +109,11 @@ func (h *FoldersHandler) getIMAPClient(w http.ResponseWriter, userID string, set
 		}
 		return nil, false
 	}
-	return client, true
+
+	return &releasingIMAPClient{
+		IMAPClient: client,
+		release:    release,
+	}, true
 }
 
 // listFoldersWithRetry lists folders with automatic retry on connection errors.
@@ -138,11 +156,16 @@ func (h *FoldersHandler) isBrokenConnectionError(errMsg string) bool {
 func (h *FoldersHandler) retryListFolders(w http.ResponseWriter, userID string, settings *models.UserSettings, imapPassword string) ([]*models.Folder, bool) {
 	h.imapPool.RemoveClient(userID)
 
-	client, retryErr := h.imapPool.GetClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
+	client, release, retryErr := h.imapPool.GetClient(userID, settings.IMAPServerHostname, settings.IMAPUsername, imapPassword)
 	if retryErr != nil {
 		log.Printf("FoldersHandler: Failed to get IMAP client on retry: %v", retryErr)
 		http.Error(w, "Failed to connect to IMAP server", http.StatusInternalServerError)
 		return nil, false
+	}
+
+	client = &releasingIMAPClient{
+		IMAPClient: client,
+		release:    release,
 	}
 
 	folders, err := client.ListFolders()
