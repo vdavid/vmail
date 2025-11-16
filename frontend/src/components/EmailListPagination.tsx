@@ -47,8 +47,8 @@ export default function EmailListPagination({ pagination }: EmailListPaginationP
     }
 
     return (
-        <div className='flex items-center justify-between border-t border-gray-200 bg-white px-6 py-4'>
-            <div className='text-sm text-gray-700'>
+        <div className='flex items-center justify-between border-t border-white/5 bg-slate-950/60 px-4 py-4 text-slate-200 sm:px-6'>
+            <div className='text-xs uppercase tracking-wide text-slate-400'>
                 Page {pagination.page} of {totalPages}
             </div>
             <div className='flex gap-2'>
@@ -57,16 +57,16 @@ export default function EmailListPagination({ pagination }: EmailListPaginationP
                         handlePageChange(pagination.page - 1)
                     }}
                     disabled={pagination.page <= 1}
-                    className='rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50'
+                    className='rounded-full border border-white/10 px-4 py-2 text-sm transition hover:border-white/40 disabled:cursor-not-allowed disabled:opacity-30'
                 >
-                    Previous
+                    Prev
                 </button>
                 <button
                     onClick={() => {
                         handlePageChange(pagination.page + 1)
                     }}
                     disabled={pagination.page >= totalPages}
-                    className='rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50'
+                    className='rounded-full border border-white/10 px-4 py-2 text-sm transition hover:border-white/40 disabled:cursor-not-allowed disabled:opacity-30'
                 >
                     Next
                 </button>

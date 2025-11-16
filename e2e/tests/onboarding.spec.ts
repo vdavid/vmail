@@ -6,7 +6,6 @@ import {
     fillSettingsForm,
     navigateAndWait,
     submitSettingsForm,
-    waitForAppReady,
 } from '../utils/helpers'
 
 /**

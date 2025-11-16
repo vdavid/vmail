@@ -164,8 +164,8 @@ describe('ThreadPage', () => {
 
         // Mock fetch to verify the API is called with the raw (decoded) thread ID
         const mockFetch = vi.fn()
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        global.fetch = mockFetch
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any,@typescript-eslint/no-unsafe-assignment
+        globalThis.fetch = mockFetch as any
 
         mockFetch.mockResolvedValueOnce({
             ok: true,

@@ -44,8 +44,8 @@ test.describe('Search Functionality', () => {
         // Wait for results
         await waitForEmailList(page)
 
-        // Verify search results page shows query (use main content area to avoid sidebar h1)
-        await expect(page.locator('main h1, [role="main"] h1').first()).toContainText('Search results')
+        // Verify search results page shows query (use data-testid for style-independent testing)
+        await expect(page.locator('[data-testid="search-page-heading"]').first()).toContainText('Search results')
         
         // Verify we found the expected message from sampleMessages
         const expectedMessage = sampleMessages.find(m => m.subject.includes('Special Report'))
