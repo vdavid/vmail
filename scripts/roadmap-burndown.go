@@ -23,10 +23,11 @@ type CommitData struct {
 
 // DailyData represents aggregated data for a single day
 type DailyData struct {
-	Date       time.Time
-	TotalTasks int
-	DoneTasks  int
-	Message    string
+	Date        time.Time
+	TotalTasks  int
+	DoneTasks   int
+	CommitCount int
+	Messages    []string
 }
 
 func main() {
@@ -167,29 +168,42 @@ func countTasks(content string) (total, done int) {
 	return total, done
 }
 
-// aggregateByDay groups commits by date and uses the latest commit per day
+// aggregateByDay groups commits by date and uses the latest commit per day for task counts
 func aggregateByDay(commits []CommitData) []DailyData {
-	// Map: date (YYYY-MM-DD) -> latest commit data for that day
-	dailyMap := make(map[string]CommitData)
+	// Map: date (YYYY-MM-DD) -> commits for that day
+	dailyMap := make(map[string][]CommitData)
 
 	for _, commit := range commits {
 		dateKey := commit.Date.Format("2006-01-02")
-		existing, exists := dailyMap[dateKey]
-
-		// Use the latest commit if multiple commits on the same day
-		if !exists || commit.Date.After(existing.Date) {
-			dailyMap[dateKey] = commit
-		}
+		dailyMap[dateKey] = append(dailyMap[dateKey], commit)
 	}
 
 	// Convert map to slice and sort by date
 	var dailyData []DailyData
-	for _, commit := range dailyMap {
+	for dateKey, commitsForDay := range dailyMap {
+		// Parse the date
+		date, _ := time.Parse("2006-01-02", dateKey)
+
+		// Use the latest commit for task counts
+		latestCommit := commitsForDay[0]
+		for _, c := range commitsForDay {
+			if c.Date.After(latestCommit.Date) {
+				latestCommit = c
+			}
+		}
+
+		// Collect all messages
+		var messages []string
+		for _, c := range commitsForDay {
+			messages = append(messages, c.Message)
+		}
+
 		dailyData = append(dailyData, DailyData{
-			Date:       commit.Date,
-			TotalTasks: commit.TotalTasks,
-			DoneTasks:  commit.DoneTasks,
-			Message:    commit.Message,
+			Date:        date,
+			TotalTasks:  latestCommit.TotalTasks,
+			DoneTasks:   latestCommit.DoneTasks,
+			CommitCount: len(commitsForDay),
+			Messages:    messages,
 		})
 	}
 
@@ -244,12 +258,13 @@ func fillGaps(dailyData []DailyData) []DailyData {
 			hasLastData = true
 			filled = append(filled, data)
 		} else if hasLastData {
-			// Use previous day's data but update the date
+			// Use previous day's data but update the date and set commit count to 0
 			filled = append(filled, DailyData{
-				Date:       d,
-				TotalTasks: lastData.TotalTasks,
-				DoneTasks:  lastData.DoneTasks,
-				Message:    lastData.Message,
+				Date:        d,
+				TotalTasks:  lastData.TotalTasks,
+				DoneTasks:   lastData.DoneTasks,
+				CommitCount: 0,
+				Messages:    []string{},
 			})
 		}
 	}
@@ -263,7 +278,7 @@ func outputCSV(data []DailyData) {
 	defer writer.Flush()
 
 	// Write header
-	header := []string{"date", "total_tasks", "done_tasks", "commit_message"}
+	header := []string{"date", "commits", "total_tasks", "done_tasks", "commit_messages"}
 	if err := writer.Write(header); err != nil {
 		_, err := fmt.Fprintf(os.Stderr, "Error writing CSV header: %v\n", err)
 		if err != nil {
@@ -274,11 +289,13 @@ func outputCSV(data []DailyData) {
 
 	// Write data rows
 	for _, d := range data {
+		messages := strings.Join(d.Messages, "; ")
 		row := []string{
 			d.Date.Format("2006-01-02"),
+			fmt.Sprintf("%d", d.CommitCount),
 			fmt.Sprintf("%d", d.TotalTasks),
 			fmt.Sprintf("%d", d.DoneTasks),
-			d.Message,
+			messages,
 		}
 		if err := writer.Write(row); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error writing CSV row: %v\n", err)
