@@ -105,6 +105,12 @@ export default [
                     },
                 },
             ],
+            complexity: [
+                'warn',
+                {
+                    max: 15,
+                },
+            ],
         },
     },
     {

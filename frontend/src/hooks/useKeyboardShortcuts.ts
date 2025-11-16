@@ -36,6 +36,45 @@ export function useKeyboardShortcuts() {
     const threads = threadsResponse?.threads ?? null
 
     useEffect(() => {
+        const isInbox = location.pathname === '/'
+        const isThreadView = location.pathname.startsWith('/thread/')
+
+        const handleNextItem = (event: KeyboardEvent) => {
+            event.preventDefault()
+            event.stopPropagation()
+            if (isInbox && threads && threads.length > 0) {
+                incrementSelectedIndex(threads.length)
+            }
+        }
+
+        const handlePreviousItem = (event: KeyboardEvent) => {
+            event.preventDefault()
+            event.stopPropagation()
+            if (isInbox) {
+                decrementSelectedIndex()
+            }
+        }
+
+        const handleOpenThread = (event: KeyboardEvent) => {
+            event.preventDefault()
+            if (
+                selectedThreadIndex !== null &&
+                threads &&
+                selectedThreadIndex >= 0 &&
+                selectedThreadIndex < threads.length &&
+                threads[selectedThreadIndex]
+            ) {
+                const selectedThread = threads[selectedThreadIndex]
+                void navigate(`/thread/${encodeThreadIdForUrl(selectedThread.stable_thread_id)}`)
+                setSelectedThreadIndex(null)
+            }
+        }
+
+        const handleBackToInbox = (event: KeyboardEvent) => {
+            event.preventDefault()
+            void navigate('/')
+        }
+
         const handleKeyDown = (event: KeyboardEvent) => {
             // Don't handle shortcuts when typing in input fields
             if (
@@ -45,49 +84,27 @@ export function useKeyboardShortcuts() {
                 return
             }
 
-            const isInbox = location.pathname === '/'
-            const isThreadView = location.pathname.startsWith('/thread/')
-
             // j or ↓: Move to next item
             if (event.key === 'j' || event.key === 'ArrowDown') {
-                event.preventDefault()
-                event.stopPropagation()
-                if (isInbox && threads && threads.length > 0) {
-                    incrementSelectedIndex(threads.length)
-                }
+                handleNextItem(event)
+                return
             }
 
             // k or ↑: Move to previous item
             if (event.key === 'k' || event.key === 'ArrowUp') {
-                event.preventDefault()
-                event.stopPropagation()
-                if (isInbox) {
-                    decrementSelectedIndex()
-                }
+                handlePreviousItem(event)
+                return
             }
 
             // o or Enter: Open selected thread
             if ((event.key === 'o' || event.key === 'Enter') && isInbox) {
-                event.preventDefault()
-                if (
-                    selectedThreadIndex !== null &&
-                    threads &&
-                    selectedThreadIndex >= 0 &&
-                    selectedThreadIndex < threads.length &&
-                    threads[selectedThreadIndex]
-                ) {
-                    const selectedThread = threads[selectedThreadIndex]
-                    void navigate(
-                        `/thread/${encodeThreadIdForUrl(selectedThread.stable_thread_id)}`,
-                    )
-                    setSelectedThreadIndex(null)
-                }
+                handleOpenThread(event)
+                return
             }
 
             // u: Go back to inbox from thread view
             if (event.key === 'u' && isThreadView) {
-                event.preventDefault()
-                void navigate('/')
+                handleBackToInbox(event)
             }
         }
 
