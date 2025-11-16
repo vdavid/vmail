@@ -2,7 +2,10 @@ import { test, expect } from '@playwright/test'
 
 import { setupAuth } from '../fixtures/auth'
 import { defaultTestUser } from '../fixtures/test-data'
-import { navigateAndWait } from '../utils/helpers'
+import {
+    navigateAndWait,
+    testSettingsFormValidation,
+} from '../utils/helpers'
 
 /**
  * Settings Page Tests for Existing Users
@@ -66,23 +69,8 @@ test.describe('Settings Page (Existing User)', () => {
 
         // Wait for settings to load
         await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
-        await page.waitForSelector('input[name="imap_server_hostname"]', { timeout: 10000 })
 
-        // Clear required fields
-        await page.fill('input[name="imap_server_hostname"]', '')
-        await page.fill('input[name="imap_username"]', '')
-        await page.fill('input[name="smtp_server_hostname"]', '')
-        await page.fill('input[name="smtp_username"]', '')
-
-        // Try to submit
-        const submitButton = page.locator('button[type="submit"]')
-        await submitButton.click()
-
-        // HTML5 validation should prevent submission
-        // Check that required fields are marked as invalid
-        const imapServerInput = page.locator('input[name="imap_server_hostname"]')
-        await page.waitForTimeout(100)
-        const isInvalid = await imapServerInput.evaluate((el: HTMLInputElement) => !el.validity.valid)
+        const isInvalid = await testSettingsFormValidation(page)
         expect(isInvalid).toBeTruthy()
     })
 })

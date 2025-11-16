@@ -1,4 +1,7 @@
-import { Page } from '@playwright/test'
+import { Locator, Page } from '@playwright/test'
+
+import { setupAuth } from '../fixtures/auth'
+import { defaultTestUser } from '../fixtures/test-data'
 
 /**
  * Waits for the page to be fully loaded and ready.
@@ -99,5 +102,109 @@ export async function clickFirstEmail(page: Page) {
 export async function getSearchInput(page: Page) {
     await page.waitForSelector('input[placeholder="Search mail..."]', { timeout: 10000 })
     return page.locator('input[placeholder="Search mail..."]')
+}
+
+/**
+ * Sets up authenticated session and navigates to inbox, handling redirects.
+ * Returns email links locator and count, or null if redirected to settings.
+ */
+export async function setupInboxTest(
+    page: Page,
+    userEmail: string = defaultTestUser.email,
+): Promise<{ emailLinks: Locator; count: number } | null> {
+    await setupAuth(page, userEmail)
+    await navigateAndWait(page, '/')
+
+    // Wait for redirect to complete (either to inbox or settings)
+    await page.waitForURL(/.*\/(settings|$)/, { timeout: 10000 })
+
+    // If redirected to settings, the user doesn't have settings yet
+    const currentURL = page.url()
+    if (currentURL.includes('/settings')) {
+        return null // User needs onboarding
+    }
+
+    // Wait for settings to load first (required for threads query)
+    await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+
+    // Wait for email list to load
+    await waitForEmailList(page)
+
+    const emailLinks = page.locator('a[href*="/thread/"]')
+    const count = await emailLinks.count()
+
+    return { emailLinks, count }
+}
+
+/**
+ * Sets up authenticated inbox session and waits for email list.
+ * Returns email links locator and count.
+ */
+export async function setupInboxForNavigation(page: Page): Promise<{
+    emailLinks: Locator
+    count: number
+}> {
+    await setupAuth(page, defaultTestUser.email)
+    await navigateAndWait(page, '/')
+
+    // Wait for settings to load first
+    await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+
+    await waitForEmailList(page)
+
+    const emailLinks = page.locator('a[href*="/thread/"]')
+    const count = await emailLinks.count()
+
+    return { emailLinks, count }
+}
+
+/**
+ * Clears required settings form fields and attempts submission.
+ * Returns whether the form validation prevented submission: `true` if invalid, `false` if valid or not yet submitted.
+ */
+export async function testSettingsFormValidation(page: Page): Promise<boolean> {
+    // Wait for form to be ready
+    await page.waitForSelector('input[name="imap_server_hostname"]', { timeout: 10000 })
+
+    // Clear required fields
+    await page.fill('input[name="imap_server_hostname"]', '')
+    await page.fill('input[name="imap_username"]', '')
+    await page.fill('input[name="smtp_server_hostname"]', '')
+    await page.fill('input[name="smtp_username"]', '')
+
+    // Try to submit
+    const submitButton = page.locator('button[type="submit"]')
+    await submitButton.click()
+
+    // Wait a bit for validation to trigger
+    await page.waitForTimeout(100)
+
+    // Check if the input is invalid (HTML5 validation)
+    const imapServerInput = page.locator('input[name="imap_server_hostname"]')
+    return await imapServerInput.evaluate(
+        (el: HTMLInputElement) => !el.validity.valid,
+    )
+}
+
+/**
+ * Sets up authenticated session and navigates to inbox.
+ * Returns true if successfully on inbox, false if redirected to settings.
+ */
+export async function setupInboxWithRedirectCheck(page: Page): Promise<boolean> {
+    await setupAuth(page, defaultTestUser.email)
+    await navigateAndWait(page, '/')
+
+    // Wait for redirect to complete (either to inbox or settings)
+    await page.waitForURL(/.*\/(settings|$)/, { timeout: 10000 })
+
+    // If redirected to settings, the user doesn't have settings yet
+    const currentURL = page.url()
+    if (currentURL.includes('/settings')) {
+        return false // User needs onboarding
+    }
+
+    // Wait for settings to load first
+    await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+    return true
 }
 

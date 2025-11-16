@@ -1,8 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-import { setupAuth } from '../fixtures/auth'
-import { defaultTestUser } from '../fixtures/test-data'
-import { navigateAndWait, waitForEmailList } from '../utils/helpers'
+import { setupInboxForNavigation } from '../utils/helpers'
 
 /**
  * Test 3: Navigation
@@ -17,17 +15,7 @@ import { navigateAndWait, waitForEmailList } from '../utils/helpers'
  */
 test.describe('Keyboard Navigation', () => {
     test('pressing u navigates back from thread to inbox', async ({ page }) => {
-        await setupAuth(page, defaultTestUser.email)
-        await navigateAndWait(page, '/')
-
-        // Wait for settings to load first
-        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
-        
-        await waitForEmailList(page)
-
-        // Click first email to go to thread view (EmailListItem renders as <a> links)
-        const emailLinks = page.locator('a[href*="/thread/"]')
-        const count = await emailLinks.count()
+        const { emailLinks, count } = await setupInboxForNavigation(page)
 
         if (count === 0) {
             // No emails available, skip this test
@@ -54,16 +42,7 @@ test.describe('Keyboard Navigation', () => {
     })
 
     test('pressing j moves selection to next email', async ({ page }) => {
-        await setupAuth(page, defaultTestUser.email)
-        await navigateAndWait(page, '/')
-
-        // Wait for settings to load first
-        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
-        
-        await waitForEmailList(page)
-
-        const emailLinks = page.locator('a[href*="/thread/"]')
-        const count = await emailLinks.count()
+        const { count } = await setupInboxForNavigation(page)
 
         if (count < 2) {
             // Need at least 2 emails for this test
@@ -88,16 +67,7 @@ test.describe('Keyboard Navigation', () => {
     })
 
     test('pressing k moves selection to previous email', async ({ page }) => {
-        await setupAuth(page, defaultTestUser.email)
-        await navigateAndWait(page, '/')
-
-        // Wait for settings to load first
-        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
-        
-        await waitForEmailList(page)
-
-        const emailLinks = page.locator('a[href*="/thread/"]')
-        const count = await emailLinks.count()
+        const { count } = await setupInboxForNavigation(page)
 
         if (count < 2) {
             // Need at least 2 emails for this test
@@ -123,16 +93,7 @@ test.describe('Keyboard Navigation', () => {
     })
 
     test('pressing o opens selected email', async ({ page }) => {
-        await setupAuth(page, defaultTestUser.email)
-        await navigateAndWait(page, '/')
-
-        // Wait for settings to load first
-        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
-        
-        await waitForEmailList(page)
-
-        const emailLinks = page.locator('a[href*="/thread/"]')
-        const count = await emailLinks.count()
+        const { count } = await setupInboxForNavigation(page)
 
         if (count === 0) {
             // No emails available, skip this test

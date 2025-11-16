@@ -51,6 +51,26 @@ describe('SettingsPage', () => {
         )
     }
 
+    /**
+     * Helper to update passwords and submit settings form.
+     */
+    const updatePasswordsAndSubmit = async (
+        user: ReturnType<typeof userEvent.setup>,
+        password: string = 'test123',
+    ) => {
+        await waitFor(() => {
+            expect(screen.getByDisplayValue('imap.example.com:993')).toBeInTheDocument()
+        })
+
+        await user.type(screen.getByLabelText('IMAP password'), password)
+        await user.type(screen.getByLabelText('SMTP password'), password)
+
+        const submitButton = screen.getByRole('button', {
+            name: /Save Settings/i,
+        })
+        await user.click(submitButton)
+    }
+
     it('should show loading state initially', () => {
         // eslint-disable-next-line @typescript-eslint/unbound-method
         vi.mocked(apiModule.api.getSettings).mockImplementation(
@@ -151,17 +171,7 @@ describe('SettingsPage', () => {
         const user = userEvent.setup()
         renderSettingsPage()
 
-        await waitFor(() => {
-            expect(screen.getByDisplayValue('imap.example.com:993')).toBeInTheDocument()
-        })
-
-        await user.type(screen.getByLabelText('IMAP password'), 'test123')
-        await user.type(screen.getByLabelText('SMTP password'), 'test123')
-
-        const submitButton = screen.getByRole('button', {
-            name: /Save Settings/i,
-        })
-        await user.click(submitButton)
+        await updatePasswordsAndSubmit(user)
 
         await waitFor(
             () => {
@@ -180,17 +190,7 @@ describe('SettingsPage', () => {
         const user = userEvent.setup()
         renderSettingsPage()
 
-        await waitFor(() => {
-            expect(screen.getByDisplayValue('imap.example.com:993')).toBeInTheDocument()
-        })
-
-        await user.type(screen.getByLabelText('IMAP password'), 'test123')
-        await user.type(screen.getByLabelText('SMTP password'), 'test123')
-
-        const submitButton = screen.getByRole('button', {
-            name: /Save Settings/i,
-        })
-        await user.click(submitButton)
+        await updatePasswordsAndSubmit(user)
 
         await waitFor(
             () => {

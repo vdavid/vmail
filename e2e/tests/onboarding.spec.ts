@@ -6,6 +6,7 @@ import {
     fillSettingsForm,
     navigateAndWait,
     submitSettingsForm,
+    testSettingsFormValidation,
 } from '../utils/helpers'
 
 /**
@@ -72,30 +73,7 @@ test.describe('New User Onboarding', () => {
         await setupAuth(page, newUserEmail)
         await navigateAndWait(page, '/settings')
 
-        // Wait for form to be ready
-        await page.waitForSelector('input[name="imap_server_hostname"]', { timeout: 10000 })
-
-        // Try to submit without filling required fields
-        // First, ensure the form is empty (clear any default values)
-        await page.fill('input[name="imap_server_hostname"]', '')
-        await page.fill('input[name="imap_username"]', '')
-        await page.fill('input[name="smtp_server_hostname"]', '')
-        await page.fill('input[name="smtp_username"]', '')
-
-        // Try to submit
-        const submitButton = page.locator('button[type="submit"]')
-        await submitButton.click()
-
-        // HTML5 validation should prevent submission
-        // Check that required fields are marked as invalid
-        // Note: HTML5 validation might not set :invalid immediately, so we check the form validity
-        const imapServerInput = page.locator('input[name="imap_server_hostname"]')
-        
-        // Wait a bit for validation to trigger
-        await page.waitForTimeout(100)
-        
-        // Check if the input is invalid (HTML5 validation)
-        const isInvalid = await imapServerInput.evaluate((el: HTMLInputElement) => !el.validity.valid)
+        const isInvalid = await testSettingsFormValidation(page)
         expect(isInvalid).toBeTruthy()
     })
 })

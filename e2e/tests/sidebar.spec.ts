@@ -1,8 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-import { setupAuth } from '../fixtures/auth'
-import { defaultTestUser } from '../fixtures/test-data'
-import { navigateAndWait, waitForEmailList } from '../utils/helpers'
+import { navigateAndWait, setupInboxWithRedirectCheck, waitForEmailList } from '../utils/helpers'
 
 /**
  * Sidebar and Folder Navigation Tests
@@ -14,22 +12,11 @@ import { navigateAndWait, waitForEmailList } from '../utils/helpers'
  */
 test.describe('Sidebar and Folder Navigation', () => {
     test.beforeEach(async ({ page }) => {
-        await setupAuth(page, defaultTestUser.email)
-        await navigateAndWait(page, '/')
-        
-        // Wait for redirect to complete (either to inbox or settings)
-        await page.waitForURL(/.*\/(settings|$)/, { timeout: 10000 })
-        
-        // If redirected to settings, the user doesn't have settings yet
-        // This shouldn't happen for test@example.com, but handle it gracefully
-        const currentURL = page.url()
-        if (currentURL.includes('/settings')) {
+        const isOnInbox = await setupInboxWithRedirectCheck(page)
+        if (!isOnInbox) {
             // User needs to complete onboarding first - tests will skip
             return
         }
-        
-        // Wait for settings to load first
-        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
     })
 
     test('sidebar displays folders', async ({ page }) => {
