@@ -415,6 +415,12 @@ func (s *Service) Search(ctx context.Context, userID string, query string, page,
 			// Continue anyway - threads will work without the from_address
 		}
 
+		// Enrich threads with preview snippet and attachment info
+		if err := db.EnrichThreadsWithPreviewAndAttachments(ctx, s.dbPool, threads); err != nil {
+			log.Printf("Warning: Failed to enrich threads with preview and attachment info: %v", err)
+			// Continue anyway - threads will work without these fields
+		}
+
 		return nil
 	})
 

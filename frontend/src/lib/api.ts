@@ -93,6 +93,10 @@ export interface Thread {
     subject: string
     user_id: string
     first_message_from_address?: string
+    preview_snippet?: string
+    has_attachments: boolean
+    message_count?: number
+    last_sent_at?: string
     messages?: Message[]
 }
 

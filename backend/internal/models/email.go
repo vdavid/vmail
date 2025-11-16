@@ -13,12 +13,16 @@ type Folder struct {
 // The StableThreadID is the Message-ID header of the root message, which allows
 // us to group messages from different folders (e.g., 'INBOX' and 'Sent') into a single thread.
 type Thread struct {
-	ID                      string    `json:"id"`
-	StableThreadID          string    `json:"stable_thread_id"`
-	Subject                 string    `json:"subject"`
-	UserID                  string    `json:"user_id"`
-	FirstMessageFromAddress string    `json:"first_message_from_address,omitempty"`
-	Messages                []Message `json:"messages,omitempty"`
+	ID                      string     `json:"id"`
+	StableThreadID          string     `json:"stable_thread_id"`
+	Subject                 string     `json:"subject"`
+	UserID                  string     `json:"user_id"`
+	FirstMessageFromAddress string     `json:"first_message_from_address,omitempty"`
+	PreviewSnippet          string     `json:"preview_snippet,omitempty"`
+	HasAttachments          bool       `json:"has_attachments"`
+	MessageCount            int        `json:"message_count,omitempty"`
+	LastSentAt              *time.Time `json:"last_sent_at,omitempty"`
+	Messages                []Message  `json:"messages,omitempty"`
 }
 
 // Message represents a single email message.

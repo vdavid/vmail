@@ -89,6 +89,8 @@ func GetThreadByID(ctx context.Context, pool *pgxpool.Pool, threadID string) (*m
 
 // GetThreadsForFolder returns threads for a specific folder.
 // It returns threads that have at least one message in the specified folder.
+// Each thread includes message_count (number of messages), last_sent_at (most recent message date),
+// preview_snippet, has_attachments, and first_message_from_address for efficient list view rendering.
 func GetThreadsForFolder(ctx context.Context, pool *pgxpool.Pool, userID, folderName string, limit, offset int) ([]*models.Thread, error) {
 	rows, err := pool.Query(ctx, `
         SELECT 
@@ -101,7 +103,20 @@ func GetThreadsForFolder(ctx context.Context, pool *pgxpool.Pool, userID, folder
              FROM messages m3 
              WHERE m3.thread_id = t.id 
              ORDER BY m3.sent_at NULLS LAST 
-             LIMIT 1) AS first_message_from_address
+             LIMIT 1) AS first_message_from_address,
+            (SELECT LEFT(m4.body_text, 100)
+             FROM messages m4 
+             WHERE m4.thread_id = t.id 
+             ORDER BY m4.sent_at NULLS LAST 
+             LIMIT 1) AS preview_snippet,
+            EXISTS (
+                SELECT 1 
+                FROM attachments a
+                INNER JOIN messages m5 ON a.message_id = m5.id
+                WHERE m5.thread_id = t.id 
+                AND a.is_inline = false
+            ) AS has_attachments,
+            COUNT(DISTINCT m.id) AS message_count
         FROM threads t
         INNER JOIN messages m ON t.id = m.thread_id
         LEFT JOIN messages m2 ON m2.thread_id = t.id
@@ -119,21 +134,33 @@ func GetThreadsForFolder(ctx context.Context, pool *pgxpool.Pool, userID, folder
 	var threads []*models.Thread
 	for rows.Next() {
 		var thread models.Thread
-		var _lastSentAt *time.Time
+		var lastSentAt *time.Time
 		var firstMessageFromAddress *string
+		var previewSnippet *string
+		var hasAttachments bool
+		var messageCount int
 		if err := rows.Scan(
 			&thread.ID,
 			&thread.UserID,
 			&thread.StableThreadID,
 			&thread.Subject,
-			&_lastSentAt,
+			&lastSentAt,
 			&firstMessageFromAddress,
+			&previewSnippet,
+			&hasAttachments,
+			&messageCount,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan thread: %w", err)
 		}
 		if firstMessageFromAddress != nil {
 			thread.FirstMessageFromAddress = *firstMessageFromAddress
 		}
+		if previewSnippet != nil {
+			thread.PreviewSnippet = *previewSnippet
+		}
+		thread.HasAttachments = hasAttachments
+		thread.MessageCount = messageCount
+		thread.LastSentAt = lastSentAt
 		threads = append(threads, &thread)
 	}
 
@@ -291,6 +318,75 @@ func EnrichThreadsWithFirstMessageFromAddress(ctx context.Context, pool *pgxpool
 
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("error iterating from addresses: %w", err)
+	}
+
+	return nil
+}
+
+// EnrichThreadsWithPreviewAndAttachments enriches threads with preview snippet, attachment info,
+// message count, and last sent date. This is useful for search results and other cases where
+// threads don't have these fields populated.
+func EnrichThreadsWithPreviewAndAttachments(ctx context.Context, pool *pgxpool.Pool, threads []*models.Thread) error {
+	if len(threads) == 0 {
+		return nil
+	}
+
+	// Build a map of thread IDs for efficient lookup
+	threadIDMap := make(map[string]*models.Thread)
+	threadIDs := make([]string, 0, len(threads))
+	for _, thread := range threads {
+		threadIDMap[thread.ID] = thread
+		threadIDs = append(threadIDs, thread.ID)
+	}
+
+	// Query preview snippets, attachment flags, message count, and last sent date in one query
+	rows, err := pool.Query(ctx, `
+		SELECT 
+			t.id,
+			(SELECT LEFT(m.body_text, 100)
+			 FROM messages m 
+			 WHERE m.thread_id = t.id 
+			 ORDER BY m.sent_at NULLS LAST 
+			 LIMIT 1) AS preview_snippet,
+			EXISTS (
+				SELECT 1 
+				FROM attachments a
+				INNER JOIN messages m2 ON a.message_id = m2.id
+				WHERE m2.thread_id = t.id 
+				AND a.is_inline = false
+			) AS has_attachments,
+			(SELECT COUNT(*) FROM messages m3 WHERE m3.thread_id = t.id) AS message_count,
+			(SELECT MAX(m4.sent_at) FROM messages m4 WHERE m4.thread_id = t.id) AS last_sent_at
+		FROM threads t
+		WHERE t.id = ANY($1)
+	`, threadIDs)
+
+	if err != nil {
+		return fmt.Errorf("failed to get preview and attachment info: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var threadID string
+		var previewSnippet *string
+		var hasAttachments bool
+		var messageCount int
+		var lastSentAt *time.Time
+		if err := rows.Scan(&threadID, &previewSnippet, &hasAttachments, &messageCount, &lastSentAt); err != nil {
+			return fmt.Errorf("failed to scan preview and attachment info: %w", err)
+		}
+		if thread, exists := threadIDMap[threadID]; exists {
+			if previewSnippet != nil {
+				thread.PreviewSnippet = *previewSnippet
+			}
+			thread.HasAttachments = hasAttachments
+			thread.MessageCount = messageCount
+			thread.LastSentAt = lastSentAt
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("error iterating preview and attachment info: %w", err)
 	}
 
 	return nil

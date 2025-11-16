@@ -9,32 +9,75 @@ interface EmailListItemProps {
     isSelected?: boolean
 }
 
+const timeFormatter = new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+})
+
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
     month: 'short',
     day: 'numeric',
 })
 
-function getSnippet(bodyText: string | undefined): string {
-    if (!bodyText) {
-        return ''
-    }
-    const snippetText = bodyText.replace(/\s+/g, ' ').trim()
-    if (snippetText.length === 0) {
-        return ''
-    }
-    return snippetText.length > 80 ? snippetText.slice(0, 80) + '...' : snippetText
-}
-
-function getFormattedDate(sentAt: string | undefined): string {
+function formatDate(sentAt: string | null | undefined): string {
     if (!sentAt) {
         return ''
     }
-    return dateFormatter.format(new Date(sentAt))
+    const date = new Date(sentAt)
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+
+    if (messageDate.getTime() === today.getTime()) {
+        return timeFormatter.format(date)
+    }
+    return dateFormatter.format(date)
+}
+
+function getPreviewSnippet(
+    previewSnippet: string | undefined,
+    bodyText: string | undefined,
+): string {
+    // Prefer backend preview_snippet, fallback to first message body_text
+    const source = previewSnippet || bodyText
+    if (!source) {
+        return ''
+    }
+    const snippetText = source.replace(/\s+/g, ' ').trim()
+    if (snippetText.length === 0) {
+        return ''
+    }
+    // Backend already limits to 100 chars, but we'll truncate further if needed for display
+    return snippetText.length > 100 ? snippetText.slice(0, 100) + '...' : snippetText
+}
+
+function extractSenderName(fromAddress: string): string {
+    // Extract name from "Name <email@domain.com>" format
+    // If no angle brackets, assume it's just an email address
+    const match = fromAddress.match(/^(.+?)\s*<.+>$/)
+    if (match) {
+        return match[1].trim()
+    }
+    // If no name found, return the original (might be just email)
+    return fromAddress
+}
+
+function truncateSenderName(name: string): string {
+    // If exactly 20 characters, display it fully
+    if (name.length === 20) {
+        return name
+    }
+    // If longer than 19, truncate to 19 and add "."
+    if (name.length > 19) {
+        return name.slice(0, 19) + '.'
+    }
+    // Otherwise, return as-is
+    return name
 }
 
 function getLinkClassName(isSelected: boolean, isUnread: boolean): string {
     const baseClasses =
-        'flex items-center gap-3 px-4 py-2 sm:px-6 hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-blue-400'
+        'grid grid-cols-[24px_32px_200px_1fr_24px_80px] items-center gap-2 px-4 py-2 sm:px-6 hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-blue-400'
     if (isSelected) {
         return `${baseClasses} bg-blue-500/20 text-white`
     }
@@ -42,58 +85,6 @@ function getLinkClassName(isSelected: boolean, isUnread: boolean): string {
         return `${baseClasses} bg-white/0 text-white`
     }
     return `${baseClasses} text-slate-300`
-}
-
-function getTextClassName(isUnread: boolean, variant: 'sender' | 'subject'): string {
-    const baseClass = 'truncate'
-    if (isUnread) {
-        return `${baseClass} font-semibold text-white`
-    }
-    return variant === 'sender' ? `${baseClass} text-slate-100` : `${baseClass} text-slate-300`
-}
-
-function StarIcon({ isStarred }: { isStarred: boolean }) {
-    return (
-        <div className='flex w-8 justify-center text-base'>
-            <span className={isStarred ? 'text-amber-400' : 'text-slate-500'} aria-hidden='true'>
-                {isStarred ? '★' : '☆'}
-            </span>
-        </div>
-    )
-}
-
-function EmailContent({
-    sender,
-    subject,
-    threadCount,
-    snippet,
-    isUnread,
-}: {
-    sender: string
-    subject: string
-    threadCount: number
-    snippet: string
-    isUnread: boolean
-}) {
-    return (
-        <div className='min-w-0 flex-1'>
-            <div className='flex items-center gap-2 text-sm'>
-                <span data-testid='email-sender' className={getTextClassName(isUnread, 'sender')}>
-                    {sender}
-                </span>
-                {threadCount > 1 && (
-                    <span className='rounded-full border border-white/10 px-2 py-0.5 text-xs text-slate-300'>
-                        {threadCount}
-                    </span>
-                )}
-                <span className='text-slate-400'>—</span>
-                <span data-testid='email-subject' className={getTextClassName(isUnread, 'subject')}>
-                    {subject}
-                </span>
-                {snippet && <span className='truncate text-slate-400'> — {snippet}</span>}
-            </div>
-        </div>
-    )
 }
 
 function isNavigationKey(key: string): boolean {
@@ -112,16 +103,23 @@ function handleKeyDown(event: React.KeyboardEvent<HTMLAnchorElement>, isSelected
     }
 }
 
-// eslint-disable-next-line complexity -- It's okay.
+// eslint-disable-next-line complexity -- It's okay to have a lot of logic here
 export default function EmailListItem({ thread, isSelected }: EmailListItemProps) {
     const firstMessage = thread.messages?.[0]
-    const sender = thread.first_message_from_address || firstMessage?.from_address || 'Unknown'
+    const fromAddress = thread.first_message_from_address || firstMessage?.from_address || 'Unknown'
+    const senderName = truncateSenderName(extractSenderName(fromAddress))
     const subject = thread.subject || '(No subject)'
-    const threadCount = thread.messages?.length || 1
+    const threadCount = thread.message_count || 1
     const isUnread = firstMessage ? !firstMessage.is_read : false
     const isStarred = firstMessage?.is_starred || false
-    const snippet = getSnippet(firstMessage?.body_text)
-    const formattedDate = getFormattedDate(firstMessage?.sent_at || undefined)
+    const previewSnippet = getPreviewSnippet(thread.preview_snippet, firstMessage?.body_text)
+    // Use last_sent_at from thread (for list views) or fallback to first message sent_at (for detail views)
+    const dateToFormat = thread.last_sent_at || firstMessage?.sent_at || null
+    const formattedDate = formatDate(dateToFormat)
+    const hasAttachments = thread.has_attachments
+
+    const senderClassName = `truncate text-sm ${isUnread ? 'font-semibold text-white' : 'text-slate-100'}`
+    const subjectClassName = `truncate text-sm ${isUnread ? 'font-semibold text-white' : 'text-slate-300'}`
 
     return (
         <Link
@@ -132,17 +130,66 @@ export default function EmailListItem({ thread, isSelected }: EmailListItemProps
             }}
             tabIndex={isSelected ? -1 : 0}
         >
-            <StarIcon isStarred={isStarred} />
-            <EmailContent
-                sender={sender}
-                subject={subject}
-                threadCount={threadCount}
-                snippet={snippet}
-                isUnread={isUnread}
-            />
-            <div className='w-16 flex-shrink-0 text-right text-xs text-slate-400'>
-                {formattedDate}
+            {/* Checkbox column */}
+            <div className='flex items-center justify-center'>
+                <input
+                    type='checkbox'
+                    className='h-4 w-4 cursor-pointer rounded border-white/20 bg-slate-900/50 text-blue-500 focus:ring-2 focus:ring-blue-400'
+                    onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                    }}
+                    aria-label='Select email'
+                />
             </div>
+
+            {/* Star column */}
+            <div className='flex justify-center text-base'>
+                <span
+                    className={isStarred ? 'text-amber-400' : 'text-slate-500'}
+                    aria-hidden='true'
+                >
+                    {isStarred ? '★' : '☆'}
+                </span>
+            </div>
+
+            {/* Sender column with thread count */}
+            <div className='min-w-0'>
+                <span data-testid='email-sender' className={senderClassName}>
+                    {senderName}
+                    {threadCount > 1 && (
+                        <>
+                            {' '}
+                            <small className='text-xs opacity-60'>{threadCount}</small>
+                        </>
+                    )}
+                </span>
+            </div>
+
+            {/* Subject and preview column */}
+            <div className='min-w-0'>
+                <div className='flex items-center gap-2 text-sm'>
+                    <span data-testid='email-subject' className={subjectClassName}>
+                        {subject}
+                    </span>
+                    {previewSnippet && (
+                        <>
+                            <span className='opacity-60 text-slate-400'> - </span>
+                            <span className='truncate opacity-60 text-slate-400'>
+                                {previewSnippet}
+                            </span>
+                        </>
+                    )}
+                </div>
+            </div>
+
+            {/* Attachment indicator column */}
+            <div className='flex justify-center text-slate-400'>
+                {hasAttachments && <span aria-label='Has attachments'>📎</span>}
+            </div>
+
+            {/* Date column */}
+            <div className='text-right text-xs text-slate-400'>{formattedDate}</div>
         </Link>
     )
 }

@@ -43,6 +43,18 @@ It's intentionally not organized into a single package so that API-level functio
 * If sync fails, continues and returns cached data (graceful degradation).
 * Sync errors are logged but don't fail the request.
 
+## Thread Fields
+
+The `GetThreadsForFolder` function returns threads with the following fields populated for list views:
+
+* **`message_count`**: Number of messages in the thread. Always populated in list views to avoid needing to load the full messages array.
+* **`last_sent_at`**: Date/time of the most recent message in the thread. Used for date display in the email list (shows time if today, otherwise shows day).
+* **`preview_snippet`**: First 100 characters of the first message's body text, with whitespace normalized. Used for email preview in the list view.
+* **`has_attachments`**: Boolean indicating if any messages in the thread have non-inline attachments. Used to display attachment indicator (📎) in the list view.
+* **`first_message_from_address`**: Sender address of the first message in the thread. Used to display the sender name in the list view.
+
+The `EnrichThreadsWithPreviewAndAttachments` function also populates these fields for search results and other cases where threads don't have them pre-populated.
+
 ## Error handling
 
 * Returns 400 if folder parameter is missing.
