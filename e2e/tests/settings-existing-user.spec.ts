@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 import { setupAuth } from '../fixtures/auth'
 import { defaultTestUser } from '../fixtures/test-data'
-import { fillSettingsForm, navigateAndWait, submitSettingsForm } from '../utils/helpers'
+import { navigateAndWait } from '../utils/helpers'
 
 /**
  * Settings Page Tests for Existing Users

@@ -22,12 +22,12 @@ const createWrapper = () => {
 describe('Sidebar', () => {
     it('should render the V-Mail title', () => {
         render(<Sidebar />, { wrapper: createWrapper() })
-        expect(screen.getByText('V-Mail')).toBeInTheDocument()
+        expect(screen.getAllByText('V-Mail')[0]).toBeInTheDocument()
     })
 
     it('should render a loading state', () => {
         render(<Sidebar />, { wrapper: createWrapper() })
-        expect(screen.getByText('Loading...')).toBeInTheDocument()
+        expect(screen.getAllByText('Loading...').length).toBeGreaterThan(0)
     })
 
     it('should call GET /api/v1/folders', async () => {
@@ -41,21 +41,20 @@ describe('Sidebar', () => {
     it('should render a list of links based on the mock API response', async () => {
         render(<Sidebar />, { wrapper: createWrapper() })
 
-        await waitFor(() => {
-            expect(screen.getByText('INBOX')).toBeInTheDocument()
-            expect(screen.getByText('Sent')).toBeInTheDocument()
-            expect(screen.getByText('Drafts')).toBeInTheDocument()
-        })
+        const inboxMatches = await screen.findAllByText('INBOX')
+        const sentMatches = await screen.findAllByText('Sent')
+        const draftsMatches = await screen.findAllByText('Drafts')
+
+        expect(inboxMatches.length).toBeGreaterThan(0)
+        expect(sentMatches.length).toBeGreaterThan(0)
+        expect(draftsMatches.length).toBeGreaterThan(0)
     })
 
     it('should navigate to the correct folder when clicking a link', async () => {
         render(<Sidebar />, { wrapper: createWrapper() })
 
-        await waitFor(() => {
-            expect(screen.getByText('Sent')).toBeInTheDocument()
-        })
-
-        const sentLink = screen.getByText('Sent')
+        const sentItems = await screen.findAllByText('Sent')
+        const sentLink = sentItems[0]
         expect(sentLink.closest('a')).toHaveAttribute('href', '/?folder=Sent')
     })
 

@@ -55,7 +55,7 @@ describe('EmailListPagination', () => {
         expect(container.firstChild).toBeNull()
     })
 
-    it('should render Previous and Next buttons', () => {
+    it('should render Prev and Next buttons', () => {
         render(
             <EmailListPagination
                 pagination={{
@@ -67,7 +67,7 @@ describe('EmailListPagination', () => {
             { wrapper: createWrapper(['/?folder=INBOX&page=2']) },
         )
 
-        expect(screen.getByText('Previous')).toBeInTheDocument()
+        expect(screen.getByText('Prev')).toBeInTheDocument()
         expect(screen.getByText('Next')).toBeInTheDocument()
     })
 
@@ -83,7 +83,7 @@ describe('EmailListPagination', () => {
             { wrapper: createWrapper(['/?folder=INBOX&page=1']) },
         )
 
-        const prevButton = screen.getByText('Previous')
+        const prevButton = screen.getByText('Prev')
         expect(prevButton).toBeDisabled()
     })
 
@@ -95,7 +95,6 @@ describe('EmailListPagination', () => {
                     page: 3,
                     per_page: 100,
                 }}
-                folder='INBOX'
             />,
             { wrapper: createWrapper(['/?folder=INBOX&page=3']) },
         )
@@ -156,7 +155,7 @@ describe('EmailListPagination', () => {
             </QueryClientProvider>,
         )
 
-        const prevButton = screen.getByText('Previous')
+        const prevButton = screen.getByText('Prev')
         await user.click(prevButton)
 
         expect(prevButton).toBeInTheDocument()

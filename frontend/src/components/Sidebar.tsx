@@ -1,9 +1,25 @@
 import { useQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
-import { api } from '../lib/api'
+import { api, type Folder } from '../lib/api'
 
-export default function Sidebar() {
+interface SidebarProps {
+    isMobileOpen?: boolean
+    onClose?: () => void
+}
+
+const ROLE_ORDER: Record<Folder['role'], number> = {
+    inbox: 0,
+    sent: 1,
+    drafts: 2,
+    spam: 3,
+    trash: 4,
+    archive: 5,
+    other: 6,
+}
+
+export default function Sidebar({ isMobileOpen = false, onClose }: SidebarProps) {
     const location = useLocation()
     const {
         data: folders,
@@ -16,35 +32,55 @@ export default function Sidebar() {
         queryFn: () => api.getFolders(),
     })
 
-    return (
-        <div className='flex h-full w-64 flex-col border-r border-gray-200 bg-white'>
-            <div className='flex h-16 items-center border-b border-gray-200 px-6'>
-                <h1 className='text-xl font-bold text-gray-900'>V-Mail</h1>
+    const sortedFolders = useMemo(() => {
+        if (!folders) {
+            return []
+        }
+        return [...folders].sort((a, b) => {
+            const roleComparison = ROLE_ORDER[a.role] - ROLE_ORDER[b.role]
+            if (roleComparison !== 0) {
+                return roleComparison
+            }
+            return a.name.localeCompare(b.name)
+        })
+    }, [folders])
+
+    const sidebarContent = (
+        <div className='flex h-full flex-col'>
+            <div className='flex flex-col gap-4 border-b border-white/10 pb-6'>
+                <div>
+                    <p className='text-lg font-semibold text-white'>V-Mail</p>
+                    <p className='text-xs text-slate-400'>Inbox zero, but make it cozy</p>
+                </div>
+                <button
+                    type='button'
+                    className='flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-500/90 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/40 transition hover:bg-blue-500 disabled:opacity-60'
+                    disabled
+                    title='Compose is coming soon'
+                >
+                    ＋ Compose
+                </button>
             </div>
-            <nav className='flex-1 space-y-1 px-3 py-4' aria-label='Sidebar'>
+            <nav className='mt-4 flex-1 space-y-1' aria-label='Sidebar navigation'>
                 {isLoading ? (
-                    <div className='px-3 py-2 text-sm text-gray-500'>Loading...</div>
+                    <div className='px-2 py-2 text-sm text-slate-400'>Loading...</div>
                 ) : error ? (
-                    <div className='px-3 py-2'>
-                        <div className='mb-2 text-sm text-red-600'>{error.message}</div>
+                    <div className='rounded-xl border border-red-400/30 bg-red-900/20 px-3 py-2 text-sm text-red-200'>
+                        <p className='mb-2'>{error.message}</p>
                         <button
                             onClick={() => {
                                 void refetch()
                             }}
                             disabled={isRefetching}
-                            className='rounded-md bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50'
+                            className='rounded-full bg-red-500/80 px-3 py-1 text-xs font-semibold text-white hover:bg-red-500 disabled:opacity-30'
                         >
                             {isRefetching ? 'Retrying...' : 'Retry'}
                         </button>
                     </div>
                 ) : (
-                    folders?.map((folder) => {
+                    sortedFolders.map((folder) => {
                         const isInbox = folder.role === 'inbox'
-                        // For inbox, use just '/' instead of '/?folder=...'
                         const linkTo = isInbox ? '/' : `/?folder=${encodeURIComponent(folder.name)}`
-
-                        // Inbox is active when pathname is '/' and there's no folder param (or folder matches inbox name)
-                        // Other folders are active when the folder param matches
                         const isActive = isInbox
                             ? location.pathname === '/' &&
                               (location.search === '' ||
@@ -58,30 +94,81 @@ export default function Sidebar() {
                             <Link
                                 key={folder.name}
                                 to={linkTo}
-                                className={`group flex items-center rounded-md px-3 py-2 text-sm font-medium ${
+                                className={`group flex items-center gap-3 rounded-2xl px-3 py-2 text-sm font-medium transition ${
                                     isActive
-                                        ? 'bg-gray-100 text-gray-900'
-                                        : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                                        ? 'bg-white/10 text-white shadow-inner shadow-white/10'
+                                        : 'text-slate-300 hover:bg-white/5 hover:text-white'
                                 }`}
                                 aria-current={isActive ? 'page' : undefined}
+                                onClick={() => {
+                                    onClose?.()
+                                }}
                             >
-                                {folder.name}
+                                <span
+                                    className={`flex h-7 w-7 items-center justify-center rounded-full text-xs ${
+                                        isActive
+                                            ? 'bg-white/20 text-white'
+                                            : 'bg-white/5 text-slate-300'
+                                    }`}
+                                    aria-hidden='true'
+                                >
+                                    {folder.name.slice(0, 2).toUpperCase()}
+                                </span>
+                                <span className='truncate'>{folder.name}</span>
                             </Link>
                         )
                     })
                 )}
             </nav>
-            <div className='border-t border-gray-200 p-4'>
+            <div className='mt-4 border-t border-white/10 pt-4'>
                 <Link
                     to='/settings'
-                    className='flex items-center text-sm text-gray-700 hover:text-gray-900'
+                    className='flex items-center gap-3 text-sm text-slate-300 transition hover:text-white'
+                    onClick={() => {
+                        onClose?.()
+                    }}
                 >
-                    <span className='mr-3 text-lg' aria-hidden='true'>
-                        ⚙️
+                    <span className='text-base' aria-hidden='true'>
+                        ⚙︎
                     </span>
                     Settings
                 </Link>
             </div>
         </div>
+    )
+
+    return (
+        <>
+            <aside className='hidden w-64 flex-shrink-0 rounded-3xl bg-slate-950/70 p-6 shadow-2xl shadow-black/40 backdrop-blur lg:flex'>
+                {sidebarContent}
+            </aside>
+
+            <div
+                className={`fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-300 lg:hidden ${
+                    isMobileOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+                }`}
+                aria-hidden={!isMobileOpen}
+                onClick={onClose}
+            />
+            <aside
+                className={`fixed inset-y-0 left-0 z-50 w-72 transform bg-slate-950/80 p-6 shadow-2xl shadow-black/60 backdrop-blur transition-transform duration-300 lg:hidden ${
+                    isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+                }`}
+                aria-hidden={!isMobileOpen}
+            >
+                <div className='mb-4 flex items-center justify-between'>
+                    <p className='text-base font-semibold text-white'>Menu</p>
+                    <button
+                        type='button'
+                        className='rounded-full border border-white/10 px-3 py-1 text-xs text-slate-200'
+                        onClick={onClose}
+                        aria-label='Close navigation'
+                    >
+                        Close
+                    </button>
+                </div>
+                {sidebarContent}
+            </aside>
+        </>
     )
 }

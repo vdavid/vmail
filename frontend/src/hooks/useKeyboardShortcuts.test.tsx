@@ -6,6 +6,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as api from '../lib/api'
+import type { UserSettings } from '../lib/api'
 import { useUIStore } from '../store/ui.store'
 
 import { useKeyboardShortcuts } from './useKeyboardShortcuts'
@@ -60,21 +61,7 @@ type MockThread = {
 const setupMockThreadsAndQueryClient = (mockThreads: MockThread[]) => {
     // Mock settings first
     // eslint-disable-next-line @typescript-eslint/unbound-method
-    vi.mocked(api.api.getSettings).mockResolvedValue({
-        imap_server_hostname: 'imap.example.com',
-        imap_username: 'user@example.com',
-        imap_password: 'password',
-        smtp_server_hostname: 'smtp.example.com',
-        smtp_username: 'user@example.com',
-        smtp_password: 'password',
-        archive_folder_name: 'Archive',
-        sent_folder_name: 'Sent',
-        drafts_folder_name: 'Drafts',
-        trash_folder_name: 'Trash',
-        spam_folder_name: 'Spam',
-        undo_send_delay_seconds: 20,
-        pagination_threads_per_page: 100,
-    })
+    vi.mocked(api.api.getSettings).mockResolvedValue(createMockSettings())
 
     // Mock threads response with the correct format
     // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -92,6 +79,20 @@ const setupMockThreadsAndQueryClient = (mockThreads: MockThread[]) => {
             queries: { retry: false },
         },
     })
+}
+
+function createMockSettings(overrides: Partial<UserSettings> = {}): UserSettings {
+    return {
+        imap_server_hostname: 'imap.example.com',
+        imap_username: 'user@example.com',
+        imap_password: 'password',
+        smtp_server_hostname: 'smtp.example.com',
+        smtp_username: 'user@example.com',
+        smtp_password: 'password',
+        undo_send_delay_seconds: 20,
+        pagination_threads_per_page: 100,
+        ...overrides,
+    }
 }
 
 const waitForQueryToResolve = async (queryClient: QueryClient, mockThreads: MockThread[]) => {
@@ -143,21 +144,7 @@ describe('useKeyboardShortcuts', () => {
     it('adds and removes event listeners on mount/unmount', () => {
         // Mock settings to avoid query warning
         // eslint-disable-next-line @typescript-eslint/unbound-method
-        vi.mocked(api.api.getSettings).mockResolvedValue({
-            imap_server_hostname: 'imap.example.com',
-            imap_username: 'user@example.com',
-            imap_password: 'password',
-            smtp_server_hostname: 'smtp.example.com',
-            smtp_username: 'user@example.com',
-            smtp_password: 'password',
-            archive_folder_name: 'Archive',
-            sent_folder_name: 'Sent',
-            drafts_folder_name: 'Drafts',
-            trash_folder_name: 'Trash',
-            spam_folder_name: 'Spam',
-            undo_send_delay_seconds: 20,
-            pagination_threads_per_page: 100,
-        })
+        vi.mocked(api.api.getSettings).mockResolvedValue(createMockSettings())
 
         const addEventListenerSpy = vi.spyOn(window, 'addEventListener')
         const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
@@ -230,21 +217,7 @@ describe('useKeyboardShortcuts', () => {
     it('decrements selected index when "k" is pressed', () => {
         // Mock settings to avoid query warning
         // eslint-disable-next-line @typescript-eslint/unbound-method
-        vi.mocked(api.api.getSettings).mockResolvedValue({
-            imap_server_hostname: 'imap.example.com',
-            imap_username: 'user@example.com',
-            imap_password: 'password',
-            smtp_server_hostname: 'smtp.example.com',
-            smtp_username: 'user@example.com',
-            smtp_password: 'password',
-            archive_folder_name: 'Archive',
-            sent_folder_name: 'Sent',
-            drafts_folder_name: 'Drafts',
-            trash_folder_name: 'Trash',
-            spam_folder_name: 'Spam',
-            undo_send_delay_seconds: 20,
-            pagination_threads_per_page: 100,
-        })
+        vi.mocked(api.api.getSettings).mockResolvedValue(createMockSettings())
 
         useUIStore.setState({ selectedThreadIndex: 1 })
 
@@ -265,21 +238,7 @@ describe('useKeyboardShortcuts', () => {
     it('decrements selected index when ArrowUp is pressed', () => {
         // Mock settings to avoid query warning
         // eslint-disable-next-line @typescript-eslint/unbound-method
-        vi.mocked(api.api.getSettings).mockResolvedValue({
-            imap_server_hostname: 'imap.example.com',
-            imap_username: 'user@example.com',
-            imap_password: 'password',
-            smtp_server_hostname: 'smtp.example.com',
-            smtp_username: 'user@example.com',
-            smtp_password: 'password',
-            archive_folder_name: 'Archive',
-            sent_folder_name: 'Sent',
-            drafts_folder_name: 'Drafts',
-            trash_folder_name: 'Trash',
-            spam_folder_name: 'Spam',
-            undo_send_delay_seconds: 20,
-            pagination_threads_per_page: 100,
-        })
+        vi.mocked(api.api.getSettings).mockResolvedValue(createMockSettings())
 
         useUIStore.setState({ selectedThreadIndex: 1 })
 
@@ -356,21 +315,7 @@ describe('useKeyboardShortcuts', () => {
     it('does not handle shortcuts when typing in input fields', () => {
         // Mock settings to avoid query warning
         // eslint-disable-next-line @typescript-eslint/unbound-method
-        vi.mocked(api.api.getSettings).mockResolvedValue({
-            imap_server_hostname: 'imap.example.com',
-            imap_username: 'user@example.com',
-            imap_password: 'password',
-            smtp_server_hostname: 'smtp.example.com',
-            smtp_username: 'user@example.com',
-            smtp_password: 'password',
-            archive_folder_name: 'Archive',
-            sent_folder_name: 'Sent',
-            drafts_folder_name: 'Drafts',
-            trash_folder_name: 'Trash',
-            spam_folder_name: 'Spam',
-            undo_send_delay_seconds: 20,
-            pagination_threads_per_page: 100,
-        })
+        vi.mocked(api.api.getSettings).mockResolvedValue(createMockSettings())
 
         renderHook(
             () => {

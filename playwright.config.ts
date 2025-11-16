@@ -15,6 +15,8 @@ export default defineConfig({
     use: {
         baseURL: 'http://localhost:7557', // Frontend Vite dev server (E2E test port)
         trace: 'on-first-retry',
+        screenshot: 'only-on-failure',
+        video: 'retain-on-failure',
     },
 
     projects: [

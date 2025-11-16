@@ -44,7 +44,8 @@ describe('SearchPage', () => {
             expect(screen.queryByText('Loading...')).not.toBeInTheDocument()
         })
 
-        expect(screen.getByText('Search results for "test"')).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: 'Search results' })).toBeInTheDocument()
+        expect(screen.getByText('"test"')).toBeInTheDocument()
         await waitFor(() => {
             expect(screen.getByText('Search Result 1')).toBeInTheDocument()
             expect(screen.getByText('Search Result 2')).toBeInTheDocument()
@@ -84,7 +85,7 @@ describe('SearchPage', () => {
             expect(screen.queryByText('Loading...')).not.toBeInTheDocument()
         })
 
-        expect(screen.getByText('Search')).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: 'Search' })).toBeInTheDocument()
         expect(screen.getByText('Enter a search query to find emails')).toBeInTheDocument()
     })
 
@@ -96,6 +97,7 @@ describe('SearchPage', () => {
             expect(screen.queryByText('Loading...')).not.toBeInTheDocument()
         })
 
-        expect(screen.getByText('Search results for "my search query"')).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: 'Search results' })).toBeInTheDocument()
+        expect(screen.getByText('"my search query"')).toBeInTheDocument()
     })
 })

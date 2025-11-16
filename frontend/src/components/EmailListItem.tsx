@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { Link } from 'react-router-dom'
 
 import type { Thread } from '../lib/api'
@@ -8,18 +9,28 @@ interface EmailListItemProps {
     isSelected?: boolean
 }
 
+const dateFormatter = new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+})
+
 export default function EmailListItem({ thread, isSelected }: EmailListItemProps) {
-    // Get the first message for display purposes
     const firstMessage = thread.messages?.[0]
     const sender = thread.first_message_from_address || firstMessage?.from_address || 'Unknown'
     const subject = thread.subject || '(No subject)'
-    const date = firstMessage?.sent_at ? new Date(firstMessage.sent_at).toLocaleDateString() : ''
     const threadCount = thread.messages?.length || 1
     const isUnread = firstMessage ? !firstMessage.is_read : false
     const isStarred = firstMessage?.is_starred || false
+    const snippetSource = firstMessage?.body_text || ''
+    const snippetText = snippetSource.replace(/\s+/g, ' ').trim()
+    const snippet =
+        snippetText.length > 0
+            ? snippetText.slice(0, 80) + (snippetText.length > 80 ? '...' : '')
+            : ''
+    const formattedDate = firstMessage?.sent_at
+        ? dateFormatter.format(new Date(firstMessage.sent_at))
+        : ''
 
-    // Prevent navigation when 'j' or 'k' keys are pressed (handled by keyboard shortcuts)
-    // Also prevent the Link from receiving focus when selected to avoid accidental navigation
     const handleKeyDown = (event: React.KeyboardEvent<HTMLAnchorElement>) => {
         if (
             event.key === 'j' ||
@@ -30,7 +41,6 @@ export default function EmailListItem({ thread, isSelected }: EmailListItemProps
             event.preventDefault()
             event.stopPropagation()
         }
-        // Prevent Enter from navigating when Link has focus (keyboard shortcuts handle 'o' and Enter)
         if (event.key === 'Enter' && isSelected) {
             event.preventDefault()
             event.stopPropagation()
@@ -40,33 +50,50 @@ export default function EmailListItem({ thread, isSelected }: EmailListItemProps
     return (
         <Link
             to={`/thread/${encodeThreadIdForUrl(thread.stable_thread_id)}`}
-            className={`flex items-center gap-4 border-b border-gray-200 px-4 py-3 hover:bg-gray-50 ${
-                isSelected ? 'bg-blue-50' : ''
-            } ${isUnread ? 'font-semibold' : ''}`}
+            className={`flex items-center gap-3 px-4 py-2 sm:px-6 ${
+                isSelected
+                    ? 'bg-blue-500/20 text-white'
+                    : isUnread
+                      ? 'bg-white/0 text-white'
+                      : 'text-slate-300'
+            } hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-blue-400`}
             onKeyDown={handleKeyDown}
             tabIndex={isSelected ? -1 : 0}
         >
-            <div className='flex-shrink-0'>
-                {isStarred ? (
-                    <span className='text-yellow-500' aria-label='Starred'>
-                        ★
-                    </span>
-                ) : (
-                    <span className='text-gray-300' aria-label='Not starred'>
-                        ☆
-                    </span>
-                )}
+            <div className='flex w-8 justify-center text-base'>
+                <span
+                    className={isStarred ? 'text-amber-400' : 'text-slate-500'}
+                    aria-hidden='true'
+                >
+                    {isStarred ? '★' : '☆'}
+                </span>
             </div>
-            <div className='flex-1 min-w-0'>
-                <div className='flex items-center gap-2'>
-                    <span className='truncate text-sm text-gray-900'>{sender}</span>
+            <div className='min-w-0 flex-1'>
+                <div className='flex items-center gap-2 text-sm'>
+                    <span
+                        data-testid='email-sender'
+                        className={`truncate ${isUnread ? 'font-semibold text-white' : 'text-slate-100'}`}
+                    >
+                        {sender}
+                    </span>
                     {threadCount > 1 && (
-                        <span className='text-xs text-gray-500'>({threadCount})</span>
+                        <span className='rounded-full border border-white/10 px-2 py-0.5 text-xs text-slate-300'>
+                            {threadCount}
+                        </span>
                     )}
+                    <span className='text-slate-400'>—</span>
+                    <span
+                        data-testid='email-subject'
+                        className={`truncate ${isUnread ? 'font-semibold text-white' : 'text-slate-300'}`}
+                    >
+                        {subject}
+                    </span>
+                    {snippet && <span className='truncate text-slate-400'> — {snippet}</span>}
                 </div>
-                <div className='truncate text-sm text-gray-600'>{subject}</div>
             </div>
-            <div className='flex-shrink-0 text-xs text-gray-500'>{date}</div>
+            <div className='w-16 flex-shrink-0 text-right text-xs text-slate-400'>
+                {formattedDate}
+            </div>
         </Link>
     )
 }

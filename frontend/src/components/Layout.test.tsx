@@ -29,7 +29,8 @@ describe('Layout', () => {
 
     it('should render Sidebar component', () => {
         renderLayout(<div>Test</div>)
-        expect(screen.getByText('V-Mail')).toBeInTheDocument()
+        const navs = screen.getAllByLabelText('Sidebar navigation')
+        expect(navs.length).toBeGreaterThan(0)
     })
 
     it('should render Header component', () => {
@@ -37,9 +38,9 @@ describe('Layout', () => {
         expect(screen.getByPlaceholderText('Search mail...')).toBeInTheDocument()
     })
 
-    it('should have correct layout structure', () => {
+    it('should wrap content with a background container', () => {
         const { container } = renderLayout(<div>Test</div>)
         const mainLayout = container.firstChild
-        expect(mainLayout).toHaveClass('flex', 'h-screen', 'overflow-hidden')
+        expect(mainLayout).toHaveClass('min-h-screen')
     })
 })

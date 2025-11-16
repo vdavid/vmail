@@ -4,6 +4,32 @@ import { useParams, useNavigate } from 'react-router-dom'
 import Message from '../components/Message'
 import { api, decodeThreadIdFromUrl } from '../lib/api'
 
+const LoadingState = (
+    <div className='flex h-full flex-col gap-4 p-6 text-slate-200'>
+        <div className='h-8 w-32 rounded-full bg-white/10' />
+        <div className='rounded-3xl border border-white/5 bg-white/5 p-6 text-sm'>Loading...</div>
+    </div>
+)
+
+interface ErrorStateProps {
+    message: string
+    onBack: () => void
+}
+
+function ErrorState({ message, onBack }: ErrorStateProps) {
+    return (
+        <div className='p-6 text-slate-100'>
+            <button
+                onClick={onBack}
+                className='mb-4 inline-flex items-center gap-2 text-sm text-slate-300 transition hover:text-white'
+            >
+                <span aria-hidden='true'>←</span> Back to Inbox
+            </button>
+            <p className='mt-2 rounded-2xl bg-red-900/40 p-4 text-sm text-red-100'>{message}</p>
+        </div>
+    )
+}
+
 export default function ThreadPage() {
     const { threadId: encodedThreadId } = useParams<{ threadId: string }>()
     const navigate = useNavigate()
@@ -40,81 +66,51 @@ export default function ThreadPage() {
     }
 
     if (isLoading) {
-        return (
-            <div className='p-6'>
-                <button
-                    onClick={handleBack}
-                    className='mb-4 text-sm text-blue-600 hover:text-blue-800'
-                >
-                    ← Back to Inbox
-                </button>
-                <p className='mt-4 text-gray-600'>Loading...</p>
-            </div>
-        )
+        return LoadingState
     }
 
     if (decodeError) {
         return (
-            <div className='p-6'>
-                <button
-                    onClick={handleBack}
-                    className='mb-4 text-sm text-blue-600 hover:text-blue-800'
-                >
-                    ← Back to Inbox
-                </button>
-                <p className='mt-4 text-red-600'>Error decoding thread ID: {decodeError.message}</p>
-            </div>
+            <ErrorState
+                message={`Error decoding thread ID: ${decodeError.message}`}
+                onBack={handleBack}
+            />
         )
     }
 
     if (error) {
-        return (
-            <div className='p-6'>
-                <button
-                    onClick={handleBack}
-                    className='mb-4 text-sm text-blue-600 hover:text-blue-800'
-                >
-                    ← Back to Inbox
-                </button>
-                <p className='mt-4 text-red-600'>Error loading thread: {error.message}</p>
-            </div>
-        )
+        return <ErrorState message={`Error loading thread: ${error.message}`} onBack={handleBack} />
     }
 
     if (!thread) {
-        // If we've passed all the error/loading checks but still have no thread,
-        // it means the thread doesn't exist
-        return (
-            <div className='p-6'>
-                <button
-                    onClick={handleBack}
-                    className='mb-4 text-sm text-blue-600 hover:text-blue-800'
-                >
-                    ← Back to Inbox
-                </button>
-                <p className='mt-4 text-gray-600'>Thread not found</p>
-            </div>
-        )
+        return <ErrorState message='Thread not found' onBack={handleBack} />
     }
 
+    const subject = thread.subject || '(No subject)'
+
     return (
-        <div className='flex h-full flex-col'>
-            <div className='border-b border-gray-200 px-6 py-4'>
+        <div className='flex h-full flex-col text-white'>
+            <div className='border-b border-white/5 px-4 py-4 sm:px-6'>
                 <button
                     onClick={handleBack}
-                    className='mb-2 text-sm text-blue-600 hover:text-blue-800'
+                    className='mb-2 inline-flex items-center gap-2 text-sm text-slate-300 transition hover:text-white'
                 >
-                    ← Back to Inbox
+                    <span aria-hidden='true'>←</span> Back to Inbox
                 </button>
-                <h1 className='text-2xl font-bold text-gray-900'>
-                    {thread.subject || '(No subject)'}
-                </h1>
+                <h1 className='text-xl font-semibold text-white'>{subject}</h1>
+                <p className='mt-1 text-sm text-slate-400'>Conversation view</p>
             </div>
-            <div className='flex-1 overflow-y-auto'>
+            <div className='flex-1 overflow-y-auto px-4 py-4 sm:px-6'>
                 {thread.messages && thread.messages.length > 0 ? (
-                    thread.messages.map((message) => <Message key={message.id} message={message} />)
+                    <div className='flex flex-col gap-4'>
+                        {thread.messages.map((message) => (
+                            <Message key={message.id} message={message} />
+                        ))}
+                    </div>
                 ) : (
-                    <div className='p-6 text-center text-gray-500'>No messages found</div>
+                    <div className='rounded-3xl border border-white/5 bg-white/5 p-6 text-center text-sm text-slate-400'>
+                        No messages found
+                    </div>
                 )}
             </div>
         </div>

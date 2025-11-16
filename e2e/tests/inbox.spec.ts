@@ -173,9 +173,8 @@ test.describe('Existing User Read-Only Flow', () => {
             const firstEmail = emailLinks.first()
 
             // Verify sender is displayed (not "Unknown")
-            // EmailListItem structure: <div class="flex-1 min-w-0"><div class="flex items-center gap-2"><span class="truncate text-sm text-gray-900">{sender}</span>
-            // We look for the sender span within the email link
-            const senderSpan = firstEmail.locator('div.flex-1 div.flex span.text-gray-900').first()
+            // Use data-testid for style-independent testing
+            const senderSpan = firstEmail.locator('[data-testid="email-sender"]').first()
             await expect(senderSpan).toBeVisible({ timeout: 5000 })
             const senderText = await senderSpan.textContent()
             expect(senderText).toBeTruthy()
@@ -183,8 +182,8 @@ test.describe('Existing User Read-Only Flow', () => {
             expect(senderText?.trim().length).toBeGreaterThan(0)
 
             // Verify subject is displayed
-            // EmailListItem structure: <div class="flex-1 min-w-0"><div class="truncate text-sm text-gray-600">{subject}</div>
-            const subjectDiv = firstEmail.locator('div.flex-1 div.text-gray-600').first()
+            // Use data-testid for style-independent testing
+            const subjectDiv = firstEmail.locator('[data-testid="email-subject"]').first()
             await expect(subjectDiv).toBeVisible({ timeout: 5000 })
             const subjectText = await subjectDiv.textContent()
             expect(subjectText).toBeTruthy()
@@ -215,7 +214,8 @@ test.describe('Existing User Read-Only Flow', () => {
 
         if (count > 0) {
             // Get the href of the first email to verify URL format
-            const firstEmailHref = await emailLinks.first().getAttribute('href')
+            // noinspection ES6RedundantAwait -- getAttribute returns Promise<string | null>, so await is required
+            const firstEmailHref: string | null = await emailLinks.first().getAttribute('href')
             expect(firstEmailHref).toBeTruthy()
             expect(firstEmailHref).toMatch(/^\/thread\//)
 
@@ -281,6 +281,7 @@ test.describe('Existing User Read-Only Flow', () => {
 
         if (count > 0) {
             // Get the thread URL from the first email link
+            // noinspection ES6RedundantAwait -- getAttribute returns Promise<string | null>, so await is required
             const threadUrl = await emailLinks.first().getAttribute('href')
             expect(threadUrl).toBeTruthy()
             

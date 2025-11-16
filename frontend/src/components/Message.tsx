@@ -20,49 +20,65 @@ export default function Message({ message }: MessageProps) {
         return date.toLocaleString()
     }
 
+    const attachments = message.attachments?.filter((att) => !att.is_inline) ?? []
+
     return (
-        <div className='border-b border-gray-200 p-6'>
-            <div className='mb-4'>
-                <div className='flex items-center justify-between'>
-                    <div>
-                        <div className='font-semibold text-gray-900'>{message.from_address}</div>
-                        <div className='text-sm text-gray-600'>
-                            To: {message.to_addresses.join(', ')}
-                        </div>
-                        {message.cc_addresses.length > 0 && (
-                            <div className='text-sm text-gray-600'>
-                                CC: {message.cc_addresses.join(', ')}
-                            </div>
-                        )}
-                    </div>
-                    <div className='text-sm text-gray-500'>{formatDate(message.sent_at)}</div>
+        <article className='rounded-3xl border border-white/5 bg-slate-950/50 p-5 text-slate-100 shadow-[0_25px_50px_-12px_rgba(15,23,42,0.8)]'>
+            <header className='flex flex-col gap-3 border-b border-white/5 pb-4 md:flex-row md:items-start md:justify-between'>
+                <div>
+                    <p className='text-sm uppercase tracking-wide text-slate-400'>From</p>
+                    <p className='text-lg font-semibold text-white'>{message.from_address}</p>
+                    <p className='text-xs text-slate-400'>
+                        To:{' '}
+                        <span className='text-slate-200'>{message.to_addresses.join(', ')}</span>
+                    </p>
+                    {message.cc_addresses.length > 0 && (
+                        <p className='text-xs text-slate-400'>
+                            CC:{' '}
+                            <span className='text-slate-200'>
+                                {message.cc_addresses.join(', ')}
+                            </span>
+                        </p>
+                    )}
                 </div>
-                {message.subject && (
-                    <div className='mt-2 font-semibold text-gray-900'>{message.subject}</div>
-                )}
-            </div>
-            {message.attachments && message.attachments.length > 0 && (
-                <div className='mb-4'>
-                    <div className='text-sm font-semibold text-gray-700'>Attachments:</div>
-                    <ul className='mt-1 space-y-1'>
-                        {message.attachments
-                            .filter((att) => !att.is_inline)
-                            .map((attachment) => (
-                                <li key={attachment.id} className='text-sm text-blue-600'>
-                                    {attachment.filename} ({formatFileSize(attachment.size_bytes)})
-                                </li>
-                            ))}
+                <div className='text-sm text-slate-400'>{formatDate(message.sent_at)}</div>
+            </header>
+            {message.subject && (
+                <div className='mt-4 rounded-2xl bg-white/5 px-4 py-2 text-sm font-semibold text-white'>
+                    {message.subject}
+                </div>
+            )}
+            {attachments.length > 0 && (
+                <div className='mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-sm'>
+                    <p className='font-semibold text-white'>Attachments</p>
+                    <ul className='mt-2 space-y-1'>
+                        {attachments.map((attachment) => (
+                            <li
+                                key={attachment.id}
+                                className='flex items-center justify-between text-slate-200'
+                            >
+                                <span>{attachment.filename}</span>
+                                <span className='text-xs text-slate-400'>
+                                    {formatFileSize(attachment.size_bytes)}
+                                </span>
+                            </li>
+                        ))}
                     </ul>
                 </div>
             )}
-            <div
-                className='prose prose-sm max-w-none text-gray-900'
-                dangerouslySetInnerHTML={{ __html: sanitizedHTML }}
-            />
-            {!sanitizedHTML && message.body_text && (
-                <div className='whitespace-pre-wrap text-gray-900'>{message.body_text}</div>
+            {sanitizedHTML ? (
+                <div
+                    className='prose prose-sm max-w-none text-slate-100'
+                    dangerouslySetInnerHTML={{ __html: sanitizedHTML }}
+                />
+            ) : (
+                message.body_text && (
+                    <div className='mt-4 whitespace-pre-wrap text-slate-100'>
+                        {message.body_text}
+                    </div>
+                )
             )}
-        </div>
+        </article>
     )
 }
 

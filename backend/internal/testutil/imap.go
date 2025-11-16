@@ -61,7 +61,7 @@ func (u *specialUseUser) GetMailbox(name string) (backend.Mailbox, error) {
 	}
 
 	// Add SPECIAL-USE attributes based on mailbox name
-	attrs := []string{}
+	var attrs []string
 	switch name {
 	case "Sent":
 		attrs = append(attrs, "\\Sent")
@@ -94,7 +94,7 @@ func (u *specialUseUser) ListMailboxes(subscribed bool) ([]backend.Mailbox, erro
 		}
 
 		// Add SPECIAL-USE attributes based on mailbox name
-		attrs := []string{}
+		var attrs []string
 		switch info.Name {
 		case "Sent":
 			attrs = append(attrs, "\\Sent")

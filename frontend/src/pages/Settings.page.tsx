@@ -16,6 +16,9 @@ const defaultSettings: UserSettings = {
     pagination_threads_per_page: 100,
 }
 
+const inputClasses =
+    'mt-1 block w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/40'
+
 export default function SettingsPage() {
     const queryClient = useQueryClient()
     const navigate = useNavigate()
@@ -155,174 +158,163 @@ export default function SettingsPage() {
 
     if (isLoading) {
         return (
-            <div className='flex h-full items-center justify-center'>
-                <div className='text-gray-600'>Loading settings...</div>
+            <div className='flex h-full items-center justify-center text-slate-200'>
+                <div className='rounded-3xl border border-white/5 bg-white/5 px-6 py-4 text-sm'>
+                    Loading settings...
+                </div>
             </div>
         )
     }
 
     return (
-        <div className='mx-auto max-w-3xl p-6'>
-            <h1 className='mb-6 text-3xl font-bold text-gray-900'>Settings</h1>
+        <div className='mx-auto flex max-w-4xl flex-col gap-6 p-6 text-slate-100'>
+            <header>
+                <p className='text-xs uppercase tracking-wide text-slate-400'>Preferences</p>
+                <h1 className='text-3xl font-semibold text-white'>Settings</h1>
+                <p className='mt-2 text-sm text-slate-400'>
+                    Update how V-Mail connects to your servers and personalizes the UI.
+                </p>
+            </header>
 
             {saveMessage && (
                 <div
-                    className={`mb-4 rounded-md p-4 ${
+                    className={`rounded-3xl px-4 py-3 text-sm ${
                         saveMessage.startsWith('Error')
-                            ? 'bg-red-50 text-red-800'
-                            : 'bg-green-50 text-green-800'
+                            ? 'border border-red-400/40 bg-red-900/40 text-red-100'
+                            : 'border border-emerald-400/40 bg-emerald-900/40 text-emerald-100'
                     }`}
                 >
                     {saveMessage}
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className='space-y-8'>
-                <section>
-                    <h2 className='mb-4 text-xl font-semibold text-gray-900'>IMAP settings</h2>
-                    <div className='space-y-4'>
-                        <div>
-                            <label
-                                htmlFor='imap_server_hostname'
-                                className='block text-sm font-medium text-gray-700'
-                            >
-                                IMAP server
-                            </label>
-                            <input
-                                type='text'
-                                id='imap_server_hostname'
-                                name='imap_server_hostname'
-                                value={formData.imap_server_hostname}
-                                onChange={handleChange}
-                                required
-                                placeholder='Example: imap.example.com:993'
-                                className='mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                            />
-                        </div>
-                        <div>
-                            <label
-                                htmlFor='imap_username'
-                                className='block text-sm font-medium text-gray-700'
-                            >
-                                IMAP username
-                            </label>
-                            <input
-                                type='text'
-                                id='imap_username'
-                                name='imap_username'
-                                value={formData.imap_username}
-                                onChange={handleChange}
-                                required
-                                placeholder='Example: user@example.com'
-                                className='mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                            />
-                        </div>
-                        <div>
-                            <label
-                                htmlFor='imap_password'
-                                className='block text-sm font-medium text-gray-700'
-                            >
-                                IMAP password
-                            </label>
-                            <input
-                                type='password'
-                                id='imap_password'
-                                name='imap_password'
-                                value={formData.imap_password}
-                                onChange={handleChange}
-                                placeholder={
-                                    formData.imap_password_set
-                                        ? 'Password is set (leave empty to keep current)'
-                                        : 'Enter password'
-                                }
-                                className='mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                            />
-                            {formData.imap_password_set && (
-                                <p className='mt-1 text-sm text-gray-500'>
-                                    Password is currently set. Leave empty to keep the existing
-                                    password.
-                                </p>
-                            )}
-                        </div>
+            <form
+                onSubmit={handleSubmit}
+                className='flex flex-col gap-6 rounded-3xl border border-white/5 bg-slate-950/70 p-6 shadow-[0_35px_60px_-15px_rgba(0,0,0,0.75)]'
+            >
+                <section className='space-y-4'>
+                    <h2 className='text-lg font-semibold text-white'>IMAP settings</h2>
+                    <div>
+                        <label htmlFor='imap_server_hostname' className='text-sm text-slate-300'>
+                            IMAP server
+                        </label>
+                        <input
+                            type='text'
+                            id='imap_server_hostname'
+                            name='imap_server_hostname'
+                            value={formData.imap_server_hostname}
+                            onChange={handleChange}
+                            required
+                            placeholder='Example: imap.example.com:993'
+                            className={inputClasses}
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor='imap_username' className='text-sm text-slate-300'>
+                            IMAP username
+                        </label>
+                        <input
+                            type='text'
+                            id='imap_username'
+                            name='imap_username'
+                            value={formData.imap_username}
+                            onChange={handleChange}
+                            required
+                            placeholder='Example: user@example.com'
+                            className={inputClasses}
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor='imap_password' className='text-sm text-slate-300'>
+                            IMAP password
+                        </label>
+                        <input
+                            type='password'
+                            id='imap_password'
+                            name='imap_password'
+                            value={formData.imap_password}
+                            onChange={handleChange}
+                            placeholder={
+                                formData.imap_password_set
+                                    ? 'Password is set (leave empty to keep current)'
+                                    : 'Enter password'
+                            }
+                            className={inputClasses}
+                        />
+                        {formData.imap_password_set && (
+                            <p className='mt-1 text-xs text-slate-400'>
+                                Password is currently set. Leave empty to keep the existing
+                                password.
+                            </p>
+                        )}
                     </div>
                 </section>
 
-                <section>
-                    <h2 className='mb-4 text-xl font-semibold text-gray-900'>SMTP settings</h2>
-                    <div className='space-y-4'>
-                        <div>
-                            <label
-                                htmlFor='smtp_server_hostname'
-                                className='block text-sm font-medium text-gray-700'
-                            >
-                                SMTP server
-                            </label>
-                            <input
-                                type='text'
-                                id='smtp_server_hostname'
-                                name='smtp_server_hostname'
-                                value={formData.smtp_server_hostname}
-                                onChange={handleChange}
-                                required
-                                placeholder='Example: smtp.example.com:587'
-                                className='mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                            />
-                        </div>
-                        <div>
-                            <label
-                                htmlFor='smtp_username'
-                                className='block text-sm font-medium text-gray-700'
-                            >
-                                SMTP username
-                            </label>
-                            <input
-                                type='text'
-                                id='smtp_username'
-                                name='smtp_username'
-                                value={formData.smtp_username}
-                                onChange={handleChange}
-                                required
-                                placeholder='Example: user@example.com'
-                                className='mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                            />
-                        </div>
-                        <div>
-                            <label
-                                htmlFor='smtp_password'
-                                className='block text-sm font-medium text-gray-700'
-                            >
-                                SMTP password
-                            </label>
-                            <input
-                                type='password'
-                                id='smtp_password'
-                                name='smtp_password'
-                                value={formData.smtp_password}
-                                onChange={handleChange}
-                                placeholder={
-                                    formData.smtp_password_set
-                                        ? 'Password is set (leave empty to keep current)'
-                                        : 'Enter password'
-                                }
-                                className='mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                            />
-                            {formData.smtp_password_set && (
-                                <p className='mt-1 text-sm text-gray-500'>
-                                    Password is currently set. Leave empty to keep the existing
-                                    password.
-                                </p>
-                            )}
-                        </div>
+                <section className='space-y-4'>
+                    <h2 className='text-lg font-semibold text-white'>SMTP settings</h2>
+                    <div>
+                        <label htmlFor='smtp_server_hostname' className='text-sm text-slate-300'>
+                            SMTP server
+                        </label>
+                        <input
+                            type='text'
+                            id='smtp_server_hostname'
+                            name='smtp_server_hostname'
+                            value={formData.smtp_server_hostname}
+                            onChange={handleChange}
+                            required
+                            placeholder='Example: smtp.example.com:587'
+                            className={inputClasses}
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor='smtp_username' className='text-sm text-slate-300'>
+                            SMTP username
+                        </label>
+                        <input
+                            type='text'
+                            id='smtp_username'
+                            name='smtp_username'
+                            value={formData.smtp_username}
+                            onChange={handleChange}
+                            required
+                            placeholder='Example: user@example.com'
+                            className={inputClasses}
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor='smtp_password' className='text-sm text-slate-300'>
+                            SMTP password
+                        </label>
+                        <input
+                            type='password'
+                            id='smtp_password'
+                            name='smtp_password'
+                            value={formData.smtp_password}
+                            onChange={handleChange}
+                            placeholder={
+                                formData.smtp_password_set
+                                    ? 'Password is set (leave empty to keep current)'
+                                    : 'Enter password'
+                            }
+                            className={inputClasses}
+                        />
+                        {formData.smtp_password_set && (
+                            <p className='mt-1 text-xs text-slate-400'>
+                                Password is currently set. Leave empty to keep the existing
+                                password.
+                            </p>
+                        )}
                     </div>
                 </section>
 
-                <section>
-                    <h2 className='mb-4 text-xl font-semibold text-gray-900'>Preferences</h2>
-                    <div className='grid grid-cols-2 gap-4'>
+                <section className='space-y-4'>
+                    <h2 className='text-lg font-semibold text-white'>Preferences</h2>
+                    <div className='grid gap-4 md:grid-cols-2'>
                         <div>
                             <label
                                 htmlFor='undo_send_delay_seconds'
-                                className='block text-sm font-medium text-gray-700'
+                                className='text-sm text-slate-300'
                             >
                                 Undo send delay (seconds)
                             </label>
@@ -336,13 +328,13 @@ export default function SettingsPage() {
                                 min='0'
                                 max='60'
                                 required
-                                className='mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                                className={inputClasses}
                             />
                         </div>
                         <div>
                             <label
                                 htmlFor='pagination_threads_per_page'
-                                className='block text-sm font-medium text-gray-700'
+                                className='text-sm text-slate-300'
                             >
                                 Threads per page
                             </label>
@@ -356,7 +348,7 @@ export default function SettingsPage() {
                                 min='5'
                                 max='200'
                                 required
-                                className='mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                                className={inputClasses}
                             />
                         </div>
                     </div>
@@ -366,9 +358,9 @@ export default function SettingsPage() {
                     <button
                         type='submit'
                         disabled={saveMutation.isPending}
-                        className='rounded-md bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50'
+                        className='rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/40 transition hover:from-blue-400 hover:to-indigo-400 disabled:opacity-50'
                     >
-                        {saveMutation.isPending ? 'Saving...' : 'Save Settings'}
+                        {saveMutation.isPending ? 'Saving...' : 'Save settings'}
                     </button>
                 </div>
             </form>

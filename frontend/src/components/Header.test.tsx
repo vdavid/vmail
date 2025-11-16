@@ -23,7 +23,7 @@ describe('Header', () => {
     it('should render the search input', () => {
         render(
             <BrowserRouter>
-                <Header />
+                <Header onToggleSidebar={() => {}} />
             </BrowserRouter>,
         )
         expect(screen.getByPlaceholderText('Search mail...')).toBeInTheDocument()
@@ -33,7 +33,7 @@ describe('Header', () => {
         const user = userEvent.setup()
         render(
             <BrowserRouter>
-                <Header />
+                <Header onToggleSidebar={() => {}} />
             </BrowserRouter>,
         )
 
@@ -47,7 +47,7 @@ describe('Header', () => {
         const user = userEvent.setup()
         render(
             <BrowserRouter>
-                <Header />
+                <Header onToggleSidebar={() => {}} />
             </BrowserRouter>,
         )
 
@@ -62,7 +62,7 @@ describe('Header', () => {
         const user = userEvent.setup()
         render(
             <BrowserRouter>
-                <Header />
+                <Header onToggleSidebar={() => {}} />
             </BrowserRouter>,
         )
 
@@ -78,7 +78,7 @@ describe('Header', () => {
         const user = userEvent.setup()
         render(
             <BrowserRouter>
-                <Header />
+                <Header onToggleSidebar={() => {}} />
             </BrowserRouter>,
         )
 
