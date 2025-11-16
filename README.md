@@ -19,6 +19,8 @@ I built V-Mail with the explicit legal constraint to **not** use any of Google's
 logos) or aesthetic design. The focus is on **functional parity** while avoiding visual imitation, to avoid any brand
 confusion.
 
+![vmail-ui-draft-scrshot](https://github.com/user-attachments/assets/d003da28-ce02-4307-ba74-6fb0fac86dc6)
+
 ## Running
 
 - Install [Authelia](https://www.authelia.com) and run it. Get its hostname, you'll need it.
