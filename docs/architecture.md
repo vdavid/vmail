@@ -134,14 +134,33 @@ unique identifier, such as the `Message-ID` header of the root/first message in 
 
 ### Real-time API (WebSockets)
 
-For real-time updates (like new emails), the front end will open a WebSocket connection.
+For real-time updates (like new emails), the front end opens a WebSocket connection.
 
-* [ ] `GET /api/v1/ws`: Upgrades the HTTP connection to a WebSocket.
+* [x] `GET /api/v1/ws`: Upgrades the HTTP connection to a WebSocket.
   The server uses this connection to push updates to the client.
+    * The backend maintains a per-process **WebSocket Hub** that:
+        * Tracks multiple connections per user (`userID -> set of connections`).
+        * Limits the number of concurrent connections per user (default: 10).
+        * Sends messages (like new-email notifications) to all active connections for a user.
+    * When the first WebSocket connection for a user is established, the backend starts an **IMAP IDLE listener**:
+        * Uses a dedicated IMAP listener connection from the pool.
+        * Runs `IDLE` on the `INBOX` folder.
+        * On new-mail notifications, performs an **incremental sync** for `INBOX` immediately and then pushes an event to the WebSocket hub.
     * **Server-to-client message example:**
         ```json
-        {"type": "new_message", "folder": "INBOX"}
+        {"type": "new_email", "folder": "INBOX"}
         ```
+    * The front end listens for `new_email` messages and calls `queryClient.invalidateQueries({ queryKey: ['threads', folder] })`
+      so `GET /threads?folder=...` refetches and the new email appears.
+
+**Cache TTL as fallback:**  
+The 5‑minute cache TTL used by `GET /threads` is now a **backup mechanism**:
+
+* Real-time updates (IDLE + WebSockets) cause immediate incremental syncs for `INBOX`.
+* TTL-based sync still runs when:
+    * WebSockets are not connected or temporarily unavailable.
+    * The IDLE listener fails or is not yet started.
+    * A user navigates to a folder without real-time support.
 
 ### Technical decisions
 
