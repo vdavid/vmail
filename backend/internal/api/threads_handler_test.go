@@ -14,6 +14,7 @@ import (
 	"github.com/vdavid/vmail/backend/internal/imap"
 	"github.com/vdavid/vmail/backend/internal/models"
 	"github.com/vdavid/vmail/backend/internal/testutil"
+	ws "github.com/vdavid/vmail/backend/internal/websocket"
 )
 
 func TestThreadsHandler_GetThreads(t *testing.T) {
@@ -263,6 +264,10 @@ func (m *mockIMAPService) Search(context.Context, string, string, int, int) ([]*
 }
 
 func (m *mockIMAPService) Close() {}
+
+// StartIdleListener is part of the IMAPService interface but is not used in threads handler tests.
+func (m *mockIMAPService) StartIdleListener(context.Context, string, *ws.Hub) {
+}
 
 func TestThreadsHandler_SyncsWhenStale(t *testing.T) {
 	pool := testutil.NewTestDB(t)

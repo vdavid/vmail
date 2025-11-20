@@ -20,6 +20,11 @@ export default defineConfig({
             '/api': {
                 target: process.env.VITE_API_URL || 'http://localhost:11764',
                 changeOrigin: true,
+                ws: true,
+            },
+            '/test': {
+                target: process.env.VITE_API_URL || 'http://localhost:11764',
+                changeOrigin: true,
             },
         },
         // Ensure SPA routing works - serve index.html for all non-API routes
@@ -35,6 +40,11 @@ export default defineConfig({
         strictPort: true,
         proxy: {
             '/api': {
+                target: process.env.VITE_API_URL || 'http://localhost:11764',
+                changeOrigin: true,
+                ws: true,
+            },
+            '/test': {
                 target: process.env.VITE_API_URL || 'http://localhost:11764',
                 changeOrigin: true,
             },

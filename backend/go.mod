@@ -4,8 +4,10 @@ go 1.25.3
 
 require (
 	github.com/emersion/go-imap v1.2.1
+	github.com/emersion/go-imap-idle v0.0.0-20210907174914-db2568431445
 	github.com/emersion/go-imap-sortthread v1.2.0
 	github.com/emersion/go-smtp v0.24.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/jhillyerd/enmime v1.3.0
 	github.com/joho/godotenv v1.5.1

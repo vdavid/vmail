@@ -6,10 +6,10 @@ import { Page } from '@playwright/test'
  * We intercept API requests and modify the Authorization header to include the email.
  */
 export async function setupAuth(page: Page, userEmail: string = 'test@example.com') {
-    // Intercept all API requests and modify the Authorization header
+    // Intercept all API requests and test endpoints, and modify the Authorization header
     // to include the email in the token format "email:user@example.com"
     // This allows the backend to extract the email in test mode
-    await page.route('**/api/**', async (route) => {
+    const addAuthHeader = async (route: any) => {
         const request = route.request()
         const headers = { ...request.headers() }
         
@@ -19,7 +19,12 @@ export async function setupAuth(page: Page, userEmail: string = 'test@example.co
         
         // Continue with the modified request
         await route.continue({ headers })
-    })
+    }
+    
+    // Intercept API routes
+    await page.route('**/api/**', addAuthHeader)
+    // Intercept test routes
+    await page.route('**/test/**', addAuthHeader)
 }
 
 /**

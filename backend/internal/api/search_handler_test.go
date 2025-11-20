@@ -12,6 +12,7 @@ import (
 	"github.com/vdavid/vmail/backend/internal/imap"
 	"github.com/vdavid/vmail/backend/internal/models"
 	"github.com/vdavid/vmail/backend/internal/testutil"
+	ws "github.com/vdavid/vmail/backend/internal/websocket"
 )
 
 func TestSearchHandler_Search(t *testing.T) {
@@ -320,6 +321,10 @@ func (m *mockIMAPServiceForSearch) Search(_ context.Context, _ string, query str
 }
 
 func (m *mockIMAPServiceForSearch) Close() {}
+
+// StartIdleListener is part of the IMAPService interface but is not used in search tests.
+func (m *mockIMAPServiceForSearch) StartIdleListener(context.Context, string, *ws.Hub) {
+}
 
 type imapError struct {
 	message string

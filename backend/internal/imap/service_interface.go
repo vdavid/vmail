@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/vdavid/vmail/backend/internal/models"
+	"github.com/vdavid/vmail/backend/internal/websocket"
 )
 
 // MessageToSync represents a message that needs to be synced.
@@ -34,6 +35,10 @@ type IMAPService interface {
 	// Search searches for threads matching the query.
 	// Returns threads, total count, and error.
 	Search(ctx context.Context, userID string, query string, page, limit int) ([]*models.Thread, int, error)
+
+	// StartIdleListener runs an IMAP IDLE loop for a user and pushes events to the WebSocket hub.
+	// This function blocks until the context is cancelled.
+	StartIdleListener(ctx context.Context, userID string, hub *websocket.Hub)
 
 	// Close closes the service and cleans up connections.
 	Close()

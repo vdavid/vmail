@@ -98,8 +98,11 @@ type mockIMAPPool struct {
 	getClientPass      string
 	removeClientCalled map[string]bool
 	// For retry scenarios: the first call returns one client, the second call returns another
-	retryClient    imap.IMAPClient
-	retryClientErr error
+	retryClient          imap.IMAPClient
+	retryClientErr       error
+	listenerClient       imap.ListenerClient
+	listenerClientErr    error
+	removeListenerCalled map[string]bool
 }
 
 func (m *mockIMAPPool) WithClient(userID, server, username, password string, fn func(imap.IMAPClient) error) error {
@@ -137,6 +140,20 @@ func (m *mockIMAPPool) RemoveClient(userID string) {
 }
 
 func (m *mockIMAPPool) Close() {}
+
+func (m *mockIMAPPool) GetListenerConnection(string, string, string, string) (imap.ListenerClient, error) {
+	if m.listenerClientErr != nil {
+		return nil, m.listenerClientErr
+	}
+	return m.listenerClient, nil
+}
+
+func (m *mockIMAPPool) RemoveListenerConnection(userID string) {
+	if m.removeListenerCalled == nil {
+		m.removeListenerCalled = make(map[string]bool)
+	}
+	m.removeListenerCalled[userID] = true
+}
 
 // callGetFolders is a helper function that sets up and calls GetFolders handler.
 // It returns the response recorder for assertions.

@@ -1,10 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-import {
-    clickFirstEmail,
-    setupInboxForNavigation,
-    setupInboxTest,
-} from '../utils/helpers'
+import { clickFirstEmail, setupInboxForNavigation, setupInboxTest } from '../utils/helpers'
 
 /**
  * Test 2: Existing User Read-Only Flow
@@ -135,6 +131,88 @@ test.describe('Existing User Read-Only Flow', () => {
             expect(subjectText?.trim()).not.toBe('(No subject)')
             expect(subjectText?.trim().length).toBeGreaterThan(0)
         }
+    })
+
+    test('shows new emails in real time without page reload', async ({ page }) => {
+        // Capture console logs to debug WebSocket issues
+        const consoleMessages: string[] = []
+        page.on('console', (msg) => {
+            const text = msg.text()
+            consoleMessages.push(`[${msg.type()}] ${text}`)
+            // Log errors and warnings immediately
+            if (msg.type() === 'error' || msg.type() === 'warning') {
+                console.log(`Browser ${msg.type()}:`, text)
+            }
+        })
+
+        // Capture network requests to see WebSocket connection status
+        const networkErrors: string[] = []
+        page.on('requestfailed', (request) => {
+            const error = `${request.method()} ${request.url()} - ${request.failure()?.errorText}`
+            networkErrors.push(error)
+            console.log('Network error:', error)
+        })
+
+        const result = await setupInboxTest(page)
+        if (!result) {
+            // Skip if redirected to settings
+            return
+        }
+
+        // Wait for WebSocket connection to be established.
+        // The connection status banner only shows when disconnected, so wait for it to not be visible.
+        // Give it a few seconds for the WebSocket to connect.
+        await page.waitForTimeout(3000)
+        
+        // Verify WebSocket is connected by checking that the connection banner is not visible
+        // (it only shows when status is 'disconnected')
+        const connectionBanner = page.locator('text=Connection lost')
+        const bannerVisible = await connectionBanner.isVisible().catch(() => false)
+        
+        if (bannerVisible) {
+            console.log('WebSocket connection banner is visible - connection may not be established')
+            console.log('Console messages:', consoleMessages.filter(m => m.includes('WebSocket') || m.includes('error')))
+            console.log('Network errors:', networkErrors)
+        }
+
+        // Capture current thread subjects (if any).
+        const initialSubjects = await page
+            .locator('[data-testid="email-subject"]')
+            .allInnerTexts()
+
+        // Trigger backend helper that appends a new message to INBOX on the test IMAP server.
+        // The backend is expected to expose a test-only endpoint for this.
+        // Use page.evaluate to make the request from the page context so it goes through route interceptors
+        const response = await page.evaluate(async () => {
+            const res = await fetch('/test/add-imap-message', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    folder: 'INBOX',
+                    subject: 'E2E Real-Time Test',
+                    from: 'sender@example.com',
+                    to: 'username@example.com',
+                }),
+            })
+            return { status: res.status, statusText: res.statusText }
+        })
+
+        if (response.status !== 204) {
+            console.log(`Test endpoint returned status ${response.status}: ${response.statusText}`)
+        }
+
+        // Wait for the new subject to appear without reloading the page.
+        await expect(
+            page.locator('[data-testid="email-subject"]', { hasText: 'E2E Real-Time Test' }),
+        ).toBeVisible({ timeout: 15000 })
+
+        const updatedSubjects = await page
+            .locator('[data-testid="email-subject"]')
+            .allInnerTexts()
+
+        expect(updatedSubjects).not.toEqual(initialSubjects)
     })
 
     test('clicking email navigates to thread with correct URL and displays body', async ({
