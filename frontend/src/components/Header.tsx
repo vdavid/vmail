@@ -55,7 +55,7 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
                     />
                     <div className='hidden sm:block'>
                         <p className='text-base font-semibold text-white'>V-Mail</p>
-                        <p className='text-xs text-slate-400'>Personal mail hub</p>
+                        <p className='text-xs text-slate-400'>A nice email UI without the G</p>
                     </div>
                 </div>
                 <form onSubmit={handleSearch} className='relative flex-1'>
