@@ -15,7 +15,7 @@ V-Mail is a self-hosted, web-based email client designed for personal use.
 It uses the layout and keyboard shortcuts of Gmail to make it immediately familiar for ex-Gmail users.
 It connects to an IMAP server and provides the web UI to read and send email.
 
-I built V-Mail with the explicit legal constraint to **not** use any of Google's proprietary assets (fonts, icons,
+We built V-Mail with the explicit legal constraint to **not** use any of Google's proprietary assets (fonts, icons,
 logos) or aesthetic design. The focus is on **functional parity** while avoiding visual imitation, to avoid any brand
 confusion.
 
@@ -33,23 +33,11 @@ confusion.
 - Open `http://localhost:11764` in the browser (or configure port mapping if using Docker).
 - Log in with your Authelia credentials.
 
-## Non-goals
-
-Compared to Gmail, this project does **not** include:
-
-* Client-side email filters. The user should set these up on the server, typically via [Sieve](http://sieve.info/).
-* A visual query builder for the search box. A simple text field is fine.
-* A multi-language UI. The UI is English-only.
-* 95% of Gmail's settings. V-Mail has some basic settings like emails per page and undo send delay, but that's it.
-* Automatic categorization such as primary/social/promotions.
-* The ability to collapse the left sidebar.
-* Signature management.
-* Smiley/emoji reactions to emails. This is Google's proprietary thing.
-
 ## Tech stack
 
 V-Mail uses a **Postgres** database, a **Go** back end, a **REST** API, and a **React** front end with **TypeScript**.
-V-Mail needs a separate, self-hosted [Authelia](https://www.authelia.com) instance for authentication.
+V-Mail needs a separate, self-hosted [Authelia](https://www.authelia.com) (an
+[open-source](https://github.com/authelia/authelia), Go-based SSO and 2FA server) instance for authentication.
 
 ### IMAP server
 
@@ -63,21 +51,11 @@ It has two **hard requirements** for the IMAP server:
    Standard IMAP `SEARCH` is part of the core protocol, but V-Mail's performance relies on the server's FTS
    capabilities, like those in Dovecot.
 
-### Authelia
-
-**Authelia** ([authelia.com](https://www.authelia.com/)) is responsible for authentication.
-It's an [open-source](https://github.com/authelia/authelia), Go-based single sign-on (SSO) and 2FA server.
-
-**Interaction flow:** The V-Mail front end redirects the user to Authelia for login.
-After successful login, Authelia provides a session token, a JWT, which the front end stores in the browser.
-After this, all API requests from the front end to the Go back end will include this token.
-The back end validates the token before processing requests.
-
 ## Security
 
-I designed the project with security in mind.
-However, you are responsible for regularly backing up the database to avoid data loss. The emails themselves
-live on the IMAP server, but offline drafts and settings are in the database.
+We designed the project with security in mind.
+However, when self-hosting the project, you are responsible for regularly backing up the database to avoid data loss.
+The emails themselves live on the IMAP server, but offline drafts and settings are stored in V-Mail.
 
 ## Keyboard shortcuts
 

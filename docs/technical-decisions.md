@@ -1,5 +1,10 @@
 ## Back end
 
+### DB
+
+We chose **Postgres** for its robustness, reliability, and excellent support for `JSONB`,
+which is useful for flexible payloads like our action queue.
+
 ### Go libraries used
 
 * **IMAP Client:** [`github.com/emersion/go-imap`](https://github.com/emersion/go-imap)
