@@ -51,7 +51,7 @@ func NewServer(cfg *config.Config, dbPool *pgxpool.Pool) http.Handler {
 
 	imapPool := imap.NewPoolWithMaxWorkers(cfg.IMAPMaxWorkers)
 	imapService := imap.NewService(dbPool, imapPool, encryptor)
-	hub := ws.NewHub(10)
+	wsHub := ws.NewHub(10)
 
 	authHandler := api.NewAuthHandler(dbPool)
 	settingsHandler := api.NewSettingsHandler(dbPool, encryptor)
@@ -59,8 +59,8 @@ func NewServer(cfg *config.Config, dbPool *pgxpool.Pool) http.Handler {
 	threadsHandler := api.NewThreadsHandler(dbPool, encryptor, imapService)
 	threadHandler := api.NewThreadHandler(dbPool, encryptor, imapService)
 	searchHandler := api.NewSearchHandler(dbPool, encryptor, imapService)
-	wsHandler := api.NewWebSocketHandler(dbPool, imapService, hub)
-	testHandler := api.NewTestHandler(dbPool, encryptor, imapService, hub)
+	wsHandler := api.NewWebSocketHandler(dbPool, imapService, wsHub)
+	testHandler := api.NewTestHandler(dbPool, encryptor, imapService, wsHub)
 
 	mux := http.NewServeMux()
 
@@ -83,6 +83,7 @@ func NewServer(cfg *config.Config, dbPool *pgxpool.Pool) http.Handler {
 	// WebSocket handler handles its own authentication via query parameter
 	// (since browsers can't set headers on WebSocket connections).
 	mux.Handle("/api/v1/ws", http.HandlerFunc(wsHandler.Handle))
+	// Add test endpoints
 	if cfg.Environment == "test" {
 		mux.Handle("/test/add-imap-message", auth.RequireAuth(http.HandlerFunc(testHandler.AddIMAPMessage)))
 	}

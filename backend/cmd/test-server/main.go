@@ -247,15 +247,15 @@ func NewServer(cfg *config.Config, dbPool *pgxpool.Pool) http.Handler {
 	imapPool := imap.NewPoolWithMaxWorkers(cfg.IMAPMaxWorkers)
 	imapService := imap.NewService(dbPool, imapPool, encryptor)
 
-	hub := ws.NewHub(10)
+	tsHub := ws.NewHub(10)
 	authHandler := api.NewAuthHandler(dbPool)
 	settingsHandler := api.NewSettingsHandler(dbPool, encryptor)
 	foldersHandler := api.NewFoldersHandler(dbPool, encryptor, imapPool)
 	threadsHandler := api.NewThreadsHandler(dbPool, encryptor, imapService)
 	threadHandler := api.NewThreadHandler(dbPool, encryptor, imapService)
 	searchHandler := api.NewSearchHandler(dbPool, encryptor, imapService)
-	wsHandler := api.NewWebSocketHandler(dbPool, imapService, hub)
-	testHandler := api.NewTestHandler(dbPool, encryptor, imapService, hub)
+	wsHandler := api.NewWebSocketHandler(dbPool, imapService, tsHub)
+	testHandler := api.NewTestHandler(dbPool, encryptor, imapService, tsHub)
 
 	mux := http.NewServeMux()
 

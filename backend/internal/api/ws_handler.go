@@ -41,18 +41,19 @@ var wsUpgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		// For now, allow all origins. This server is expected to be used
 		// behind a reverse proxy in a trusted environment.
+		// TODO Review this decision and add CORS headers later if needed.
 		return true
 	},
 }
 
 // Handle upgrades the HTTP connection to a WebSocket and registers it with the Hub.
 // Authentication is handled via query parameter (?token=...) since WebSocket connections
-// cannot set custom headers in browsers. The token is validated using the same ValidateToken
-// function used by the RequireAuth middleware.
+// cannot set custom headers in browsers.
+// The token is validated using the same ValidateToken function used by the RequireAuth middleware.
 func (h *WebSocketHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Extract token from query parameter (WebSocket connections can't set headers).
+	// Extract token from the query parameter
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		// Fallback to Authorization header if query parameter is not provided.
@@ -72,7 +73,7 @@ func (h *WebSocketHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate token using the same function as RequireAuth middleware.
+	// Validate token using the same function as the RequireAuth middleware.
 	userEmail, err := auth.ValidateToken(token)
 	if err != nil {
 		log.Printf("WebSocketHandler: Token validation failed: %v", err)
@@ -80,7 +81,7 @@ func (h *WebSocketHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get or create user from email.
+	// Get or create the user by their email address.
 	userID, err := db.GetOrCreateUser(ctx, h.pool, userEmail)
 	if err != nil {
 		log.Printf("WebSocketHandler: Failed to get/create user: %v", err)
@@ -88,6 +89,7 @@ func (h *WebSocketHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Upgrade the connection to a WebSocket
 	conn, err := wsUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("WebSocketHandler: failed to upgrade connection for user %s: %v", userID, err)
@@ -104,26 +106,18 @@ func (h *WebSocketHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Temporary logging
-	log.Printf("WebSocketHandler: WebSocket connection established for user %s", userID)
-
 	// Ensure an IDLE listener is running for this user.
 	h.ensureIdleListener(userID)
 
 	// If this is the first connection, immediately sync INBOX to catch up on missed emails.
 	// This ensures emails that arrived while no WebSocket was connected are synced.
 	if isFirstConnection {
-		// Temporary logging
-		log.Printf("WebSocketHandler: First connection for user %s, triggering immediate INBOX sync", userID)
 		go func() {
-			// Use background context to avoid cancellation if request context is cancelled.
+			// Use background context to avoid cancellation if the request context is canceled.
 			// The sync should complete even if the WebSocket connection is established.
 			syncCtx := context.Background()
 			if err := h.imap.SyncThreadsForFolder(syncCtx, userID, "INBOX"); err != nil {
 				log.Printf("WebSocketHandler: Failed to sync INBOX for user %s on connection: %v", userID, err)
-			} else {
-				// Temporary logging
-				log.Printf("WebSocketHandler: Successfully synced INBOX for user %s on connection", userID)
 			}
 		}()
 	}
@@ -141,11 +135,10 @@ func (h *WebSocketHandler) ensureIdleListener(userID string) {
 		return
 	}
 
-	// Temporary logging
-	log.Printf("WebSocketHandler: Starting IDLE listener for user %s", userID)
 	idleCtx, cancel := context.WithCancel(context.Background())
 	h.idleCancels[userID] = cancel
 
+	// Start the IDLE listener in a separate goroutine.
 	go func(ctx context.Context, uid string, cancelFn context.CancelFunc) {
 		h.imap.StartIdleListener(ctx, uid, h.hub)
 
