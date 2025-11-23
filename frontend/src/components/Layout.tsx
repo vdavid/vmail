@@ -1,7 +1,9 @@
 import { useState, type ReactNode } from 'react'
 
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
+import { useWebSocket } from '../hooks/useWebSocket'
 
+import ConnectionStatusBanner from './ConnectionStatusBanner'
 import Header from './Header'
 import Sidebar from './Sidebar'
 
@@ -11,10 +13,12 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
     useKeyboardShortcuts()
+    useWebSocket()
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
     return (
         <div className='min-h-screen bg-transparent text-slate-100'>
+            <ConnectionStatusBanner />
             <Header
                 onToggleSidebar={() => {
                     setIsSidebarOpen(true)

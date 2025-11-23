@@ -19,6 +19,11 @@ export default defineConfig({
         proxy: {
             '/api': {
                 target: process.env.VITE_API_URL || 'http://localhost:11764',
+                changeOrigin: true, // Needed for CORS
+                ws: true, // Enable WebSocket proxying
+            },
+            '/test': {
+                target: process.env.VITE_API_URL || 'http://localhost:11764',
                 changeOrigin: true,
             },
         },
@@ -35,6 +40,11 @@ export default defineConfig({
         strictPort: true,
         proxy: {
             '/api': {
+                target: process.env.VITE_API_URL || 'http://localhost:11764',
+                changeOrigin: true, // Needed for CORS
+                ws: true, // Enable WebSocket proxying
+            },
+            '/test': {
                 target: process.env.VITE_API_URL || 'http://localhost:11764',
                 changeOrigin: true,
             },

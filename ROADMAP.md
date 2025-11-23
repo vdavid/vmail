@@ -500,58 +500,60 @@ This is the most complex but most rewarding "quality of life" feature.
 
 #### **Backend**
 
-* [ ] **Add WebSocket library:**
+* [x] **Add WebSocket library:**
     * `go get github.com/gorilla/websocket`
-* [ ] **Create WebSocket Hub:**
-    * Create `/backend/internal/websocket/hub.go`.
-    * The `Hub` struct will manage active connections: `clients map[string]*websocket.Conn` (mapping `userID` to their connection).
-    * It needs methods: `Register(userID, conn)`, `Unregister(userID)`, and `Send(userID, message []byte)`.
-* [ ] **Create <code>GET /api/v1/ws</code> endpoint:**
-    * Add this route in `routes.go`.
-    * The handler (`wsHandler`) upgrades the HTTP connection to a WebSocket.
-    * It gets the `userID` from the auth context.
-    * It calls `hub.Register(userID, conn)`.
-    * It must handle disconnects by calling `hub.Unregister(userID)`.
-* [ ] **Create IMAP IDLE listener:**
-    * In `/backend/internal/imap/idle.go`, create `func (s *Service) StartIdleListener(ctx context.Context, userID string, hub *websocket.Hub)`.
-    * **Launch it:** When a user successfully connects to the WebSocket (`hub.Register`), launch this function in a **new goroutine** for that `userID`.
+* [x] **Create WebSocket Hub:**
+    * Created `/backend/internal/websocket/hub.go`.
+    * The `Hub` struct manages active connections: `userID -> set of *websocket.Conn` (via a `Client` wrapper).
+    * It exposes methods: `Register(userID, conn)`, `Unregister(userID, client)`, and `Send(userID, message []byte)`.
+    * It supports multiple connections per user with a per-user limit (currently 10).
+* [x] **Create <code>GET /api/v1/ws</code> endpoint:**
+    * Added the route in `cmd/server/main.go`.
+    * The handler (`WebSocketHandler`) upgrades the HTTP connection to a WebSocket.
+    * It gets the `userID` from the auth context using `GetUserIDFromContext`.
+    * It calls `hub.Register(userID, conn)` and starts a read loop to detect disconnects.
+    * On disconnect, it calls `hub.Unregister(userID, client)` and stops the IMAP IDLE listener when there are no more active connections for that user.
+* [x] **Create IMAP IDLE listener:**
+    * Implemented in `/backend/internal/imap/idle.go` as `func (s *Service) StartIdleListener(ctx context.Context, userID string, hub *websocket.Hub)`.
+    * **Launch:** When a user successfully connects to the WebSocket (`hub.Register`), `WebSocketHandler` starts this function in a **new goroutine** for that `userID` (if not already running).
     * **Logic:**
-        1. Get a *dedicated* IMAP connection (do not use the pool).
+        1. Get a dedicated IMAP listener connection from the pool.
         2. Run `SELECT INBOX`.
-        3. Start a `for` loop (to handle disconnects).
-        4. Inside the loop, run `client.Idle()`.
-        5. Listen for updates. When an update arrives (e.g., `* 1 EXISTS`), call `hub.Send(userID, []byte('{"type": "new_email", "folder": "INBOX"}'))`.
-        6. If `client.Idle()` returns an error (e.g., timeout), `log.Println` and `time.Sleep(10 * time.Second)` before the loop retries.
+        3. Start an IDLE loop (with fallback) using `go-imap-idle`.
+        4. Listen for updates via the client's `Updates` channel. When an update indicates new messages in `INBOX`, call `SyncThreadsForFolder` for `INBOX` immediately.
+        5. After syncing, call `hub.Send(userID, []byte('{"type":"new_email","folder":"INBOX"}'))`.
+        6. On errors (e.g., timeout), log, remove the listener connection, and retry after a short sleep.
 
 #### **Frontend**
 
-* [ ] **Create <code>useWebSocket</code> hook:**
-    * Create `hooks/useWebSocket.ts`.
-    * It should be called *once* from your main `Layout.tsx`.
+* [x] **Create <code>useWebSocket</code> hook:**
+    * Created `hooks/useWebSocket.ts`.
+    * It is called *once* from the main `Layout.tsx`.
     * `useEffect` on mount:
-        1. `const socket = new WebSocket('ws://localhost:8080/api/v1/ws')` (use wss in prod).
-        2. `socket.onmessage = (event) => { ... }`
-        3. `socket.onclose = () => { ... }`
-    * The `onmessage` handler parses the `event.data`.
-    * `if (message.type === 'new_email') { ... }`
-* [ ] **Invalidate cache on message:**
+        1. Opens `new WebSocket(VITE_WS_URL || '<origin>/api/v1/ws')`.
+        2. Sets status in a `connection.store.ts` (Zustand) to `connecting`/`connected`/`disconnected`.
+        3. Handles `onmessage` and `onclose` to update connection state.
+    * The `onmessage` handler parses `event.data` and, when `message.type === 'new_email'`, invalidates queries for that folder.
+* [x] **Invalidate cache on message:**
     * Inside the `onmessage` handler:
-    * Get the `queryClient` using `useQueryClient()`.
-    * Call `queryClient.invalidateQueries({ queryKey: ['threads', message.folder] })`.
-    * This will automatically make `TanStack Query` refetch the thread list, and the new email will appear.
+    * Gets the `queryClient` using `useQueryClient()`.
+    * Calls `queryClient.invalidateQueries({ queryKey: ['threads', message.folder] })`.
+    * This automatically makes `TanStack Query` refetch the thread list, and the new email appears.
+* [x] **Connection status banner and manual reconnect:**
+    * Added a `ConnectionStatusBanner` component, shown when the WebSocket status is `disconnected`.
+    * The banner displays a Gmail-style "Connection lost. New emails may be delayed." message with a "Try now" link that triggers a reconnect of the WebSocket.
 
 #### **Testing**
 
-* [ ] **Frontend Integration (RTL + Mock WebSocket):**
-    * You'll need a library like `mock-socket`.
-    * Render the `Inbox.page.tsx` (which is inside `Layout.tsx`, so the hook runs).
-    * Simulate a message from the mock socket: `mockSocket.send('{"type": "new_email", "folder": "INBOX"}')`.
-    * **Assert** that `queryClient.invalidateQueries` was called with `['threads', 'INBOX']`.
-* [ ] **E2E:**
-    * This is the only true test.
-    * Log in to V-Mail. Have the Inbox page open.
-    * Use a *different* email client (or your `spike` script!) to send a new email to your test account.
-    * **Assert** the new email appears in the V-Mail inbox *without* a page reload.
+* [x] **Frontend Integration (RTL + WebSocket mocking via MSW):**
+    * Uses `msw`'s WebSocket support instead of `mock-socket`.
+    * Renders a component that uses `useWebSocket` under a `QueryClientProvider`.
+    * Simulates a message from the mock socket: `server.send('{"type": "new_email", "folder": "INBOX"}')`.
+    * **Asserts** that `queryClient.invalidateQueries` was called with `{ queryKey: ['threads', 'INBOX'] }`.
+* [x] **E2E:**
+    * Adds a new E2E test in `e2e/tests/inbox.spec.ts`.
+    * With the Inbox page open, the test calls `/test/add-imap-message` (a test-only backend endpoint) to append a message to `INBOX` on the IMAP server.
+    * **Asserts** the new email appears in the V-Mail inbox *without* a page reload.
 
 ## Milestone 6: Offline
 

@@ -392,7 +392,6 @@ func (s *Service) processFullSyncMessages(ctx context.Context, messages []*imap.
 // Uses incremental sync if possible (only syncs new messages since last sync).
 func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName string) error {
 	return s.withClientAndSelectFolder(ctx, userID, folderName, func(client *imapclient.Client, mbox *imap.MailboxStatus) error {
-		log.Printf("Selected folder %s: %d messages", folderName, mbox.Messages)
 
 		// Check if we can do incremental sync
 		syncInfo, err := db.GetFolderSyncInfo(ctx, s.dbPool, userID, folderName)
@@ -412,13 +411,13 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 			if err != nil {
 				return fmt.Errorf("failed to fetch message headers: %w", err)
 			}
-			log.Printf("Fetched %d message headers", len(messages))
+			log.Printf("IMAP Sync: Fetched %d message headers for user %s, folder %s", len(messages), userID, folderName)
 			s.processIncrementalMessages(ctx, messages, userID, folderName)
 
 			// Update sync info with the highest UID
 			highestUIDInt64 := int64(incResult.highestUID)
 			if err := db.SetFolderSyncInfo(ctx, s.dbPool, userID, folderName, &highestUIDInt64); err != nil {
-				log.Printf("Warning: Failed to set folder sync info: %v", err)
+				log.Printf("IMAP Sync: Warning: Failed to set folder sync info for user %s, folder %s: %v", userID, folderName, err)
 			}
 			go s.updateThreadCountInBackground(userID, folderName)
 			return nil
@@ -439,13 +438,14 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 			return fmt.Errorf("failed to fetch message headers: %w", err)
 		}
 
-		log.Printf("Fetched %d message headers", len(messages))
+		log.Printf("IMAP Sync: Fetched %d message headers for user %s, folder %s", len(messages), userID, folderName)
 
 		// Process messages: use thread structure if available, otherwise use incremental processing
 		threadMaps := fullResult.threadMaps
 		if threadMaps == nil {
 			// THREAD command not supported - process messages without thread structure
 			// (same as incremental sync)
+			log.Printf("IMAP Sync: THREAD command not supported, processing messages incrementally for user %s, folder %s", userID, folderName)
 			s.processIncrementalMessages(ctx, messages, userID, folderName)
 		} else {
 			// Process messages using thread structure
@@ -457,8 +457,9 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 		// Update sync info with the highest UID
 		highestUIDInt64 := int64(fullResult.highestUID)
 		if err := db.SetFolderSyncInfo(ctx, s.dbPool, userID, folderName, &highestUIDInt64); err != nil {
-			log.Printf("Warning: Failed to set folder sync info: %v", err)
-			// Don't fail the entire sync if timestamp update fails
+			log.Printf("IMAP Sync: Warning: Failed to set folder sync info for user %s, folder %s: %v", userID, folderName, err)
+		} else {
+			log.Printf("IMAP Sync: Updated sync info for user %s, folder %s (highest UID: %d)", userID, folderName, fullResult.highestUID)
 		}
 
 		// Trigger background thread count update

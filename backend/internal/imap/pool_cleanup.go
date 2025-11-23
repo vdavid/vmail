@@ -5,7 +5,7 @@ import (
 )
 
 // startCleanupGoroutine runs a background goroutine that periodically cleans up idle connections.
-// The goroutine will stop when cleanupCtx is cancelled (via Pool.Close()).
+// The goroutine will stop when cleanupCtx is canceled (via Pool.Close()).
 func (p *Pool) startCleanupGoroutine() {
 	ticker := time.NewTicker(1 * time.Minute)
 	go func() {
@@ -13,7 +13,7 @@ func (p *Pool) startCleanupGoroutine() {
 		for {
 			select {
 			case <-p.cleanupCtx.Done():
-				// Context cancelled - stop the ticker and exit
+				// Context canceled - stop the ticker and exit
 				return
 			case <-ticker.C:
 				// Periodic cleanup

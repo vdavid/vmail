@@ -32,6 +32,13 @@ type IMAPPool interface {
 
 	// Close closes all connections in the pool.
 	Close()
+
+	// GetListenerConnection gets or creates a dedicated listener client for IDLE.
+	// Returns a locked client that must be unlocked by the caller.
+	GetListenerConnection(userID, server, username, password string) (ListenerClient, error)
+
+	// RemoveListenerConnection removes a listener connection from the pool.
+	RemoveListenerConnection(userID string)
 }
 
 // ClientWrapper wraps a go-imap client.Client to implement IMAPClient interface.

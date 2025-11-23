@@ -413,8 +413,8 @@ func TestService_buildThreadMapFromMessages(t *testing.T) {
 	}
 
 	t.Run("returns error when GetMessageByMessageID returns non-NotFound error", func(t *testing.T) {
-		// Create a cancelled context to simulate a database error
-		cancelledCtx, cancel := context.WithCancel(ctx)
+		// Create a canceled context to simulate a database error
+		canceledCtx, cancel := context.WithCancel(ctx)
 		cancel() // Cancel immediately to cause context error
 
 		imapMsg := &imap.Message{
@@ -424,7 +424,7 @@ func TestService_buildThreadMapFromMessages(t *testing.T) {
 			},
 		}
 
-		_, _, err := service.buildThreadMapFromMessages(cancelledCtx, userID, []*imap.Message{imapMsg})
+		_, _, err := service.buildThreadMapFromMessages(canceledCtx, userID, []*imap.Message{imapMsg})
 		if err == nil {
 			t.Error("Expected error when GetMessageByMessageID returns non-NotFound error")
 		}

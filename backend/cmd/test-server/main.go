@@ -23,6 +23,7 @@ import (
 	"github.com/vdavid/vmail/backend/internal/imap"
 	"github.com/vdavid/vmail/backend/internal/models"
 	"github.com/vdavid/vmail/backend/internal/testutil"
+	ws "github.com/vdavid/vmail/backend/internal/websocket"
 )
 
 func main() {
@@ -246,12 +247,15 @@ func NewServer(cfg *config.Config, dbPool *pgxpool.Pool) http.Handler {
 	imapPool := imap.NewPoolWithMaxWorkers(cfg.IMAPMaxWorkers)
 	imapService := imap.NewService(dbPool, imapPool, encryptor)
 
+	tsHub := ws.NewHub(10)
 	authHandler := api.NewAuthHandler(dbPool)
 	settingsHandler := api.NewSettingsHandler(dbPool, encryptor)
 	foldersHandler := api.NewFoldersHandler(dbPool, encryptor, imapPool)
 	threadsHandler := api.NewThreadsHandler(dbPool, encryptor, imapService)
 	threadHandler := api.NewThreadHandler(dbPool, encryptor, imapService)
 	searchHandler := api.NewSearchHandler(dbPool, encryptor, imapService)
+	wsHandler := api.NewWebSocketHandler(dbPool, imapService, tsHub)
+	testHandler := api.NewTestHandler(dbPool, encryptor, imapService, tsHub)
 
 	mux := http.NewServeMux()
 
@@ -271,6 +275,11 @@ func NewServer(cfg *config.Config, dbPool *pgxpool.Pool) http.Handler {
 	mux.Handle("/api/v1/folders", auth.RequireAuth(http.HandlerFunc(foldersHandler.GetFolders)))
 	mux.Handle("/api/v1/threads", auth.RequireAuth(http.HandlerFunc(threadsHandler.GetThreads)))
 	mux.Handle("/api/v1/search", auth.RequireAuth(http.HandlerFunc(searchHandler.Search)))
+	// WebSocket handler handles its own authentication via query parameter
+	// (since browsers can't set headers on WebSocket connections).
+	mux.Handle("/api/v1/ws", http.HandlerFunc(wsHandler.Handle))
+	// Test endpoints are only available in test environment
+	mux.Handle("/test/add-imap-message", auth.RequireAuth(http.HandlerFunc(testHandler.AddIMAPMessage)))
 
 	// Handle /api/v1/thread/{thread_id} pattern
 	mux.Handle("/api/v1/thread/", auth.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

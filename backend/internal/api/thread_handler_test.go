@@ -15,6 +15,7 @@ import (
 	"github.com/vdavid/vmail/backend/internal/imap"
 	"github.com/vdavid/vmail/backend/internal/models"
 	"github.com/vdavid/vmail/backend/internal/testutil"
+	ws "github.com/vdavid/vmail/backend/internal/websocket"
 )
 
 func TestThreadHandler_GetThread(t *testing.T) {
@@ -253,12 +254,12 @@ func TestThreadHandler_GetThread(t *testing.T) {
 		email := "dberror-thread@example.com"
 		setupTestUserAndSettings(t, pool, encryptor, email)
 
-		// Use a cancelled context to simulate database connection failure
-		cancelledCtx, cancel := context.WithCancel(context.Background())
+		// Use a canceled context to simulate database connection failure
+		canceledCtx, cancel := context.WithCancel(context.Background())
 		cancel()
 
 		req := httptest.NewRequest("GET", "/api/v1/thread/test-thread-id", nil)
-		reqCtx := context.WithValue(cancelledCtx, auth.UserEmailKey, email)
+		reqCtx := context.WithValue(canceledCtx, auth.UserEmailKey, email)
 		req = req.WithContext(reqCtx)
 
 		rr := httptest.NewRecorder()
@@ -284,12 +285,12 @@ func TestThreadHandler_GetThread(t *testing.T) {
 			t.Fatalf("Failed to save thread: %v", err)
 		}
 
-		// Use a cancelled context to simulate database error when getting messages
-		cancelledCtx, cancel := context.WithCancel(context.Background())
+		// Use a canceled context to simulate database error when getting messages
+		canceledCtx, cancel := context.WithCancel(context.Background())
 		cancel()
 
 		req := httptest.NewRequest("GET", "/api/v1/thread/thread-db-error", nil)
-		reqCtx := context.WithValue(cancelledCtx, auth.UserEmailKey, email)
+		reqCtx := context.WithValue(canceledCtx, auth.UserEmailKey, email)
 		req = req.WithContext(reqCtx)
 
 		rr := httptest.NewRecorder()
@@ -544,6 +545,10 @@ func (m *mockIMAPServiceForThread) Search(context.Context, string, string, int, 
 }
 
 func (m *mockIMAPServiceForThread) Close() {}
+
+// StartIdleListener is part of the IMAPService interface but is not used in thread handler tests.
+func (m *mockIMAPServiceForThread) StartIdleListener(context.Context, string, *ws.Hub) {
+}
 
 func TestThreadHandler_SyncsMissingBodies(t *testing.T) {
 	pool := testutil.NewTestDB(t)
