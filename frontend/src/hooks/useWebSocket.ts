@@ -40,7 +40,7 @@ export function useWebSocket() {
         setStatus('connecting')
 
         // Get the token (currently hardcoded as "token", same as used in API calls).
-        // When Authelia is implemented, this should get the actual JWT token.
+        // TODO: When Authelia is implemented, this should get the actual JWT token.
         const token = 'token'
 
         const wsEnvUrl = import.meta.env.VITE_WS_URL as string | undefined
