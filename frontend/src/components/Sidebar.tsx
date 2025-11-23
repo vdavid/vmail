@@ -48,9 +48,8 @@ export default function Sidebar({ isMobileOpen = false, onClose }: SidebarProps)
     const sidebarContent = (
         <div className='flex h-full flex-col'>
             <div className='flex flex-col gap-4 border-b border-white/10 pb-6'>
-                <div>
-                    <p className='text-lg font-semibold text-white'>V-Mail</p>
-                    <p className='text-xs text-slate-400'>Inbox zero, but make it cozy</p>
+                <div className='flex items-center justify-between'>
+                    <p className='text-base font-semibold text-white'>V-Mail</p>
                 </div>
                 <button
                     type='button'

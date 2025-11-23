@@ -54,15 +54,10 @@ export default function InboxPage() {
 
     return (
         <div className='flex h-full flex-col'>
-            <div className='border-b border-white/5 px-4 py-4 sm:px-6'>
-                <div className='flex flex-wrap items-center gap-3'>
-                    <h1 className='text-xl font-semibold text-white'>
-                        {folder === 'INBOX' ? 'Inbox' : folder}
-                    </h1>
-                    <span className='rounded-full border border-white/10 px-3 py-1 text-xs uppercase tracking-wide text-slate-300'>
-                        Compact view
-                    </span>
-                </div>
+            <div className='border-b border-white/5 px-4 py-2 sm:px-6'>
+                <h1 className='text-sm font-semibold text-slate-100'>
+                    {folder === 'INBOX' ? 'Inbox' : folder}
+                </h1>
             </div>
             <div className='flex-1 overflow-y-auto divide-y divide-white/5'>
                 {threadsResponse &&
