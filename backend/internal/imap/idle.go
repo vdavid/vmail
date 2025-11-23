@@ -16,10 +16,10 @@ const idleListenerSleep = 10 * time.Second
 
 // StartIdleListener runs an IMAP IDLE loop for a user and pushes new email events to the Hub.
 // It listens on the INBOX folder only.
-// This function blocks until the context is cancelled.
+// This function blocks until the context is canceled.
 func (s *Service) StartIdleListener(ctx context.Context, userID string, hub *websocket.Hub) {
 	for {
-		// Exit when context is cancelled.
+		// Exit when context is canceled.
 		select {
 		case <-ctx.Done():
 			return

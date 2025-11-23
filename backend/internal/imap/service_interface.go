@@ -37,7 +37,7 @@ type IMAPService interface {
 	Search(ctx context.Context, userID string, query string, page, limit int) ([]*models.Thread, int, error)
 
 	// StartIdleListener runs an IMAP IDLE loop for a user and pushes events to the WebSocket hub.
-	// This function blocks until the context is cancelled.
+	// This function blocks until the context is canceled.
 	StartIdleListener(ctx context.Context, userID string, hub *websocket.Hub)
 
 	// Close closes the service and cleans up connections.

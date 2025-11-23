@@ -60,11 +60,11 @@ func TestFoldersHandler_GetFolders(t *testing.T) {
 	t.Run("returns 500 when GetOrCreateUser returns an error", func(t *testing.T) {
 		email := "dberror@example.com"
 
-		// Use a cancelled context to simulate database connection failure
-		cancelledCtx, cancel := context.WithCancel(context.Background())
+		// Use a canceled context to simulate database connection failure
+		canceledCtx, cancel := context.WithCancel(context.Background())
 		cancel()
 		req := httptest.NewRequest("GET", "/api/v1/folders", nil)
-		reqCtx := context.WithValue(cancelledCtx, auth.UserEmailKey, email)
+		reqCtx := context.WithValue(canceledCtx, auth.UserEmailKey, email)
 		req = req.WithContext(reqCtx)
 
 		rr := httptest.NewRecorder()

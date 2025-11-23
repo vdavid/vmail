@@ -136,7 +136,7 @@ func (m *mockIMAPServiceForWS) StartIdleListener(ctx context.Context, _ string, 
 	case m.startIdleListenerCtx <- ctx:
 	default:
 	}
-	// Block until context is cancelled (simulating IDLE)
+	// Block until context is canceled (simulating IDLE)
 	<-ctx.Done()
 }
 

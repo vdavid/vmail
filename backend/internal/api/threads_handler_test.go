@@ -418,8 +418,8 @@ func TestThreadsHandler_SyncsWhenStale(t *testing.T) {
 		email := "threads-error@example.com"
 		setupTestUserAndSettings(t, pool, encryptor, email)
 
-		// Use a cancelled context to simulate database error
-		cancelledCtx, cancel := context.WithCancel(context.Background())
+		// Use a canceled context to simulate database error
+		canceledCtx, cancel := context.WithCancel(context.Background())
 		cancel()
 
 		mockIMAP := &mockIMAPService{
@@ -429,7 +429,7 @@ func TestThreadsHandler_SyncsWhenStale(t *testing.T) {
 
 		handler := NewThreadsHandler(pool, encryptor, mockIMAP)
 		req := httptest.NewRequest("GET", "/api/v1/threads?folder=INBOX", nil)
-		reqCtx := context.WithValue(cancelledCtx, auth.UserEmailKey, email)
+		reqCtx := context.WithValue(canceledCtx, auth.UserEmailKey, email)
 		req = req.WithContext(reqCtx)
 
 		rr := httptest.NewRecorder()
@@ -455,11 +455,11 @@ func TestThreadsHandler_SyncsWhenStale(t *testing.T) {
 			t.Fatalf("Failed to save thread: %v", err)
 		}
 
-		// Use a cancelled context to simulate database error when counting
-		// We need to create the user first, then use cancelled context
-		cancelledCtx, cancel := context.WithCancel(context.Background())
+		// Use a canceled context to simulate database error when counting
+		// We need to create the user first, then use canceled context
+		canceledCtx, cancel := context.WithCancel(context.Background())
 		cancel()
-		reqCtx := context.WithValue(cancelledCtx, auth.UserEmailKey, email)
+		reqCtx := context.WithValue(canceledCtx, auth.UserEmailKey, email)
 		req := httptest.NewRequest("GET", "/api/v1/threads?folder=INBOX", nil)
 		req = req.WithContext(reqCtx)
 
@@ -473,7 +473,7 @@ func TestThreadsHandler_SyncsWhenStale(t *testing.T) {
 		handler.GetThreads(rr, req)
 
 		// Note: This test is tricky because GetThreadsForFolder is called before GetThreadCountForFolder
-		// and both use the same context. The cancelled context will cause GetThreadsForFolder to fail first.
+		// and both use the same context. The canceled context will cause GetThreadsForFolder to fail first.
 		// So we expect 500, but it's from GetThreadsForFolder, not GetThreadCountForFolder.
 		// This still tests error handling, just at an earlier point.
 		if rr.Code != http.StatusInternalServerError {

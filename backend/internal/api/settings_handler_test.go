@@ -334,8 +334,8 @@ func TestSettingsHandler_PostSettings(t *testing.T) {
 	t.Run("returns 500 when GetUserSettings returns non-NotFound error in PostSettings", func(t *testing.T) {
 		email := "dberror-post@example.com"
 
-		// Use a cancelled context to simulate database connection failure
-		cancelledCtx, cancel := context.WithCancel(context.Background())
+		// Use a canceled context to simulate database connection failure
+		canceledCtx, cancel := context.WithCancel(context.Background())
 		cancel()
 
 		reqBody := models.UserSettingsRequest{
@@ -351,7 +351,7 @@ func TestSettingsHandler_PostSettings(t *testing.T) {
 
 		body, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest("POST", "/api/v1/settings", bytes.NewReader(body))
-		reqCtx := context.WithValue(cancelledCtx, auth.UserEmailKey, email)
+		reqCtx := context.WithValue(canceledCtx, auth.UserEmailKey, email)
 		req = req.WithContext(reqCtx)
 
 		rr := httptest.NewRecorder()
@@ -371,12 +371,12 @@ func TestSettingsHandler_PostSettings(t *testing.T) {
 	t.Run("returns 500 when GetUserSettings returns non-NotFound error in GetSettings", func(t *testing.T) {
 		email := "dberror-get@example.com"
 
-		// Use a cancelled context to simulate database connection failure
-		cancelledCtx, cancel := context.WithCancel(context.Background())
+		// Use a canceled context to simulate database connection failure
+		canceledCtx, cancel := context.WithCancel(context.Background())
 		cancel()
 
 		req := httptest.NewRequest("GET", "/api/v1/settings", nil)
-		reqCtx := context.WithValue(cancelledCtx, auth.UserEmailKey, email)
+		reqCtx := context.WithValue(canceledCtx, auth.UserEmailKey, email)
 		req = req.WithContext(reqCtx)
 
 		rr := httptest.NewRecorder()
