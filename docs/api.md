@@ -1,89 +1,3 @@
-# Architecture
-
-Here are some clues that should help you get started.
-
-## Component interaction diagram
-
-Here is a high-level overview of the interaction between V-Mail's components:
-
-```mermaid
-graph TD
-    subgraph User's Machine
-        User(User's Browser)
-    end
-
-    subgraph "Server (Docker Network)"
-        A[Authelia]
-        FE(V-Mail React front end)
-        API(V-Mail Go API)
-        DB(Postgres DB)
-        MC(mailcow Server)
-    end
-
-    User -- " 1. Login " --> A
-    A -- " 2. Auth cookie/token " --> User
-    User -- " 3. Load App " --> FE
-    FE -- " 4. API request (with token) " --> API
-    API -- " 5. Validate token " --> A
-    API -- " 6. Read/Write Cache " --> DB
-    API -- " 7. Sync (IMAP) / Search (IMAP) / Send (SMTP) " --> MC
-    MC -- " 8. Email data " --> API
-    DB -- " 9. Cached data/Drafts " --> API
-    API -- " 10. API Response " --> FE
-    FE -- " 11. Render UI " --> User
-```
-
-## Directory structure
-
-```
-/backend
-├── /cmd/
-│   └── /server/
-│       └── main.go           # Main entry point
-├── /internal/
-│   ├── /api/                 # HTTP Handlers & routing
-│   ├── /auth/                # Middleware for validating Authelia JWTs
-│   ├── /config/              # Config loading (env vars, etc.)
-│   ├── /crypto/              # Encryption/decryption logic
-│   ├── /db/                  # Postgres access
-│   ├── /imap/                # Core IMAP service logic
-│   ├── /models/              # Core structs (Thread, Message, User)
-│   └── /sync/                # Logic for background jobs, action_queue
-│   └── /testutil/            # Test utilities and mocks
-├── /migrations/              # DB migrations
-├── go.mod
-├── go.sum
-└── Dockerfile
-```
-
-## DB
-
-We chose **Postgres** for its robustness, reliability, and excellent support for `JSONB`,
-which is useful for flexible payloads like our action queue.
-
-The DB's role is **not** to be a full, permanent copy of the mailbox. Its primary roles are:
-
-* Caching thread/message metadata for a fast UI.
-* Storing user settings and their **encrypted** IMAP/SMTP credentials.
-* Saving drafts.
-* Queuing actions (like "Undo Send" or offline operations).
-
-## Back end
-
-The back end is a **Go** application providing a **REST API** for the front end.
-It communicates with the IMAP and the SMTP server and uses a **Postgres** database for caching and internal storage.
-
-### Features
-
-- [auth](backend/auth.md)
-- [config](backend/config.md)
-- [crypto](backend/crypto.md)
-- [folders](backend/folders.md)
-- [imap](backend/imap.md)
-- [search](backend/search.md)
-- [settings](backend/settings.md)
-- [thread](backend/thread.md)
-- [threads](backend/threads.md)
 
 ### REST API
 
@@ -134,7 +48,7 @@ unique identifier, such as the `Message-ID` header of the root/first message in 
 
 ### Real-time API (WebSockets)
 
-For real-time updates (like new emails), the front end opens a WebSocket connection.
+For real-time updates for new emails, the front end opens a WebSocket connection.
 
 * [x] `GET /api/v1/ws`: Upgrades the HTTP connection to a WebSocket.
   The server uses this connection to push updates to the client.
@@ -154,14 +68,10 @@ For real-time updates (like new emails), the front end opens a WebSocket connect
       so `GET /threads?folder=...` refetches and the new email appears.
 
 **Cache TTL as fallback:**  
-The 5‑minute cache TTL used by `GET /threads` is now a **backup mechanism**:
+The 5‑minute cache TTL used by `GET /threads` is a **backup mechanism**:
 
 * Real-time updates (IDLE + WebSockets) cause immediate incremental syncs for `INBOX`.
 * TTL-based sync still runs when:
     * WebSockets are not connected or temporarily unavailable.
     * The IDLE listener fails or is not yet started.
     * A user navigates to a folder without real-time support.
-
-### Technical decisions
-
-See [technical decisions](technical-decisions.md)

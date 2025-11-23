@@ -1,26 +1,17 @@
 # Features
 
-## Back end
+## Non-goals
 
-* Serves the front end via `http.FileServer`
-* Validates JWTs from Authelia
-* Validates user credentials in the DB
-* Pools IMAP connections
-* Uses IMAP commands: `SELECT`, `FETCH`, `THREAD`, `SEARCH`, `STORE`, `APPEND`, `COPY`
-* Provides a helper function for generating an encryption key for AES-GCM encryption.
-* Uses IMAP's IDLE command as per [RFC 2177](https://datatracker.ietf.org/doc/html/rfc2177). Runs a goroutine
-  for each active user to get notified as soon as an email arrives.
-* Maintains a connection pool to the IMAP server, making sure connections exist at all times.
-  We need two types of connections for each active user:
-    * **The "Worker" Pool:** A pool of 1–3 "normal" connections used by the API handlers to run `SEARCH`, `FETCH`,
-      `STORE` (star, archive), and so on. These are for short-lived commands.
-    * **The "Listener" Connection:** A single, dedicated connection per user that runs in its own persistent goroutine.
-      Its only job is to log in, `SELECT` `Inbox`, and run the `IDLE` command.
-        * If this connection drops (which it will, due to network timeouts), the `client.Idle()` command in the
-          goroutine returns an error. The code catches this error, logs it,
-          waits 5–10 seconds (uses exponential backoff), and then reconnects and re-issues the IDLE command.
-* Provides WebSocket connections for clients for email push. When the IDLE goroutine gets a push, it finds
-  the user's WebSocket connection and sends a JSON message like `{"type": "new_email", "folder": "Inbox"}`.
+Compared to Gmail, this project does **not** include:
+
+* Client-side email filters. The user should set these up on the server, typically via [Sieve](http://sieve.info/).
+* A visual query builder for the search box. A simple text field is fine.
+* A multi-language UI. The UI is English-only.
+* 95% of Gmail's settings. V-Mail has some basic settings like emails per page and undo send delay, but that's it.
+* Automatic categorization such as primary/social/promotions.
+* The ability to collapse the left sidebar.
+* Signature management.
+* Smiley/emoji reactions to emails. This is Google's proprietary thing.
 
 ## Front end
 
@@ -55,7 +46,6 @@
 * Keyboard shortcuts.
 * Logout.
 
-
 ### UI
 
 * **Main layout:** Functionally similar to Gmail but aesthetically distinct (fonts, colors, logos).
@@ -72,3 +62,25 @@
   thread count, date.
 * **Email thread view:** Replaces the list view when the user clicks a thread.
   Shows all messages in the thread, expanded. Displays attachments and Reply/Forward actions.
+
+## Back end
+
+* Serves the front end via `http.FileServer`
+* Validates JWTs from Authelia
+* Validates user credentials in the DB
+* Pools IMAP connections
+* Uses IMAP commands: `SELECT`, `FETCH`, `THREAD`, `SEARCH`, `STORE`, `APPEND`, `COPY`
+* Provides a helper function for generating an encryption key for AES-GCM encryption.
+* Uses IMAP's IDLE command as per [RFC 2177](https://datatracker.ietf.org/doc/html/rfc2177). Runs a goroutine
+  for each active user to get notified as soon as an email arrives.
+* Maintains a connection pool to the IMAP server, making sure connections exist at all times.
+  We need two types of connections for each active user:
+    * **The "Worker" Pool:** A pool of 1–3 "normal" connections used by the API handlers to run `SEARCH`, `FETCH`,
+      `STORE` (star, archive), and so on. These are for short-lived commands.
+    * **The "Listener" Connection:** A single, dedicated connection per user that runs in its own persistent goroutine.
+      Its only job is to log in, `SELECT` `Inbox`, and run the `IDLE` command.
+        * If this connection drops (which it will, due to network timeouts), the `client.Idle()` command in the
+          goroutine returns an error. The code catches this error, logs it,
+          waits 5–10 seconds (uses exponential backoff), and then reconnects and re-issues the IDLE command.
+* Provides WebSocket connections for clients for email push. When the IDLE goroutine gets a push, it finds
+  the user's WebSocket connection and sends a JSON message like `{"type": "new_email", "folder": "Inbox"}`.
