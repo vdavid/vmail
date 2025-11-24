@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/vdavid/vmail/backend/internal/models"
 	"github.com/vdavid/vmail/backend/internal/testutil"
 )
@@ -22,44 +23,44 @@ func TestUserSettingsExist(t *testing.T) {
 		t.Fatalf("GetOrCreateUser failed: %v", err)
 	}
 
-	t.Run("returns false when settings don't exist", func(t *testing.T) {
-		exists, err := UserSettingsExist(ctx, pool, userID)
-		if err != nil {
-			t.Fatalf("UserSettingsExist failed: %v", err)
-		}
+	tests := []struct {
+		name     string
+		setup    func()
+		expected bool
+	}{
+		{
+			name:     "returns false when settings don't exist",
+			setup:    func() {}, // No setup needed
+			expected: false,
+		},
+		{
+			name: "returns true when settings exist",
+			setup: func() {
+				settings := &models.UserSettings{
+					UserID:                   userID,
+					UndoSendDelaySeconds:     20,
+					PaginationThreadsPerPage: 100,
+					IMAPServerHostname:       "imap.example.com",
+					IMAPUsername:             "user@example.com",
+					EncryptedIMAPPassword:    []byte("encrypted"),
+					SMTPServerHostname:       "smtp.example.com",
+					SMTPUsername:             "user@example.com",
+					EncryptedSMTPPassword:    []byte("encrypted"),
+				}
+				_ = SaveUserSettings(ctx, pool, settings)
+			},
+			expected: true,
+		},
+	}
 
-		if exists {
-			t.Error("Expected settings to not exist")
-		}
-	})
-
-	t.Run("returns true when settings exist", func(t *testing.T) {
-		settings := &models.UserSettings{
-			UserID:                   userID,
-			UndoSendDelaySeconds:     20,
-			PaginationThreadsPerPage: 100,
-			IMAPServerHostname:       "imap.example.com",
-			IMAPUsername:             "user@example.com",
-			EncryptedIMAPPassword:    []byte("encrypted"),
-			SMTPServerHostname:       "smtp.example.com",
-			SMTPUsername:             "user@example.com",
-			EncryptedSMTPPassword:    []byte("encrypted"),
-		}
-
-		err := SaveUserSettings(ctx, pool, settings)
-		if err != nil {
-			t.Fatalf("SaveUserSettings failed: %v", err)
-		}
-
-		exists, err := UserSettingsExist(ctx, pool, userID)
-		if err != nil {
-			t.Fatalf("UserSettingsExist failed: %v", err)
-		}
-
-		if !exists {
-			t.Error("Expected settings to exist")
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setup()
+			exists, err := UserSettingsExist(ctx, pool, userID)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, exists)
+		})
+	}
 }
 
 func TestSaveAndGetUserSettings(t *testing.T) {
@@ -74,80 +75,107 @@ func TestSaveAndGetUserSettings(t *testing.T) {
 		t.Fatalf("GetOrCreateUser failed: %v", err)
 	}
 
-	t.Run("saves and retrieves settings", func(t *testing.T) {
-		settings := &models.UserSettings{
-			UserID:                   userID,
-			UndoSendDelaySeconds:     30,
-			PaginationThreadsPerPage: 50,
-			IMAPServerHostname:       "imap.test.com",
-			IMAPUsername:             "test_user",
-			EncryptedIMAPPassword:    []byte("encrypted_imap_pass"),
-			SMTPServerHostname:       "smtp.test.com",
-			SMTPUsername:             "test_user",
-			EncryptedSMTPPassword:    []byte("encrypted_smtp_pass"),
-		}
+	tests := []struct {
+		name        string
+		setup       func() *models.UserSettings
+		expectError bool
+		checkResult func(*testing.T, *models.UserSettings)
+	}{
+		{
+			name: "saves and retrieves settings",
+			setup: func() *models.UserSettings {
+				return &models.UserSettings{
+					UserID:                   userID,
+					UndoSendDelaySeconds:     30,
+					PaginationThreadsPerPage: 50,
+					IMAPServerHostname:       "imap.test.com",
+					IMAPUsername:             "test_user",
+					EncryptedIMAPPassword:    []byte("encrypted_imap_pass"),
+					SMTPServerHostname:       "smtp.test.com",
+					SMTPUsername:             "test_user",
+					EncryptedSMTPPassword:    []byte("encrypted_smtp_pass"),
+				}
+			},
+			expectError: false,
+			checkResult: func(t *testing.T, retrieved *models.UserSettings) {
+				assert.Equal(t, userID, retrieved.UserID)
+				assert.Equal(t, 30, retrieved.UndoSendDelaySeconds)
+				assert.Equal(t, "imap.test.com", retrieved.IMAPServerHostname)
+				assert.Equal(t, []byte("encrypted_imap_pass"), retrieved.EncryptedIMAPPassword)
+			},
+		},
+		{
+			name: "updates existing settings",
+			setup: func() *models.UserSettings {
+				// First save initial settings
+				initial := &models.UserSettings{
+					UserID:                   userID,
+					UndoSendDelaySeconds:     30,
+					PaginationThreadsPerPage: 50,
+					IMAPServerHostname:       "imap.test.com",
+					IMAPUsername:             "test_user",
+					EncryptedIMAPPassword:    []byte("encrypted_imap_pass"),
+					SMTPServerHostname:       "smtp.test.com",
+					SMTPUsername:             "test_user",
+					EncryptedSMTPPassword:    []byte("encrypted_smtp_pass"),
+				}
+				_ = SaveUserSettings(ctx, pool, initial)
 
-		err := SaveUserSettings(ctx, pool, settings)
-		if err != nil {
-			t.Fatalf("SaveUserSettings failed: %v", err)
-		}
+				// Return updated settings
+				return &models.UserSettings{
+					UserID:                   userID,
+					UndoSendDelaySeconds:     60,
+					PaginationThreadsPerPage: 200,
+					IMAPServerHostname:       "imap.updated.com",
+					IMAPUsername:             "updated_user",
+					EncryptedIMAPPassword:    []byte("new_encrypted_imap"),
+					SMTPServerHostname:       "smtp.updated.com",
+					SMTPUsername:             "updated_user",
+					EncryptedSMTPPassword:    []byte("new_encrypted_smtp"),
+				}
+			},
+			expectError: false,
+			checkResult: func(t *testing.T, retrieved *models.UserSettings) {
+				assert.Equal(t, 60, retrieved.UndoSendDelaySeconds)
+				assert.Equal(t, "imap.updated.com", retrieved.IMAPServerHostname)
+			},
+		},
+		{
+			name: "returns error for non-existent user",
+			setup: func() *models.UserSettings {
+				return nil // Not used for this test
+			},
+			expectError: true,
+			checkResult: func(t *testing.T, retrieved *models.UserSettings) {
+				// Error case, no need to check result
+			},
+		},
+	}
 
-		retrieved, err := GetUserSettings(ctx, pool, userID)
-		if err != nil {
-			t.Fatalf("GetUserSettings failed: %v", err)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings := tt.setup()
+			if settings != nil {
+				err := SaveUserSettings(ctx, pool, settings)
+				assert.NoError(t, err)
 
-		if retrieved.UserID != settings.UserID {
-			t.Errorf("Expected UserID %s, got %s", settings.UserID, retrieved.UserID)
-		}
-		if retrieved.UndoSendDelaySeconds != settings.UndoSendDelaySeconds {
-			t.Errorf("Expected UndoSendDelaySeconds %d, got %d", settings.UndoSendDelaySeconds, retrieved.UndoSendDelaySeconds)
-		}
-		if retrieved.IMAPServerHostname != settings.IMAPServerHostname {
-			t.Errorf("Expected IMAPServerHostname %s, got %s", settings.IMAPServerHostname, retrieved.IMAPServerHostname)
-		}
-		if string(retrieved.EncryptedIMAPPassword) != string(settings.EncryptedIMAPPassword) {
-			t.Errorf("Expected EncryptedIMAPPassword %s, got %s", settings.EncryptedIMAPPassword, retrieved.EncryptedIMAPPassword)
-		}
-	})
-
-	t.Run("updates existing settings", func(t *testing.T) {
-		updatedSettings := &models.UserSettings{
-			UserID:                   userID,
-			UndoSendDelaySeconds:     60,
-			PaginationThreadsPerPage: 200,
-			IMAPServerHostname:       "imap.updated.com",
-			IMAPUsername:             "updated_user",
-			EncryptedIMAPPassword:    []byte("new_encrypted_imap"),
-			SMTPServerHostname:       "smtp.updated.com",
-			SMTPUsername:             "updated_user",
-			EncryptedSMTPPassword:    []byte("new_encrypted_smtp"),
-		}
-
-		err := SaveUserSettings(ctx, pool, updatedSettings)
-		if err != nil {
-			t.Fatalf("SaveUserSettings (update) failed: %v", err)
-		}
-
-		retrieved, err := GetUserSettings(ctx, pool, userID)
-		if err != nil {
-			t.Fatalf("GetUserSettings failed: %v", err)
-		}
-
-		if retrieved.UndoSendDelaySeconds != 60 {
-			t.Errorf("Expected updated UndoSendDelaySeconds 60, got %d", retrieved.UndoSendDelaySeconds)
-		}
-		if retrieved.IMAPServerHostname != "imap.updated.com" {
-			t.Errorf("Expected updated IMAPServerHostname, got %s", retrieved.IMAPServerHostname)
-		}
-	})
-
-	t.Run("returns error for non-existent user", func(t *testing.T) {
-		_, err := GetUserSettings(ctx, pool, "00000000-0000-0000-0000-000000000000")
-		if !errors.Is(err, ErrUserSettingsNotFound) {
-			t.Errorf("Expected ErrUserSettingsNotFound, got %v", err)
-		}
-	})
+				retrieved, err := GetUserSettings(ctx, pool, userID)
+				if tt.expectError {
+					assert.Error(t, err)
+					return
+				}
+				assert.NoError(t, err)
+				if tt.checkResult != nil {
+					tt.checkResult(t, retrieved)
+				}
+			} else {
+				// Test error case
+				_, err := GetUserSettings(ctx, pool, "00000000-0000-0000-0000-000000000000")
+				assert.Error(t, err)
+				assert.True(t, errors.Is(err, ErrUserSettingsNotFound))
+			}
+		})
+	}
 }
 
 func TestSaveUserSettingsUpdatesTimestamp(t *testing.T) {
@@ -175,35 +203,21 @@ func TestSaveUserSettingsUpdatesTimestamp(t *testing.T) {
 	}
 
 	err = SaveUserSettings(ctx, pool, settings)
-	if err != nil {
-		t.Fatalf("SaveUserSettings failed: %v", err)
-	}
+	assert.NoError(t, err)
 
 	retrieved1, err := GetUserSettings(ctx, pool, userID)
-	if err != nil {
-		t.Fatalf("GetUserSettings failed: %v", err)
-	}
-	if retrieved1 == nil {
-		t.Fatalf("GetUserSettings returned nil")
-	}
+	assert.NoError(t, err)
+	assert.NotNil(t, retrieved1)
 
 	time.Sleep(100 * time.Millisecond)
 
 	settings.UndoSendDelaySeconds = 30
 	err = SaveUserSettings(ctx, pool, settings)
-	if err != nil {
-		t.Fatalf("SaveUserSettings (update) failed: %v", err)
-	}
+	assert.NoError(t, err)
 
 	retrieved2, err := GetUserSettings(ctx, pool, userID)
-	if err != nil {
-		t.Fatalf("GetUserSettings (second) failed: %v", err)
-	}
-	if retrieved2 == nil {
-		t.Fatalf("GetUserSettings (second) returned nil")
-	}
+	assert.NoError(t, err)
+	assert.NotNil(t, retrieved2)
 
-	if !retrieved2.UpdatedAt.After(retrieved1.UpdatedAt) {
-		t.Error("Expected updated_at to be updated after second save")
-	}
+	assert.True(t, retrieved2.UpdatedAt.After(retrieved1.UpdatedAt), "updated_at should be updated after second save")
 }

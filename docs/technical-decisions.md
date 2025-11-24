@@ -27,8 +27,15 @@ which is useful for flexible payloads like our action queue.
       for this project.
 * **Encryption:** Standard `crypto/aes` and `crypto/cipher`
     * For encrypting/decrypting user credentials in the DB using AES-GCM.
-* **Testing:** [`github.com/ory/dockertest`](https://github.com/ory/dockertest)
-    * Useful for integration tests to spin up real Postgres containers.
+* **Testing:**
+    * [`github.com/stretchr/testify`](https://github.com/stretchr/testify): For assertions and test suites.
+        * Provides `assert` and `require` packages for cleaner test assertions.
+        * Widely adopted in the Go community and well-maintained.
+    * [`github.com/vektra/mockery`](https://github.com/vektra/mockery): For generating mocks from interfaces.
+        * Automatically generates mock implementations from Go interfaces, reducing boilerplate.
+        * Mocks are generated in `backend/internal/testutil/mocks` and use testify's mock package.
+        * See [this guide](https://gist.github.com/maratori/8772fe158ff705ca543a0620863977c2) for rationale on choosing mockery.
+    * [`github.com/testcontainers/testcontainers-go`](https://github.com/testcontainers/testcontainers-go): For integration tests with real Postgres containers.
 
 ## Front end
 

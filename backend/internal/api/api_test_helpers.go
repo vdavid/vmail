@@ -3,11 +3,13 @@ package api
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/assert"
 	"github.com/vdavid/vmail/backend/internal/auth"
 	"github.com/vdavid/vmail/backend/internal/crypto"
 	"github.com/vdavid/vmail/backend/internal/db"
@@ -66,4 +68,26 @@ func createRequestWithUser(method, url, email string) *http.Request {
 	req := httptest.NewRequest(method, url, nil)
 	ctx := context.WithValue(req.Context(), auth.UserEmailKey, email)
 	return req.WithContext(ctx)
+}
+
+// FailingResponseWriter is a ResponseWriter that fails on Write to test error handling.
+type FailingResponseWriter struct {
+	http.ResponseWriter
+	WriteShouldFail bool
+}
+
+func (f *FailingResponseWriter) Write(p []byte) (int, error) {
+	if f.WriteShouldFail {
+		return 0, fmt.Errorf("write failed")
+	}
+	return f.ResponseWriter.Write(p)
+}
+
+// VerifyAuthCheck verifies that the handler returns 401 Unauthorized when no user is in context.
+func VerifyAuthCheck(t *testing.T, handlerFunc http.HandlerFunc, method, url string) {
+	t.Helper()
+	req := httptest.NewRequest(method, url, nil)
+	rr := httptest.NewRecorder()
+	handlerFunc(rr, req)
+	assert.Equal(t, http.StatusUnauthorized, rr.Code, "Expected status 401 when no user email in context")
 }

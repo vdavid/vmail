@@ -40,7 +40,7 @@ func TestSyncThreadsForFolder_DetectsNewEmail(t *testing.T) {
 	// Ensure INBOX exists
 	server.EnsureINBOX(t)
 
-	encryptor := getTestEncryptor(t)
+	encryptor := testutil.GetTestEncryptor(t)
 	service := NewService(pool, NewPool(), encryptor)
 	defer service.Close()
 
@@ -214,7 +214,7 @@ func TestSyncThreadsForFolder_IncrementalSync(t *testing.T) {
 	// Ensure INBOX exists
 	server.EnsureINBOX(t)
 
-	encryptor := getTestEncryptor(t)
+	encryptor := testutil.GetTestEncryptor(t)
 	service := NewService(pool, NewPool(), encryptor)
 	defer service.Close()
 
@@ -324,7 +324,7 @@ func TestSyncThreadsForFolder_CatchesUpOnMissedEmails(t *testing.T) {
 	defer server.Close()
 	server.EnsureINBOX(t)
 
-	encryptor := getTestEncryptor(t)
+	encryptor := testutil.GetTestEncryptor(t)
 	service := NewService(pool, NewPool(), encryptor)
 	defer service.Close()
 
