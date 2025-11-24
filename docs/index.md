@@ -18,6 +18,7 @@ User's browser → Authelia → auth cookie/token → frontend → API (with tok
 - [technical decisions](tech-stack.md)
 - [testing](testing.md) – tells you how to test.
 - [scripts](scripts.md) – docs for supporting scripts.
+ - [maintenance](maintenance.md) – shows how to keep tools, dependencies, and infra up to date.
 
 ### Back-end
 
