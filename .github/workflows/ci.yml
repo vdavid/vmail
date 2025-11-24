@@ -17,11 +17,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25.4'
-          cache-dependency-path: backend/go.sum
+      - name: Install mise
+        uses: jdx/mise-action@v2
+
+      - name: Install tools with mise
+        run: mise install
 
       - name: Cache Go modules
         uses: actions/cache@v4
@@ -38,53 +38,33 @@ jobs:
 
       - name: Check gofmt
         run: ./scripts/check/check --check gofmt --ci
-        env:
-          GOTOOLCHAIN: auto
 
       - name: Check go mod tidy
         run: ./scripts/check/check --check go-mod-tidy --ci
-        env:
-          GOTOOLCHAIN: auto
 
       - name: Run govulncheck
         run: ./scripts/check/check --check govulncheck --ci
-        env:
-          GOTOOLCHAIN: auto
 
       - name: Run go vet
         run: ./scripts/check/check --check go-vet --ci
-        env:
-          GOTOOLCHAIN: auto
 
       - name: Run staticcheck
         run: ./scripts/check/check --check staticcheck --ci
-        env:
-          GOTOOLCHAIN: auto
 
       - name: Run ineffassign
         run: ./scripts/check/check --check ineffassign --ci
-        env:
-          GOTOOLCHAIN: auto
 
       - name: Run misspell
         run: ./scripts/check/check --check misspell --ci
-        env:
-          GOTOOLCHAIN: auto
 
       - name: Run gocyclo
         run: ./scripts/check/check --check gocyclo --ci
-        env:
-          GOTOOLCHAIN: auto
 
       - name: Run nilaway
         run: ./scripts/check/check --check nilaway --ci
-        env:
-          GOTOOLCHAIN: auto
 
       - name: Run backend tests
         run: ./scripts/check/check --check backend-tests --ci
-        env:
-          GOTOOLCHAIN: auto
 
   frontend-checks:
     name: Frontend (TypeScript)
@@ -94,32 +74,34 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
+      - name: Install mise
+        uses: jdx/mise-action@v2
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Install tools with mise
+        run: mise install
+
+      - name: Cache pnpm
+        uses: actions/cache@v4
         with:
-          node-version: '25'
-          cache: 'pnpm'
-          cache-dependency-path: ./frontend/pnpm-lock.yaml
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
         working-directory: ./frontend
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: Cache Go modules
+        uses: actions/cache@v4
         with:
-          go-version: '1.25.4'
-          cache-dependency-path: backend/go.sum
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('backend/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
       - name: Build check tool
         run: go build -o scripts/check/check scripts/check/main.go
-        env:
-          GOTOOLCHAIN: auto
 
       - name: Check Prettier
         run: ./scripts/check/check --check prettier --ci
@@ -139,17 +121,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
+      - name: Install mise
+        uses: jdx/mise-action@v2
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Install tools with mise
+        run: mise install
+
+      - name: Cache pnpm
+        uses: actions/cache@v4
         with:
-          node-version: '25'
-          cache: 'pnpm'
-          cache-dependency-path: ./frontend/pnpm-lock.yaml
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -158,12 +142,6 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
         working-directory: ./frontend
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25.4'
-          cache-dependency-path: backend/go.sum
 
       - name: Cache Go modules
         uses: actions/cache@v4
@@ -178,5 +156,4 @@ jobs:
         working-directory: ./frontend
         env:
           VMAIL_TEST_MODE: 'true'
-          GOTOOLCHAIN: auto
           PLAYWRIGHT: '1'
