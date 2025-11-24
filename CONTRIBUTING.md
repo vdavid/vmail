@@ -97,3 +97,7 @@ The project includes several utility scripts in `scripts/`. See [docs/scripts](d
 ## Testing
 `scripts/check.sh` runs all formatting, linting, and tests. Always run it before committing and ensure all checks pass.
 See `./scripts/check.sh --help` to learn about more specific uses.
+
+## Keeping things up to date
+
+For a step-by-step process on updating tools, dependencies, and Docker images, see [`docs/maintenance.md`](docs/maintenance.md).

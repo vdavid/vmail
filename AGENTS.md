@@ -66,6 +66,7 @@ Always keep the dev process and style guide in mind.
 - `pnpm exec playwright test --config=../playwright.config.ts --grep "{test-name}" is also helpful
 for context-efficient re-running of E2E-tests.
 - `migrate up` (using golang-migrate)
+ - For recurring updates of tools, dependencies, and infra, see `docs/maintenance.md`.
 
 ## "Red line" rules (do not break)
 - Always make check.sh happy, including warnings and gocyclo complexity!
