@@ -1,0 +1,45 @@
+# EditorConfig is awesome: https://editorconfig.org
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Go backend (gofmt uses tabs)
+[*.go]
+indent_style = tab
+# Leave indent_size unset so each editor can display tabs as preferred
+
+# Frontend TypeScript/JavaScript – matches frontend/.prettierrc (tabWidth 4, useTabs false)
+[*.{ts,tsx,js,jsx,mjs,cjs}]
+indent_style = space
+indent_size = 4
+
+# JSON and similar config files
+[*.{json,jsonc,prettierrc,eslintrc}]
+indent_style = space
+indent_size = 4
+
+# YAML (docker-compose, CI, etc.) – 2 spaces is the de-facto standard
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+
+# Markdown and docs – keep hard line-break spaces
+[*.md]
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = false
+
+# Shell scripts
+[*.{sh,bash}]
+indent_style = space
+indent_size = 4
+
+# SQL migrations and other SQL
+[*.sql]
+indent_style = space
+indent_size = 4

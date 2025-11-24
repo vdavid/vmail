@@ -38,6 +38,7 @@ Writing and code styles.
 
 - Add meaningful comments for public go functions, methods, and types to help the next dev.
 - Don't use classes in TypeScript, use only modules.
+- Keep editor settings in sync with `.editorconfig`, gofmt, and Prettier config so they all format code consistently.
 
 ## Commit messages
 

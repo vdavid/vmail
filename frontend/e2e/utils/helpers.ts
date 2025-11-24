@@ -1,4 +1,4 @@
-import { Locator, Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 
 import { setupAuth } from '../fixtures/auth'
 import { defaultTestUser } from '../fixtures/test-data'
