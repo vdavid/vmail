@@ -31,53 +31,58 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
+      - name: Build check tool
+        run: go build -o scripts/check/check scripts/check/main.go
+        env:
+          GOTOOLCHAIN: auto
+
       - name: Check gofmt
-        run: ./scripts/check.sh --check gofmt
+        run: ./scripts/check/check --check gofmt --ci
         env:
           GOTOOLCHAIN: auto
 
       - name: Check go mod tidy
-        run: ./scripts/check.sh --check go-mod-tidy
+        run: ./scripts/check/check --check go-mod-tidy --ci
         env:
           GOTOOLCHAIN: auto
 
       - name: Run govulncheck
-        run: ./scripts/check.sh --check govulncheck
+        run: ./scripts/check/check --check govulncheck --ci
         env:
           GOTOOLCHAIN: auto
 
       - name: Run go vet
-        run: ./scripts/check.sh --check go-vet
+        run: ./scripts/check/check --check go-vet --ci
         env:
           GOTOOLCHAIN: auto
 
       - name: Run staticcheck
-        run: ./scripts/check.sh --check staticcheck
+        run: ./scripts/check/check --check staticcheck --ci
         env:
           GOTOOLCHAIN: auto
 
       - name: Run ineffassign
-        run: ./scripts/check.sh --check ineffassign
+        run: ./scripts/check/check --check ineffassign --ci
         env:
           GOTOOLCHAIN: auto
 
       - name: Run misspell
-        run: ./scripts/check.sh --check misspell
+        run: ./scripts/check/check --check misspell --ci
         env:
           GOTOOLCHAIN: auto
 
       - name: Run gocyclo
-        run: ./scripts/check.sh --check gocyclo
+        run: ./scripts/check/check --check gocyclo --ci
         env:
           GOTOOLCHAIN: auto
 
       - name: Run nilaway
-        run: ./scripts/check.sh --check nilaway
+        run: ./scripts/check/check --check nilaway --ci
         env:
           GOTOOLCHAIN: auto
 
       - name: Run backend tests
-        run: ./scripts/check.sh --check backend-tests
+        run: ./scripts/check/check --check backend-tests --ci
         env:
           GOTOOLCHAIN: auto
 
@@ -105,14 +110,25 @@ jobs:
         run: pnpm install --frozen-lockfile
         working-directory: ./frontend
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.4'
+          cache-dependency-path: backend/go.sum
+
+      - name: Build check tool
+        run: go build -o scripts/check/check scripts/check/main.go
+        env:
+          GOTOOLCHAIN: auto
+
       - name: Check Prettier
-        run: ./scripts/check.sh --check prettier
+        run: ./scripts/check/check --check prettier --ci
 
       - name: Run ESLint
-        run: ./scripts/check.sh --check eslint
+        run: ./scripts/check/check --check eslint --ci
 
       - name: Run frontend tests
-        run: ./scripts/check.sh --check frontend-tests
+        run: ./scripts/check/check --check frontend-tests --ci
 
   e2e-tests:
     name: E2E Tests (Playwright)

@@ -51,7 +51,7 @@ Always keep the dev process and style guide in mind.
 ## High-level map
 
 - **Frontend**: React 19 + Vite. Entry: `frontend/src/main.tsx`. State: Zustand.
-- **Backend**: Go 1.23 (Standard lib HTTP). Entry: `backend/cmd/server`.
+- **Backend**: Go 1.25 (Standard lib HTTP). Entry: `backend/cmd/server`.
 - **Architecture**: Handlers (`api/`) -> Service/core logic (`internal/`) -> DB (`db/`).
 - **Testing**: Playwright (E2E), Vitest (unit), Go `testing` package, `testify` for assertions and mocking support,
 `mockery` for generating mocks.
