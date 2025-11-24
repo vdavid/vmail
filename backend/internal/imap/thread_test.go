@@ -4,145 +4,150 @@ import (
 	"testing"
 	"time"
 
+	"github.com/emersion/go-imap-sortthread"
+	"github.com/emersion/go-imap/client"
+	"github.com/stretchr/testify/assert"
 	"github.com/vdavid/vmail/backend/internal/testutil"
 )
 
 func TestRunThreadCommand(t *testing.T) {
-	t.Run("returns error for nil client", func(t *testing.T) {
-		_, err := RunThreadCommand(nil)
-		if err == nil {
-			t.Error("Expected error for nil client")
-		}
-		if err.Error() != "client is nil" {
-			t.Errorf("Expected error 'client is nil', got: %v", err)
-		}
-	})
+	tests := []struct {
+		name        string
+		setup       func(*testing.T) *client.Client
+		expectError bool
+		checkResult func(*testing.T, []*sortthread.Thread, error)
+	}{
+		{
+			name: "returns error for nil client",
+			setup: func(*testing.T) *client.Client {
+				return nil
+			},
+			expectError: true,
+			checkResult: func(t *testing.T, threads []*sortthread.Thread, err error) {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "client is nil")
+			},
+		},
+		{
+			name: "handles empty mailbox",
+			setup: func(t *testing.T) *client.Client {
+				server := testutil.NewTestIMAPServer(t)
+				t.Cleanup(server.Close)
+				server.EnsureINBOX(t)
+				c, cleanup := server.Connect(t)
+				t.Cleanup(cleanup)
+				_, err := c.Select("INBOX", false)
+				if err != nil {
+					t.Fatalf("Failed to select INBOX: %v", err)
+				}
+				return c
+			},
+			expectError: false,
+			checkResult: func(t *testing.T, threads []*sortthread.Thread, err error) {
+				// Check capabilities to determine expected behavior
+				server := testutil.NewTestIMAPServer(t)
+				t.Cleanup(server.Close)
+				c, cleanup := server.Connect(t)
+				t.Cleanup(cleanup)
+				defer cleanup()
+				caps, capErr := c.Capability()
+				if capErr != nil {
+					t.Fatalf("Failed to check capabilities: %v", capErr)
+				}
+				if !caps["THREAD"] {
+					assert.Error(t, err, "should error when server doesn't support THREAD")
+					return
+				}
+				assert.NoError(t, err)
+				assert.NotNil(t, threads)
+				assert.Empty(t, threads)
+			},
+		},
+		{
+			name: "handles mailbox with unthreaded messages",
+			setup: func(t *testing.T) *client.Client {
+				server := testutil.NewTestIMAPServer(t)
+				t.Cleanup(server.Close)
+				server.EnsureINBOX(t)
+				now := time.Now()
+				server.AddMessage(t, "INBOX", "<msg1@test>", "Subject 1", "from@test.com", "to@test.com", now)
+				server.AddMessage(t, "INBOX", "<msg2@test>", "Subject 2", "from@test.com", "to@test.com", now.Add(-1*time.Hour))
+				c, cleanup := server.Connect(t)
+				t.Cleanup(cleanup)
+				_, err := c.Select("INBOX", false)
+				if err != nil {
+					t.Fatalf("Failed to select INBOX: %v", err)
+				}
+				return c
+			},
+			expectError: false,
+			checkResult: func(t *testing.T, threads []*sortthread.Thread, err error) {
+				if err != nil {
+					// Some servers may not support THREAD command
+					assert.NotEmpty(t, err.Error(), "expected non-empty error message")
+					return
+				}
+				assert.NotNil(t, threads)
+			},
+		},
+		{
+			name: "handles server without THREAD support",
+			setup: func(t *testing.T) *client.Client {
+				server := testutil.NewTestIMAPServer(t)
+				t.Cleanup(server.Close)
+				server.EnsureINBOX(t)
+				c, cleanup := server.Connect(t)
+				t.Cleanup(cleanup)
+				return c
+			},
+			expectError: false,
+			checkResult: func(t *testing.T, threads []*sortthread.Thread, err error) {
+				// Check capabilities to determine expected behavior
+				server := testutil.NewTestIMAPServer(t)
+				t.Cleanup(server.Close)
+				c, cleanup := server.Connect(t)
+				t.Cleanup(cleanup)
+				defer cleanup()
+				caps, capErr := c.Capability()
+				if capErr != nil {
+					t.Fatalf("Failed to check capabilities: %v", capErr)
+				}
+				if !caps["THREAD"] {
+					assert.Error(t, err, "should error when server doesn't support THREAD")
+				} else {
+					assert.NoError(t, err, "should succeed when THREAD is supported")
+				}
+			},
+		},
+		{
+			name: "handles network errors during thread command",
+			setup: func(t *testing.T) *client.Client {
+				server := testutil.NewTestIMAPServer(t)
+				t.Cleanup(server.Close)
+				c, _ := server.Connect(t)
+				_ = c.Logout() // Close the client to simulate network error
+				return c
+			},
+			expectError: true,
+			checkResult: func(t *testing.T, threads []*sortthread.Thread, err error) {
+				assert.Error(t, err, "should error when client is closed")
+			},
+		},
+	}
 
-	t.Run("handles empty mailbox", func(t *testing.T) {
-		server := testutil.NewTestIMAPServer(t)
-		defer server.Close()
-
-		server.EnsureINBOX(t)
-
-		client, cleanup := server.Connect(t)
-		defer cleanup()
-
-		// Select INBOX (which is empty)
-		_, err := client.Select("INBOX", false)
-		if err != nil {
-			t.Fatalf("Failed to select INBOX: %v", err)
-		}
-
-		// Check if server supports THREAD
-		caps, err := client.Capability()
-		if err != nil {
-			t.Fatalf("Failed to check capabilities: %v", err)
-		}
-
-		// Run thread command on empty mailbox
-		threads, err := RunThreadCommand(client)
-		if !caps["THREAD"] {
-			// Server doesn't support THREAD, expect an error
-			if err == nil {
-				t.Error("Expected error for server without THREAD support")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := tt.setup(t)
+			threads, err := RunThreadCommand(client)
+			if tt.expectError {
+				if tt.checkResult != nil {
+					tt.checkResult(t, threads, err)
+				}
+				return
 			}
-			return
-		}
-
-		// Server supports THREAD, should succeed
-		if err != nil {
-			t.Fatalf("RunThreadCommand should succeed on empty mailbox: %v", err)
-		}
-
-		if threads == nil {
-			t.Error("Expected empty slice, got nil")
-		}
-		if len(threads) != 0 {
-			t.Errorf("Expected empty threads slice, got %d threads", len(threads))
-		}
-	})
-
-	t.Run("handles mailbox with unthreaded messages", func(t *testing.T) {
-		server := testutil.NewTestIMAPServer(t)
-		defer server.Close()
-
-		server.EnsureINBOX(t)
-
-		// Add some messages without threading relationships
-		now := time.Now()
-		server.AddMessage(t, "INBOX", "<msg1@test>", "Subject 1", "from@test.com", "to@test.com", now)
-		server.AddMessage(t, "INBOX", "<msg2@test>", "Subject 2", "from@test.com", "to@test.com", now.Add(-1*time.Hour))
-
-		client, cleanup := server.Connect(t)
-		defer cleanup()
-
-		_, err := client.Select("INBOX", false)
-		if err != nil {
-			t.Fatalf("Failed to select INBOX: %v", err)
-		}
-
-		// Run thread command
-		threads, err := RunThreadCommand(client)
-		if err != nil {
-			// Some servers may not support THREAD command
-			// In that case, we expect an error
-			if err.Error() == "" {
-				t.Error("Expected non-empty error message")
+			if tt.checkResult != nil {
+				tt.checkResult(t, threads, err)
 			}
-			return
-		}
-
-		// If successful, we should have threads (possibly one per message if unthreaded)
-		if threads == nil {
-			t.Error("Expected threads slice, got nil")
-		}
-		// Unthreaded messages might be returned as separate threads or as a single thread
-		// The exact behavior depends on the server implementation
-	})
-
-	t.Run("handles server without THREAD support", func(t *testing.T) {
-		server := testutil.NewTestIMAPServer(t)
-		defer server.Close()
-
-		server.EnsureINBOX(t)
-
-		client, cleanup := server.Connect(t)
-		defer cleanup()
-
-		// Check if server supports THREAD
-		caps, err := client.Capability()
-		if err != nil {
-			t.Fatalf("Failed to check capabilities: %v", err)
-		}
-
-		// The memory backend may or may not support THREAD
-		// If it doesn't, we should get an error
-		if !caps["THREAD"] {
-			_, err := RunThreadCommand(client)
-			if err == nil {
-				t.Error("Expected error for server without THREAD support")
-			}
-		} else {
-			// Server supports THREAD, so test should pass
-			_, err := RunThreadCommand(client)
-			if err != nil {
-				t.Fatalf("RunThreadCommand should succeed when THREAD is supported: %v", err)
-			}
-		}
-	})
-
-	t.Run("handles network errors during thread command", func(t *testing.T) {
-		server := testutil.NewTestIMAPServer(t)
-		defer server.Close()
-
-		client, _ := server.Connect(t)
-		// Close the client to simulate network error
-		_ = client.Logout()
-
-		// Try to run thread command with closed client
-		_, err := RunThreadCommand(client)
-		if err == nil {
-			t.Error("Expected error when client is closed")
-		}
-	})
+		})
+	}
 }

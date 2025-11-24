@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/vdavid/vmail/backend/internal/testutil"
 )
 
@@ -13,34 +14,47 @@ func TestGetOrCreateUser(t *testing.T) {
 
 	ctx := context.Background()
 
-	t.Run("creates new user", func(t *testing.T) {
-		email := "test@example.com"
+	tests := []struct {
+		name        string
+		email       string
+		expectNew   bool
+		checkResult func(*testing.T, string, string)
+	}{
+		{
+			name:      "creates new user",
+			email:     "test@example.com",
+			expectNew: true,
+			checkResult: func(t *testing.T, userID1, userID2 string) {
+				assert.NotEmpty(t, userID1)
+			},
+		},
+		{
+			name:      "returns existing user",
+			email:     "existing@example.com",
+			expectNew: false,
+			checkResult: func(t *testing.T, userID1, userID2 string) {
+				assert.Equal(t, userID1, userID2, "should return same user ID for same email")
+			},
+		},
+	}
 
-		userID, err := GetOrCreateUser(ctx, pool, email)
-		if err != nil {
-			t.Fatalf("GetOrCreateUser failed: %v", err)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			userID1, err := GetOrCreateUser(ctx, pool, tt.email)
+			assert.NoError(t, err)
+			assert.NotEmpty(t, userID1)
 
-		if userID == "" {
-			t.Fatal("Expected non-empty user ID")
-		}
-	})
-
-	t.Run("returns existing user", func(t *testing.T) {
-		email := "existing@example.com"
-
-		userID1, err := GetOrCreateUser(ctx, pool, email)
-		if err != nil {
-			t.Fatalf("First GetOrCreateUser failed: %v", err)
-		}
-
-		userID2, err := GetOrCreateUser(ctx, pool, email)
-		if err != nil {
-			t.Fatalf("Second GetOrCreateUser failed: %v", err)
-		}
-
-		if userID1 != userID2 {
-			t.Errorf("Expected same user ID, got %s and %s", userID1, userID2)
-		}
-	})
+			if !tt.expectNew {
+				userID2, err := GetOrCreateUser(ctx, pool, tt.email)
+				assert.NoError(t, err)
+				if tt.checkResult != nil {
+					tt.checkResult(t, userID1, userID2)
+				}
+			} else {
+				if tt.checkResult != nil {
+					tt.checkResult(t, userID1, "")
+				}
+			}
+		})
+	}
 }

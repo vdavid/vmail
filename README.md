@@ -1,7 +1,7 @@
 # V-Mail
 
 ![CI](https://github.com/vdavid/vmail/actions/workflows/ci.yml/badge.svg)
-![Go Version](https://img.shields.io/badge/go-1.25.3-blue.svg)
+![Go Version](https://img.shields.io/badge/go-1.25.4-blue.svg)
 ![Node.js](https://img.shields.io/badge/node-%3E%3D25.0.0-brightgreen.svg)
 ![TypeScript](https://img.shields.io/badge/typescript-5.9-blue.svg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/vdavid/vmail/backend)](https://goreportcard.com/report/github.com/vdavid/vmail/backend)

@@ -12,8 +12,13 @@ We use Jest and [React Testing Library](https://testing-library.com/).
 
 ### Backend
 
-We use Go's `testing` package
+We use Go's `testing` package combined with [testify](https://github.com/stretchr/testify) for assertions and suites.
+For mocking, we use [mockery](https://github.com/vektra/mockery) to generate mocks from interfaces.
 
+* **Mocking**:
+    * Mocks are generated in `backend/internal/testutil/mocks`.
+    * To generate a mock for an interface, run `mockery --name=InterfaceName --output=internal/testutil/mocks --outpkg=mocks`.
+    * Use `mock.On("Method", args...).Return(results...)` to set up expectations.
 * **`imap` package:** Mock the IMAP server connection.
     * Test `TestParseThreadResponse`: Feed it a sample `* (THREAD ...)` string and assert that it builds
       the correct Go struct tree.
@@ -64,7 +69,7 @@ For daily development, unit and integration tests are usually enough.
 
 **Prerequisites:**
 
-- Go 1.25.3+
+- Go 1.25.4+
 - Node.js 25+ and pnpm 10+
 - A `.env` file with database credentials (see `.env.example`)
 

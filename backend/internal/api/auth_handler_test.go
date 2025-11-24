@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/vdavid/vmail/backend/internal/auth"
 	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/models"
@@ -20,114 +21,69 @@ func TestAuthHandler_GetAuthStatus(t *testing.T) {
 
 	handler := NewAuthHandler(pool)
 
+	t.Run("returns 401 when no user email in context", func(t *testing.T) {
+		VerifyAuthCheck(t, handler.GetAuthStatus, "GET", "/api/v1/auth/status")
+	})
+
 	t.Run("returns isSetupComplete false for new user", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/v1/auth/status", nil)
-
 		ctx := context.WithValue(req.Context(), auth.UserEmailKey, "newuser@example.com")
 		req = req.WithContext(ctx)
 
 		rr := httptest.NewRecorder()
 		handler.GetAuthStatus(rr, req)
 
-		if rr.Code != http.StatusOK {
-			t.Errorf("Expected status 200, got %d", rr.Code)
-		}
+		assert.Equal(t, http.StatusOK, rr.Code)
 
 		var response models.AuthStatusResponse
-		if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
-			t.Fatalf("Failed to decode response: %v", err)
-		}
-
-		if response.IsSetupComplete {
-			t.Error("Expected isSetupComplete to be false for new user")
-		}
+		err := json.NewDecoder(rr.Body).Decode(&response)
+		assert.NoError(t, err)
+		assert.False(t, response.IsSetupComplete)
 	})
 
 	t.Run("returns isSetupComplete true for user with settings", func(t *testing.T) {
 		email := "setupuser@example.com"
 
-		ctx := context.Background()
-		userID, err := db.GetOrCreateUser(ctx, pool, email)
-		if err != nil {
-			t.Fatalf("Failed to create user: %v", err)
-		}
+		// We need to create settings. We can use setupTestUserAndSettings helper
+		// but we need an encryptor for that. Or just do it manually since we don't need encryption here really.
+		// Let's use the helper if we import getTestEncryptor from api_test_helpers.go
+		// But wait, getTestEncryptor is in the same package, so it's available.
+		encryptor := getTestEncryptor(t)
+		setupTestUserAndSettings(t, pool, encryptor, email)
 
-		settings := &models.UserSettings{
-			UserID:                   userID,
-			UndoSendDelaySeconds:     20,
-			PaginationThreadsPerPage: 100,
-			IMAPServerHostname:       "imap.example.com",
-			IMAPUsername:             "user",
-			EncryptedIMAPPassword:    []byte("encrypted"),
-			SMTPServerHostname:       "smtp.example.com",
-			SMTPUsername:             "user",
-			EncryptedSMTPPassword:    []byte("encrypted"),
-		}
-		if err := db.SaveUserSettings(ctx, pool, settings); err != nil {
-			t.Fatalf("Failed to save settings: %v", err)
-		}
-
-		req := httptest.NewRequest("GET", "/api/v1/auth/status", nil)
-		reqCtx := context.WithValue(req.Context(), auth.UserEmailKey, email)
-		req = req.WithContext(reqCtx)
-
+		req := createRequestWithUser("GET", "/api/v1/auth/status", email)
 		rr := httptest.NewRecorder()
 		handler.GetAuthStatus(rr, req)
 
-		if rr.Code != http.StatusOK {
-			t.Errorf("Expected status 200, got %d", rr.Code)
-		}
+		assert.Equal(t, http.StatusOK, rr.Code)
 
 		var response models.AuthStatusResponse
-		if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
-			t.Fatalf("Failed to decode response: %v", err)
-		}
-
-		if !response.IsSetupComplete {
-			t.Error("Expected isSetupComplete to be true for user with settings")
-		}
-	})
-
-	t.Run("returns 401 when no user email in context", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/v1/auth/status", nil)
-
-		rr := httptest.NewRecorder()
-		handler.GetAuthStatus(rr, req)
-
-		if rr.Code != http.StatusUnauthorized {
-			t.Errorf("Expected status 401, got %d", rr.Code)
-		}
+		err := json.NewDecoder(rr.Body).Decode(&response)
+		assert.NoError(t, err)
+		assert.True(t, response.IsSetupComplete)
 	})
 
 	t.Run("returns 500 when GetOrCreateUser returns an error", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/v1/auth/status", nil)
-
-		// Use a canceled context to simulate database connection failure
 		canceledCtx, cancel := context.WithCancel(context.Background())
 		cancel()
+
+		req := httptest.NewRequest("GET", "/api/v1/auth/status", nil)
 		reqCtx := context.WithValue(canceledCtx, auth.UserEmailKey, "test@example.com")
 		req = req.WithContext(reqCtx)
 
 		rr := httptest.NewRecorder()
 		handler.GetAuthStatus(rr, req)
 
-		if rr.Code != http.StatusInternalServerError {
-			t.Errorf("Expected status 500, got %d", rr.Code)
-		}
+		assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	})
 
 	t.Run("returns 500 when UserSettingsExist returns an error", func(t *testing.T) {
 		email := "erroruser@example.com"
-
 		// Create user first with valid context
-		ctx := context.Background()
-		_, err := db.GetOrCreateUser(ctx, pool, email)
-		if err != nil {
-			t.Fatalf("Failed to create user: %v", err)
-		}
+		_, err := db.GetOrCreateUser(context.Background(), pool, email)
+		assert.NoError(t, err)
 
 		// Use a context with a deadline that's already passed to cause UserSettingsExist to fail
-		// Note: GetOrCreateUser might succeed due to ON CONFLICT, but UserSettingsExist will fail
 		deadlineCtx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 		defer cancel()
 		reqCtx := context.WithValue(deadlineCtx, auth.UserEmailKey, email)
@@ -138,8 +94,6 @@ func TestAuthHandler_GetAuthStatus(t *testing.T) {
 		rr := httptest.NewRecorder()
 		handler.GetAuthStatus(rr, req)
 
-		if rr.Code != http.StatusInternalServerError {
-			t.Errorf("Expected status 500, got %d", rr.Code)
-		}
+		assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	})
 }
