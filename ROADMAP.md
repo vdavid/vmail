@@ -39,7 +39,7 @@
 
 - [ ] Attachments are not always displayed. Make sure they are displayed correctly.
 - [ ] Sent emails are not part of threads in Inbox. Make sure they are included. I guess same for vice versa. Add backend test to cover this.
-- [ ] Rewrite /scripts/check.sh in Go because the logic is too complex now. Also, make it run E2E tests just once, and log it when failed, AND run gofmt and pnpm lint:fix automatically.
+- [x] Rewrite /scripts/check.sh in Go because the logic is too complex now. Also, make it run E2E tests just once, and log it when failed, AND run gofmt and pnpm lint:fix automatically.
 - [ ] Write docs for how to run the app in dev mode, and in general to run it with a single command, forking to Go and the frontend, with Go having live reload. These things would be nice.
 
 ## Milestone 3: Actions

@@ -50,7 +50,7 @@ export default [
                 ecmaFeatures: {
                     jsx: true,
                 },
-                project: ['./tsconfig.node.json', './tsconfig.app.json'],
+                project: ['./tsconfig.node.json', './tsconfig.app.json', './tsconfig.e2e.json'],
                 tsconfigRootDir: import.meta.dirname,
             },
         },

@@ -29,7 +29,9 @@ test.describe('Search Functionality', () => {
 
     test('plain text search works', async ({ page }) => {
         // Wait for page to load and find search input (in header)
-        await page.waitForSelector('input[placeholder="Search mail..."]', { timeout: 10000 })
+        await page.waitForSelector('input[placeholder="Search mail..."]', {
+            timeout: 10000,
+        })
         const searchInput = page.locator('input[placeholder="Search mail..."]')
 
         // Use sampleMessages to ensure test data consistency
@@ -45,10 +47,12 @@ test.describe('Search Functionality', () => {
         await waitForEmailList(page)
 
         // Verify search results page shows query (use data-testid for style-independent testing)
-        await expect(page.locator('[data-testid="search-page-heading"]').first()).toContainText('Search results')
-        
+        await expect(page.locator('[data-testid="search-page-heading"]').first()).toContainText(
+            'Search results',
+        )
+
         // Verify we found the expected message from sampleMessages
-        const expectedMessage = sampleMessages.find(m => m.subject.includes('Special Report'))
+        const expectedMessage = sampleMessages.find((m) => m.subject.includes('Special Report'))
         if (expectedMessage) {
             await expect(page.locator('text=' + expectedMessage.subject)).toBeVisible()
         }
@@ -155,16 +159,19 @@ test.describe('Search Functionality', () => {
 
     test('empty query shows appropriate message', async ({ page }) => {
         await setupAuth(page, defaultTestUser.email)
-        
+
         // Navigate to inbox first to ensure settings are loaded
         await navigateAndWait(page, '/')
-        
+
         // Wait for inbox to load (ensures settings are available)
-        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
-        
+        await page.waitForSelector('text=Loading...', {
+            state: 'hidden',
+            timeout: 10000,
+        })
+
         // Wait a bit for authStatus to update
         await page.waitForTimeout(1000)
-        
+
         // Now navigate to search page with empty query
         await navigateAndWait(page, '/search?q=')
 
@@ -178,17 +185,20 @@ test.describe('Search Functionality', () => {
         }
 
         // Wait for settings to load first (required for search query)
-        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+        await page.waitForSelector('text=Loading...', {
+            state: 'hidden',
+            timeout: 10000,
+        })
 
         // Empty query returns all emails (per backend behavior: "Empty query means return all emails")
         // So we should see either the email list or a "no results" message, not the "Enter a search query" message
         // The "Enter a search query" message only shows when threadsResponse is null/undefined
         // Since the API is called, we'll see either results or "No results found"
         await waitForEmailList(page)
-        
+
         // Verify we're on the search page (not redirected to settings)
         await expect(page).toHaveURL(/.*\/search/)
-        
+
         // Verify the page shows "Search" (not "Search results for ...") when query is empty
         await expect(page.locator('main h1, [role="main"] h1').first()).toContainText('Search')
     })
@@ -196,11 +206,14 @@ test.describe('Search Functionality', () => {
     test('no results shows appropriate message', async ({ page }) => {
         await setupAuth(page, defaultTestUser.email)
         await navigateAndWait(page, '/')
-        
+
         const searchInput = await getSearchInput(page)
 
         // Wait for settings to load first
-        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+        await page.waitForSelector('text=Loading...', {
+            state: 'hidden',
+            timeout: 10000,
+        })
 
         // Search for something that definitely won't exist
         await searchInput.fill('nonexistent-email-xyz-123')
@@ -210,9 +223,9 @@ test.describe('Search Functionality', () => {
 
         // Verify "no results" message
         // The SearchPage shows "No results found for \"query\"" when no results
-        await expect(
-            page.locator('text=No results found')
-        ).toBeVisible({ timeout: 5000 })
+        await expect(page.locator('text=No results found')).toBeVisible({
+            timeout: 5000,
+        })
     })
 
     test('pagination works', async ({ page }) => {
@@ -230,7 +243,7 @@ test.describe('Search Functionality', () => {
         if (paginationCount > 0) {
             // Try clicking next page if available
             const nextButton = page.locator('text=Next, button:has-text("Next")')
-            if (await nextButton.count() > 0 && (await nextButton.isEnabled())) {
+            if ((await nextButton.count()) > 0 && (await nextButton.isEnabled())) {
                 await nextButton.click()
                 await expect(page).toHaveURL(/.*page=2/)
             }
@@ -274,10 +287,9 @@ test.describe('Search Functionality', () => {
         await page.waitForTimeout(500)
     })
 
-    test('search keyboard shortcut (/) focuses search bar', async ({ page }) => {
+    test('search keyboard shortcut (/) focuses search bar', () => {
         // Note: The keyboard shortcut '/' to focus search is not currently implemented
         // This test is skipped until the feature is added
         test.skip()
     })
 })
-

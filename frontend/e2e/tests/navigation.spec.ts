@@ -26,10 +26,15 @@ test.describe('Keyboard Navigation', () => {
         await expect(page).toHaveURL(/.*\/thread\/.*/)
 
         // Wait for thread to load
-        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
-        
+        await page.waitForSelector('text=Loading...', {
+            state: 'hidden',
+            timeout: 10000,
+        })
+
         // Wait for thread content to be visible (ensures page is fully loaded)
-        await page.waitForSelector('h1, button:has-text("Back to Inbox")', { timeout: 5000 })
+        await page.waitForSelector('h1, button:has-text("Back to Inbox")', {
+            timeout: 5000,
+        })
 
         // Wait a bit for React to finish rendering and keyboard handler to be ready
         await page.waitForTimeout(200)
@@ -113,4 +118,3 @@ test.describe('Keyboard Navigation', () => {
         await expect(page).toHaveURL(/.*\/thread\/.*/, { timeout: 2000 })
     })
 })
-
