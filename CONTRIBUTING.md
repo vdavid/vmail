@@ -14,6 +14,33 @@ This doc is here to help you get started.
 This setup lets you run the Go backend and the React frontend locally for debugging.
 It is different from the ["Running"](README.md#running) section of the main README, which uses Docker Compose for everything.
 
+### 0. Install mise and tools
+
+This project uses [mise](https://mise.jdx.dev) for tool version management. It automatically installs and manages the correct versions of Go, Node, and pnpm.
+
+1. Install mise:
+   ```bash
+   brew install mise
+   ```
+   
+   See more alternatives [here](https://mise.jdx.dev/getting-started.html).
+
+2. In the project directory, install all required tools:
+   ```bash
+   mise install
+   ```
+
+   This will install Go, Node, and pnpm. The tools will be automatically available when you're in the project directory.
+
+3. Install golang-migrate separately (it's not available in mise's registry):
+   ```bash
+   brew install golang-migrate
+   ```
+   Alternatively, you can install it via Go:
+   ```bash
+   go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+   ```
+
 ### 1. Database
 
 1. Run a Postgres v14+ instance and make it available on a port (e.g., 5432).
@@ -21,8 +48,7 @@ It is different from the ["Running"](README.md#running) section of the main READ
    ```bash
    docker run -d --name vmail-postgres -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=vmail postgres:16-alpine
    ```
-2. Install the [golang-migrate](https://github.com/golang-migrate/migrate/tree/master/cmd/migrate) CLI tool.
-3. Run the migrations:
+2. Run the migrations:
    ```bash
    migrate -path backend/migrations -database "postgres://postgres:postgres@localhost:5432/vmail?sslmode=disable" up
    ```

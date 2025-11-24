@@ -58,6 +58,7 @@ Always keep the dev process and style guide in mind.
 
 ## Tooling
 
+- Tool versions: We use [mise](https://mise.jdx.dev). Go, Node, pnpm, etc. are in `mise.toml`. `mise install` installs.
 - `scripts/check.sh` is the primary quality control tool. It runs linting, formatting, and back/front end+E2E tests.
 `./scripts/check.sh --frontend`, `./scripts/check.sh --backend` are options, and so is
 `./scripts/check.sh --check <check-name>` (use `./scripts/check.sh --help` to list them).
