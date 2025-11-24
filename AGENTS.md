@@ -39,9 +39,9 @@ Always follow this process when developing in this project:
     - Or use a subset, for example, if you only touch the front end.
     - Even fix gocyclo's cyclomatic complexity warnings! I know it's a pain, but it's helpful to keep Go funcs simple.
 5. Make sure to add tests for the new code. Think about unit tests, integration tests, and end-to-end tests.
-6. Check if you added new patterns, external dependencies or architectural changes. Update all related docs.
+6. Check if you added new patterns, external dependencies, or architectural changes. Update all related docs.
 7. Also consider updating `AGENTS.md` (incl. this very process) to keep the next agent's work streamlined.
-8. Before you call it done, see the diff of your changes (e.g. with `git diff`) and make sure all changes are actually
+8. Before you call it done, see the diff of your changes (`git diff`) and make sure all changes are actually
    needed. Revert unneeded changes.
 9. Rerun `./scripts/check.sh` to make sure everything still works.
 10. Suggest a commit message, in the format seen in the style guide.

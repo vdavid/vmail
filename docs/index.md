@@ -15,7 +15,7 @@ User's browser → Authelia → auth cookie/token → frontend → API (with tok
 - [API](api.md) – tells you about the API.
 - [features](features.md) – describes what V-Mail can do.
 - [style guide](style-guide.md) – is **the style guide**. Make sure to read it and re-read it periodically.
-- [technical decisions](technical-decisions.md)
+- [technical decisions](tech-stack.md)
 - [testing](testing.md) – tells you how to test.
 - [scripts](scripts.md) – docs for supporting scripts.
 
