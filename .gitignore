@@ -12,3 +12,6 @@ docker-compose.override.yaml
 # Playwright
 frontend/playwright-report/
 frontend/test-results/
+
+# Air's logs and the built Go binary
+/backend/tmp

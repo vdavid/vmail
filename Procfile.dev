@@ -1,0 +1,4 @@
+# Overmind auto-sets PORT=5000 for each process, which is an unfortunate collision, so setting it explicitly here.
+backend: cd backend && PORT=11764 air
+frontend: cd frontend && pnpm dev
+
