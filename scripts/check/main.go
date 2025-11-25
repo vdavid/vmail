@@ -94,8 +94,8 @@ func main() {
 	totalDuration := time.Since(startTime)
 	fmt.Println()
 	if failed {
-		fmt.Printf("%s❌ Some checks failed. Please fix the issues above.%s\n", colorRed, colorReset)
 		fmt.Printf("%s⏱️  Total runtime: %s%s\n", colorYellow, formatDuration(totalDuration), colorReset)
+		fmt.Printf("%s❌ Some checks failed. Please fix the issues above.%s\n", colorRed, colorReset)
 		if len(allFailedChecks) > 0 {
 			fmt.Println()
 			fmt.Println("To rerun a specific check:")
@@ -105,8 +105,8 @@ func main() {
 		}
 		os.Exit(1)
 	} else {
-		fmt.Printf("%s✅ All checks passed!%s\n", colorGreen, colorReset)
 		fmt.Printf("%s⏱️  Total runtime: %s%s\n", colorYellow, formatDuration(totalDuration), colorReset)
+		fmt.Printf("%s✅ All checks passed!%s\n", colorGreen, colorReset)
 		os.Exit(0)
 	}
 }
