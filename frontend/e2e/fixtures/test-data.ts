@@ -45,7 +45,7 @@ export const sampleMessages: TestMessage[] = [
         subject: 'Meeting Tomorrow',
         from: 'colleague@example.com',
         to: 'test@example.com',
-        body: 'Don\'t forget about the meeting tomorrow at 2 PM.',
+        body: "Don't forget about the meeting tomorrow at 2 PM.",
         sentAt: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
     },
     {
@@ -57,4 +57,3 @@ export const sampleMessages: TestMessage[] = [
         sentAt: new Date(), // Now
     },
 ]
-

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/vdavid/vmail/backend/internal/models"
 	"github.com/vdavid/vmail/backend/internal/testutil"
 )
@@ -24,72 +25,81 @@ func TestSaveAndGetThread(t *testing.T) {
 		t.Fatalf("GetOrCreateUser failed: %v", err)
 	}
 
-	t.Run("saves and retrieves thread", func(t *testing.T) {
-		thread := &models.Thread{
-			UserID:         userID,
-			StableThreadID: "test-thread-id-123",
-			Subject:        "Test Subject",
-		}
+	tests := []struct {
+		name        string
+		setup       func() *models.Thread
+		expectError bool
+		checkResult func(*testing.T, *models.Thread)
+	}{
+		{
+			name: "saves and retrieves thread",
+			setup: func() *models.Thread {
+				return &models.Thread{
+					UserID:         userID,
+					StableThreadID: "test-thread-id-123",
+					Subject:        "Test Subject",
+				}
+			},
+			expectError: false,
+			checkResult: func(t *testing.T, retrieved *models.Thread) {
+				assert.NotEmpty(t, retrieved.ID)
+				assert.Equal(t, "test-thread-id-123", retrieved.StableThreadID)
+				assert.Equal(t, "Test Subject", retrieved.Subject)
+			},
+		},
+		{
+			name: "updates existing thread",
+			setup: func() *models.Thread {
+				thread := &models.Thread{
+					UserID:         userID,
+					StableThreadID: "test-thread-id-456",
+					Subject:        "Original Subject",
+				}
+				_ = SaveThread(ctx, pool, thread)
+				thread.Subject = "Updated Subject"
+				return thread
+			},
+			expectError: false,
+			checkResult: func(t *testing.T, retrieved *models.Thread) {
+				assert.Equal(t, "Updated Subject", retrieved.Subject)
+			},
+		},
+		{
+			name: "returns error for non-existent thread",
+			setup: func() *models.Thread {
+				return nil // Not used for this test
+			},
+			expectError: true,
+			checkResult: func(t *testing.T, retrieved *models.Thread) {
+				// Error case, no need to check result
+			},
+		},
+	}
 
-		err := SaveThread(ctx, pool, thread)
-		if err != nil {
-			t.Fatalf("SaveThread failed: %v", err)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			thread := tt.setup()
+			if thread != nil {
+				err := SaveThread(ctx, pool, thread)
+				assert.NoError(t, err)
 
-		if thread.ID == "" {
-			t.Error("Expected thread ID to be set")
-		}
-
-		retrieved, err := GetThreadByStableID(ctx, pool, userID, "test-thread-id-123")
-		if err != nil {
-			t.Fatalf("GetThreadByStableID failed: %v", err)
-		}
-
-		if retrieved.StableThreadID != thread.StableThreadID {
-			t.Errorf("Expected StableThreadID %s, got %s", thread.StableThreadID, retrieved.StableThreadID)
-		}
-		if retrieved.Subject != thread.Subject {
-			t.Errorf("Expected Subject %s, got %s", thread.Subject, retrieved.Subject)
-		}
-	})
-
-	t.Run("updates existing thread", func(t *testing.T) {
-		thread := &models.Thread{
-			UserID:         userID,
-			StableThreadID: "test-thread-id-456",
-			Subject:        "Original Subject",
-		}
-
-		err := SaveThread(ctx, pool, thread)
-		if err != nil {
-			t.Fatalf("SaveThread failed: %v", err)
-		}
-
-		thread.Subject = "Updated Subject"
-		err = SaveThread(ctx, pool, thread)
-		if err != nil {
-			t.Fatalf("SaveThread (update) failed: %v", err)
-		}
-
-		retrieved, err := GetThreadByStableID(ctx, pool, userID, "test-thread-id-456")
-		if err != nil {
-			t.Fatalf("GetThreadByStableID failed: %v", err)
-		}
-
-		if retrieved.Subject != "Updated Subject" {
-			t.Errorf("Expected updated Subject, got %s", retrieved.Subject)
-		}
-	})
-
-	t.Run("returns error for non-existent thread", func(t *testing.T) {
-		_, err := GetThreadByStableID(ctx, pool, userID, "non-existent-thread-id")
-		if err == nil {
-			t.Error("Expected error for non-existent thread")
-		}
-		if !errors.Is(err, ErrThreadNotFound) {
-			t.Errorf("Expected ErrThreadNotFound, got %v", err)
-		}
-	})
+				retrieved, err := GetThreadByStableID(ctx, pool, userID, thread.StableThreadID)
+				if tt.expectError {
+					assert.Error(t, err)
+					return
+				}
+				assert.NoError(t, err)
+				if tt.checkResult != nil {
+					tt.checkResult(t, retrieved)
+				}
+			} else {
+				// Test error case
+				_, err := GetThreadByStableID(ctx, pool, userID, "non-existent-thread-id")
+				assert.Error(t, err)
+				assert.True(t, errors.Is(err, ErrThreadNotFound))
+			}
+		})
+	}
 }
 
 func TestGetThreadsForFolder(t *testing.T) {
@@ -168,38 +178,43 @@ func TestGetThreadsForFolder(t *testing.T) {
 		t.Fatalf("SaveMessage failed: %v", err)
 	}
 
-	t.Run("returns threads for INBOX folder", func(t *testing.T) {
-		threads, err := GetThreadsForFolder(ctx, pool, userID, "INBOX", 10, 0)
-		if err != nil {
-			t.Fatalf("GetThreadsForFolder failed: %v", err)
-		}
+	tests := []struct {
+		name        string
+		folderName  string
+		limit       int
+		offset      int
+		expectedLen int
+	}{
+		{
+			name:        "returns threads for INBOX folder",
+			folderName:  "INBOX",
+			limit:       10,
+			offset:      0,
+			expectedLen: 2,
+		},
+		{
+			name:        "returns threads for Sent folder",
+			folderName:  "Sent",
+			limit:       10,
+			offset:      0,
+			expectedLen: 1,
+		},
+		{
+			name:        "respects pagination",
+			folderName:  "INBOX",
+			limit:       1,
+			offset:      0,
+			expectedLen: 1,
+		},
+	}
 
-		if len(threads) != 2 {
-			t.Errorf("Expected 2 threads, got %d", len(threads))
-		}
-	})
-
-	t.Run("returns threads for Sent folder", func(t *testing.T) {
-		threads, err := GetThreadsForFolder(ctx, pool, userID, "Sent", 10, 0)
-		if err != nil {
-			t.Fatalf("GetThreadsForFolder failed: %v", err)
-		}
-
-		if len(threads) != 1 {
-			t.Errorf("Expected 1 thread, got %d", len(threads))
-		}
-	})
-
-	t.Run("respects pagination", func(t *testing.T) {
-		threads, err := GetThreadsForFolder(ctx, pool, userID, "INBOX", 1, 0)
-		if err != nil {
-			t.Fatalf("GetThreadsForFolder failed: %v", err)
-		}
-
-		if len(threads) != 1 {
-			t.Errorf("Expected 1 thread with limit 1, got %d", len(threads))
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			threads, err := GetThreadsForFolder(ctx, pool, userID, tt.folderName, tt.limit, tt.offset)
+			assert.NoError(t, err)
+			assert.Len(t, threads, tt.expectedLen)
+		})
+	}
 }
 
 func TestGetThreadCountForFolder(t *testing.T) {
@@ -303,95 +318,79 @@ func TestGetThreadCountForFolder(t *testing.T) {
 		t.Fatalf("SaveMessage failed: %v", err)
 	}
 
-	t.Run("falls back to calculation when no materialized count exists", func(t *testing.T) {
-		count, err := GetThreadCountForFolder(ctx, pool, userID, folderName)
-		if err != nil {
-			t.Fatalf("GetThreadCountForFolder failed: %v", err)
-		}
-		if count != 3 {
-			t.Errorf("Expected count 3, got %d", count)
-		}
-	})
+	tests := []struct {
+		name        string
+		setup       func()
+		expected    int
+		description string
+	}{
+		{
+			name:        "falls back to calculation when no materialized count exists",
+			setup:       func() {}, // No setup needed
+			expected:    3,
+			description: "should calculate count when materialized count doesn't exist",
+		},
+		{
+			name: "uses materialized count when available",
+			setup: func() {
+				_ = UpdateThreadCount(ctx, pool, userID, folderName)
+			},
+			expected:    3,
+			description: "should use materialized count when available",
+		},
+		{
+			name: "updates materialized count correctly",
+			setup: func() {
+				thread4 := &models.Thread{
+					UserID:         userID,
+					StableThreadID: "count-thread-4",
+					Subject:        "Thread 4",
+				}
+				_ = SaveThread(ctx, pool, thread4)
 
-	t.Run("uses materialized count when available", func(t *testing.T) {
-		// Set materialized count
-		err := UpdateThreadCount(ctx, pool, userID, folderName)
-		if err != nil {
-			t.Fatalf("UpdateThreadCount failed: %v", err)
-		}
+				msg4 := &models.Message{
+					ThreadID:        thread4.ID,
+					UserID:          userID,
+					IMAPUID:         4,
+					IMAPFolderName:  folderName,
+					MessageIDHeader: "msg-4",
+					Subject:         "Thread 4",
+					SentAt:          &now,
+				}
+				_ = SaveMessage(ctx, pool, msg4)
+				_ = UpdateThreadCount(ctx, pool, userID, folderName)
+			},
+			expected:    4,
+			description: "should update materialized count correctly",
+		},
+		{
+			name: "handles NULL materialized count",
+			setup: func() {
+				_, _ = pool.Exec(ctx, `
+					INSERT INTO folder_sync_timestamps (user_id, folder_name, synced_at, thread_count)
+					VALUES ($1, $2, now(), NULL)
+					ON CONFLICT (user_id, folder_name) DO UPDATE SET thread_count = NULL
+				`, userID, "TestFolder")
+			},
+			expected:    0,
+			description: "should fall back to calculation when count is NULL",
+		},
+	}
 
-		count, err := GetThreadCountForFolder(ctx, pool, userID, folderName)
-		if err != nil {
-			t.Fatalf("GetThreadCountForFolder failed: %v", err)
-		}
-		if count != 3 {
-			t.Errorf("Expected count 3, got %d", count)
-		}
-	})
-
-	t.Run("updates materialized count correctly", func(t *testing.T) {
-		// Add another thread and message
-		thread4 := &models.Thread{
-			UserID:         userID,
-			StableThreadID: "count-thread-4",
-			Subject:        "Thread 4",
-		}
-		err := SaveThread(ctx, pool, thread4)
-		if err != nil {
-			t.Fatalf("SaveThread failed: %v", err)
-		}
-
-		msg4 := &models.Message{
-			ThreadID:        thread4.ID,
-			UserID:          userID,
-			IMAPUID:         4,
-			IMAPFolderName:  folderName,
-			MessageIDHeader: "msg-4",
-			Subject:         "Thread 4",
-			SentAt:          &now,
-		}
-		err = SaveMessage(ctx, pool, msg4)
-		if err != nil {
-			t.Fatalf("SaveMessage failed: %v", err)
-		}
-
-		// Update count
-		err = UpdateThreadCount(ctx, pool, userID, folderName)
-		if err != nil {
-			t.Fatalf("UpdateThreadCount failed: %v", err)
-		}
-
-		// Should now return 4
-		count, err := GetThreadCountForFolder(ctx, pool, userID, folderName)
-		if err != nil {
-			t.Fatalf("GetThreadCountForFolder failed: %v", err)
-		}
-		if count != 4 {
-			t.Errorf("Expected count 4 after update, got %d", count)
-		}
-	})
-
-	t.Run("handles NULL materialized count", func(t *testing.T) {
-		// Set a row with NULL thread_count
-		_, err := pool.Exec(ctx, `
-			INSERT INTO folder_sync_timestamps (user_id, folder_name, synced_at, thread_count)
-			VALUES ($1, $2, now(), NULL)
-			ON CONFLICT (user_id, folder_name) DO UPDATE SET thread_count = NULL
-		`, userID, "TestFolder")
-		if err != nil {
-			t.Fatalf("Failed to set NULL count: %v", err)
-		}
-
-		// Should fall back to calculation
-		count, err := GetThreadCountForFolder(ctx, pool, userID, "TestFolder")
-		if err != nil {
-			t.Fatalf("GetThreadCountForFolder failed: %v", err)
-		}
-		// TestFolder has no messages, so count should be 0
-		if count != 0 {
-			t.Errorf("Expected count 0 for empty folder, got %d", count)
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setup()
+			var count int
+			var err error
+			if tt.name == "handles NULL materialized count" {
+				count, err = GetThreadCountForFolder(ctx, pool, userID, "TestFolder")
+			} else {
+				count, err = GetThreadCountForFolder(ctx, pool, userID, folderName)
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, count, tt.description)
+		})
+	}
 }
 
 func TestGetFolderSyncInfo(t *testing.T) {
@@ -423,98 +422,76 @@ func TestGetFolderSyncInfo(t *testing.T) {
 
 	folderName := "INBOX"
 
-	t.Run("returns nil when no sync info exists", func(t *testing.T) {
-		info, err := GetFolderSyncInfo(ctx, pool, userID, folderName)
-		if err != nil {
-			t.Fatalf("GetFolderSyncInfo failed: %v", err)
-		}
-		if info != nil {
-			t.Errorf("Expected nil when no sync info exists, got %+v", info)
-		}
-	})
+	tests := []struct {
+		name        string
+		setup       func()
+		checkResult func(*testing.T, *FolderSyncInfo)
+	}{
+		{
+			name:  "returns nil when no sync info exists",
+			setup: func() {}, // No setup needed
+			checkResult: func(t *testing.T, info *FolderSyncInfo) {
+				assert.Nil(t, info)
+			},
+		},
+		{
+			name: "returns sync info with UID when set",
+			setup: func() {
+				lastUID := int64(12345)
+				_ = SetFolderSyncInfo(ctx, pool, userID, folderName, &lastUID)
+			},
+			checkResult: func(t *testing.T, info *FolderSyncInfo) {
+				assert.NotNil(t, info)
+				assert.NotNil(t, info.LastSyncedUID)
+				assert.Equal(t, int64(12345), *info.LastSyncedUID)
+				assert.NotNil(t, info.SyncedAt)
+			},
+		},
+		{
+			name: "updates UID correctly",
+			setup: func() {
+				lastUID1 := int64(10000)
+				_ = SetFolderSyncInfo(ctx, pool, userID, folderName, &lastUID1)
+				lastUID2 := int64(20000)
+				_ = SetFolderSyncInfo(ctx, pool, userID, folderName, &lastUID2)
+			},
+			checkResult: func(t *testing.T, info *FolderSyncInfo) {
+				assert.NotNil(t, info)
+				assert.NotNil(t, info.LastSyncedUID)
+				assert.Equal(t, int64(20000), *info.LastSyncedUID)
+			},
+		},
+		{
+			name: "preserves UID when setting with nil",
+			setup: func() {
+				lastUID := int64(30000)
+				_ = SetFolderSyncInfo(ctx, pool, userID, "TestFolder", &lastUID)
+				_ = SetFolderSyncInfo(ctx, pool, userID, "TestFolder", nil)
+			},
+			checkResult: func(t *testing.T, info *FolderSyncInfo) {
+				assert.NotNil(t, info)
+				assert.NotNil(t, info.LastSyncedUID)
+				assert.Equal(t, int64(30000), *info.LastSyncedUID)
+			},
+		},
+	}
 
-	t.Run("returns sync info with UID when set", func(t *testing.T) {
-		lastUID := int64(12345)
-		err := SetFolderSyncInfo(ctx, pool, userID, folderName, &lastUID)
-		if err != nil {
-			t.Fatalf("SetFolderSyncInfo failed: %v", err)
-		}
-
-		info, err := GetFolderSyncInfo(ctx, pool, userID, folderName)
-		if err != nil {
-			t.Fatalf("GetFolderSyncInfo failed: %v", err)
-		}
-		if info == nil {
-			t.Fatal("Expected sync info, got nil")
-		}
-		if info.LastSyncedUID == nil {
-			t.Error("Expected LastSyncedUID to be set")
-		} else if *info.LastSyncedUID != lastUID {
-			t.Errorf("Expected LastSyncedUID %d, got %d", lastUID, *info.LastSyncedUID)
-		}
-		if info.SyncedAt == nil {
-			t.Error("Expected SyncedAt to be set")
-		}
-	})
-
-	t.Run("updates UID correctly", func(t *testing.T) {
-		lastUID1 := int64(10000)
-		err := SetFolderSyncInfo(ctx, pool, userID, folderName, &lastUID1)
-		if err != nil {
-			t.Fatalf("SetFolderSyncInfo failed: %v", err)
-		}
-
-		info1, err := GetFolderSyncInfo(ctx, pool, userID, folderName)
-		if err != nil {
-			t.Fatalf("GetFolderSyncInfo failed: %v", err)
-		}
-		if info1 == nil || info1.LastSyncedUID == nil || *info1.LastSyncedUID != lastUID1 {
-			t.Fatalf("Failed to set initial UID")
-		}
-
-		// Update to new UID
-		lastUID2 := int64(20000)
-		err = SetFolderSyncInfo(ctx, pool, userID, folderName, &lastUID2)
-		if err != nil {
-			t.Fatalf("SetFolderSyncInfo (update) failed: %v", err)
-		}
-
-		info2, err := GetFolderSyncInfo(ctx, pool, userID, folderName)
-		if err != nil {
-			t.Fatalf("GetFolderSyncInfo failed: %v", err)
-		}
-		if info2 == nil || info2.LastSyncedUID == nil {
-			t.Fatal("Expected LastSyncedUID to be set after update")
-		}
-		if *info2.LastSyncedUID != lastUID2 {
-			t.Errorf("Expected LastSyncedUID %d after update, got %d", lastUID2, *info2.LastSyncedUID)
-		}
-	})
-
-	t.Run("preserves UID when setting with nil", func(t *testing.T) {
-		lastUID := int64(30000)
-		err := SetFolderSyncInfo(ctx, pool, userID, "TestFolder", &lastUID)
-		if err != nil {
-			t.Fatalf("SetFolderSyncInfo failed: %v", err)
-		}
-
-		// Set again with nil (should preserve existing UID)
-		err = SetFolderSyncInfo(ctx, pool, userID, "TestFolder", nil)
-		if err != nil {
-			t.Fatalf("SetFolderSyncInfo (nil) failed: %v", err)
-		}
-
-		info, err := GetFolderSyncInfo(ctx, pool, userID, "TestFolder")
-		if err != nil {
-			t.Fatalf("GetFolderSyncInfo failed: %v", err)
-		}
-		if info == nil || info.LastSyncedUID == nil {
-			t.Fatal("Expected LastSyncedUID to be preserved")
-		}
-		if *info.LastSyncedUID != lastUID {
-			t.Errorf("Expected LastSyncedUID %d to be preserved, got %d", lastUID, *info.LastSyncedUID)
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setup()
+			var info *FolderSyncInfo
+			var err error
+			if tt.name == "preserves UID when setting with nil" {
+				info, err = GetFolderSyncInfo(ctx, pool, userID, "TestFolder")
+			} else {
+				info, err = GetFolderSyncInfo(ctx, pool, userID, folderName)
+			}
+			assert.NoError(t, err)
+			if tt.checkResult != nil {
+				tt.checkResult(t, info)
+			}
+		})
+	}
 }
 
 func TestUpdateThreadCount(t *testing.T) {
@@ -546,104 +523,82 @@ func TestUpdateThreadCount(t *testing.T) {
 
 	folderName := "INBOX"
 
-	t.Run("updates count for existing folder", func(t *testing.T) {
-		// Create sync info first
-		err := SetFolderSyncInfo(ctx, pool, userID, folderName, nil)
-		if err != nil {
-			t.Fatalf("SetFolderSyncInfo failed: %v", err)
-		}
+	tests := []struct {
+		name        string
+		setup       func()
+		folderName  string
+		expected    int
+		description string
+	}{
+		{
+			name: "updates count for existing folder",
+			setup: func() {
+				_ = SetFolderSyncInfo(ctx, pool, userID, folderName, nil)
 
-		// Create threads and messages
-		thread1 := &models.Thread{
-			UserID:         userID,
-			StableThreadID: "update-thread-1",
-			Subject:        "Thread 1",
-		}
-		thread2 := &models.Thread{
-			UserID:         userID,
-			StableThreadID: "update-thread-2",
-			Subject:        "Thread 2",
-		}
+				thread1 := &models.Thread{
+					UserID:         userID,
+					StableThreadID: "update-thread-1",
+					Subject:        "Thread 1",
+				}
+				thread2 := &models.Thread{
+					UserID:         userID,
+					StableThreadID: "update-thread-2",
+					Subject:        "Thread 2",
+				}
 
-		err = SaveThread(ctx, pool, thread1)
-		if err != nil {
-			t.Fatalf("SaveThread failed: %v", err)
-		}
-		err = SaveThread(ctx, pool, thread2)
-		if err != nil {
-			t.Fatalf("SaveThread failed: %v", err)
-		}
+				_ = SaveThread(ctx, pool, thread1)
+				_ = SaveThread(ctx, pool, thread2)
 
-		now := time.Now()
-		msg1 := &models.Message{
-			ThreadID:        thread1.ID,
-			UserID:          userID,
-			IMAPUID:         1,
-			IMAPFolderName:  folderName,
-			MessageIDHeader: "msg-1",
-			Subject:         "Thread 1",
-			SentAt:          &now,
-		}
-		msg2 := &models.Message{
-			ThreadID:        thread2.ID,
-			UserID:          userID,
-			IMAPUID:         2,
-			IMAPFolderName:  folderName,
-			MessageIDHeader: "msg-2",
-			Subject:         "Thread 2",
-			SentAt:          &now,
-		}
+				now := time.Now()
+				msg1 := &models.Message{
+					ThreadID:        thread1.ID,
+					UserID:          userID,
+					IMAPUID:         1,
+					IMAPFolderName:  folderName,
+					MessageIDHeader: "msg-1",
+					Subject:         "Thread 1",
+					SentAt:          &now,
+				}
+				msg2 := &models.Message{
+					ThreadID:        thread2.ID,
+					UserID:          userID,
+					IMAPUID:         2,
+					IMAPFolderName:  folderName,
+					MessageIDHeader: "msg-2",
+					Subject:         "Thread 2",
+					SentAt:          &now,
+				}
 
-		err = SaveMessage(ctx, pool, msg1)
-		if err != nil {
-			t.Fatalf("SaveMessage failed: %v", err)
-		}
-		err = SaveMessage(ctx, pool, msg2)
-		if err != nil {
-			t.Fatalf("SaveMessage failed: %v", err)
-		}
+				_ = SaveMessage(ctx, pool, msg1)
+				_ = SaveMessage(ctx, pool, msg2)
+			},
+			folderName:  folderName,
+			expected:    2,
+			description: "should update thread count correctly",
+		},
+		{
+			name: "handles folder with no messages",
+			setup: func() {
+				_ = SetFolderSyncInfo(ctx, pool, userID, "EmptyFolder", nil)
+			},
+			folderName:  "EmptyFolder",
+			expected:    0,
+			description: "should return 0 for empty folder",
+		},
+	}
 
-		// Update count
-		err = UpdateThreadCount(ctx, pool, userID, folderName)
-		if err != nil {
-			t.Fatalf("UpdateThreadCount failed: %v", err)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setup()
+			err := UpdateThreadCount(ctx, pool, userID, tt.folderName)
+			assert.NoError(t, err)
 
-		// Verify count was updated
-		info, err := GetFolderSyncInfo(ctx, pool, userID, folderName)
-		if err != nil {
-			t.Fatalf("GetFolderSyncInfo failed: %v", err)
-		}
-		if info == nil {
-			t.Fatal("Expected sync info, got nil")
-		}
-		if info.ThreadCount != 2 {
-			t.Errorf("Expected thread_count 2, got %d", info.ThreadCount)
-		}
-	})
-
-	t.Run("handles folder with no messages", func(t *testing.T) {
-		err := SetFolderSyncInfo(ctx, pool, userID, "EmptyFolder", nil)
-		if err != nil {
-			t.Fatalf("SetFolderSyncInfo failed: %v", err)
-		}
-
-		err = UpdateThreadCount(ctx, pool, userID, "EmptyFolder")
-		if err != nil {
-			t.Fatalf("UpdateThreadCount failed: %v", err)
-		}
-
-		info, err := GetFolderSyncInfo(ctx, pool, userID, "EmptyFolder")
-		if err != nil {
-			t.Fatalf("GetFolderSyncInfo failed: %v", err)
-		}
-		if info == nil {
-			t.Fatal("Expected sync info, got nil")
-		}
-		if info.ThreadCount != 0 {
-			t.Errorf("Expected thread_count 0 for empty folder, got %d", info.ThreadCount)
-		}
-	})
+			info, err := GetFolderSyncInfo(ctx, pool, userID, tt.folderName)
+			assert.NoError(t, err)
+			assert.NotNil(t, info)
+			assert.Equal(t, tt.expected, info.ThreadCount, tt.description)
+		})
+	}
 }
 
 // TestGetThreadsForFolder_DeepPagination tests pagination performance with large datasets.
@@ -745,68 +700,48 @@ func TestGetThreadsForFolder_DeepPagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetThreadCountForFolder failed: %v", err)
 	}
-	if count != totalThreads {
-		t.Errorf("Expected materialized count %d, got %d", totalThreads, count)
+	assert.Equal(t, totalThreads, count)
+
+	tests := []struct {
+		name        string
+		page        int
+		expectedLen int
+		maxDuration time.Duration
+	}{
+		{
+			name:        "page 10 (OFFSET 900) completes in reasonable time",
+			page:        10,
+			expectedLen: threadsPerPage,
+			maxDuration: 3 * time.Second,
+		},
+		{
+			name:        "page 15 (OFFSET 1400) completes in reasonable time",
+			page:        15,
+			expectedLen: threadsPerPage,
+			maxDuration: 3 * time.Second,
+		},
 	}
 
-	t.Run("page 10 (OFFSET 900) completes in reasonable time", func(t *testing.T) {
-		page := 10
-		offset := (page - 1) * threadsPerPage
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			offset := (tt.page - 1) * threadsPerPage
 
-		start := time.Now()
-		threads, err := GetThreadsForFolder(ctx, pool, userID, folderName, threadsPerPage, offset)
-		duration := time.Since(start)
+			start := time.Now()
+			threads, err := GetThreadsForFolder(ctx, pool, userID, folderName, threadsPerPage, offset)
+			duration := time.Since(start)
 
-		if err != nil {
-			t.Fatalf("GetThreadsForFolder failed: %v", err)
-		}
+			assert.NoError(t, err)
+			assert.LessOrEqual(t, duration, tt.maxDuration, "query should complete in reasonable time")
+			assert.Len(t, threads, tt.expectedLen)
 
-		// Performance check: should complete in under 3 seconds
-		if duration > 3*time.Second {
-			t.Errorf("Page %d query took %v, expected < 3s", page, duration)
-		}
-
-		// Correctness check: should return exactly threadsPerPage threads
-		if len(threads) != threadsPerPage {
-			t.Errorf("Expected %d threads on page %d, got %d", threadsPerPage, page, len(threads))
-		}
-
-		// Verify threads are ordered correctly (newest first)
-		for i := 1; i < len(threads); i++ {
-			// We can't easily check sent_at here, but we can verify we got different threads
-			if threads[i].ID == threads[i-1].ID {
-				t.Errorf("Duplicate thread found on page %d", page)
+			// Verify threads are ordered correctly (newest first)
+			for i := 1; i < len(threads); i++ {
+				assert.NotEqual(t, threads[i].ID, threads[i-1].ID, "should not have duplicate threads")
 			}
-		}
 
-		t.Logf("Page %d (OFFSET %d) completed in %v, returned %d threads", page, offset, duration, len(threads))
-	})
-
-	t.Run("page 15 (OFFSET 1400) completes in reasonable time", func(t *testing.T) {
-		page := 15
-		offset := (page - 1) * threadsPerPage
-
-		start := time.Now()
-		threads, err := GetThreadsForFolder(ctx, pool, userID, folderName, threadsPerPage, offset)
-		duration := time.Since(start)
-
-		if err != nil {
-			t.Fatalf("GetThreadsForFolder failed: %v", err)
-		}
-
-		// Performance check: should complete in under 3 seconds
-		if duration > 3*time.Second {
-			t.Errorf("Page %d query took %v, expected < 3s", page, duration)
-		}
-
-		// Correctness check: should return threadsPerPage threads
-		expectedCount := threadsPerPage
-		if len(threads) != expectedCount {
-			t.Errorf("Expected %d threads on page %d (OFFSET %d, total %d), got %d", expectedCount, page, offset, totalThreads, len(threads))
-		}
-
-		t.Logf("Page %d (OFFSET %d) completed in %v, returned %d threads (expected %d)", page, offset, duration, len(threads), expectedCount)
-	})
+			t.Logf("Page %d (OFFSET %d) completed in %v, returned %d threads", tt.page, offset, duration, len(threads))
+		})
+	}
 
 	t.Run("index is being used for pagination query", func(t *testing.T) {
 		// Use EXPLAIN to verify the index is being used
@@ -849,11 +784,7 @@ func TestGetThreadsForFolder_DeepPagination(t *testing.T) {
 
 	t.Run("materialized count is accurate with large dataset", func(t *testing.T) {
 		count, err := GetThreadCountForFolder(ctx, pool, userID, folderName)
-		if err != nil {
-			t.Fatalf("GetThreadCountForFolder failed: %v", err)
-		}
-		if count != totalThreads {
-			t.Errorf("Expected materialized count %d, got %d", totalThreads, count)
-		}
+		assert.NoError(t, err)
+		assert.Equal(t, totalThreads, count)
 	})
 }

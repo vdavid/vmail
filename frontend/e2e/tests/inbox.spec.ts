@@ -26,7 +26,7 @@ test.describe('Existing User Read-Only Flow', () => {
 
         // Verify we see either email threads or "No threads found"
         const hasThreads = result.count > 0
-        const hasEmptyState = await page.locator('text=No threads found').count() > 0
+        const hasEmptyState = (await page.locator('text=No threads found').count()) > 0
 
         expect(hasThreads || hasEmptyState).toBeTruthy()
     })
@@ -63,7 +63,10 @@ test.describe('Existing User Read-Only Flow', () => {
             await expect(page).toHaveURL(/.*\/thread\/.*/)
 
             // Wait for thread content to load
-            await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+            await page.waitForSelector('text=Loading...', {
+                state: 'hidden',
+                timeout: 10000,
+            })
 
             // Verify thread content is visible (Message component or article)
             await expect(
@@ -79,7 +82,10 @@ test.describe('Existing User Read-Only Flow', () => {
             await clickFirstEmail(page)
 
             // Wait for thread content to load
-            await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+            await page.waitForSelector('text=Loading...', {
+                state: 'hidden',
+                timeout: 10000,
+            })
 
             // Verify email body is visible
             // The exact selector depends on your Message component
@@ -141,6 +147,7 @@ test.describe('Existing User Read-Only Flow', () => {
             consoleMessages.push(`[${msg.type()}] ${text}`)
             // Log errors and warnings immediately
             if (msg.type() === 'error' || msg.type() === 'warning') {
+                // eslint-disable-next-line no-console
                 console.log(`Browser ${msg.type()}:`, text)
             }
         })
@@ -148,8 +155,10 @@ test.describe('Existing User Read-Only Flow', () => {
         // Capture network requests to see WebSocket connection status
         const networkErrors: string[] = []
         page.on('requestfailed', (request) => {
-            const error = `${request.method()} ${request.url()} - ${request.failure()?.errorText}`
+            const errorText = request.failure()?.errorText ?? 'unknown error'
+            const error = `${request.method()} ${request.url()} - ${errorText}`
             networkErrors.push(error)
+            // eslint-disable-next-line no-console
             console.log('Network error:', error)
         })
 
@@ -163,22 +172,28 @@ test.describe('Existing User Read-Only Flow', () => {
         // The connection status banner only shows when disconnected, so wait for it to not be visible.
         // Give it a few seconds for the WebSocket to connect.
         await page.waitForTimeout(3000)
-        
+
         // Verify WebSocket is connected by checking that the connection banner is not visible
         // (it only shows when status is 'disconnected')
         const connectionBanner = page.locator('text=Connection lost')
         const bannerVisible = await connectionBanner.isVisible().catch(() => false)
-        
+
         if (bannerVisible) {
-            console.log('WebSocket connection banner is visible - connection may not be established')
-            console.log('Console messages:', consoleMessages.filter(m => m.includes('WebSocket') || m.includes('error')))
+            // eslint-disable-next-line no-console
+            console.log(
+                'WebSocket connection banner is visible - connection may not be established',
+            )
+            // eslint-disable-next-line no-console
+            console.log(
+                'Console messages:',
+                consoleMessages.filter((m) => m.includes('WebSocket') || m.includes('error')),
+            )
+            // eslint-disable-next-line no-console
             console.log('Network errors:', networkErrors)
         }
 
         // Capture current thread subjects (if any).
-        const initialSubjects = await page
-            .locator('[data-testid="email-subject"]')
-            .allInnerTexts()
+        const initialSubjects = await page.locator('[data-testid="email-subject"]').allInnerTexts()
 
         // Trigger backend helper that appends a new message to INBOX on the test IMAP server.
         // The backend is expected to expose a test-only endpoint for this.
@@ -200,17 +215,20 @@ test.describe('Existing User Read-Only Flow', () => {
         })
 
         if (response.status !== 204) {
-            console.log(`Test endpoint returned status ${response.status}: ${response.statusText}`)
+            // eslint-disable-next-line no-console
+            console.log(
+                `Test endpoint returned status ${String(response.status)}: ${response.statusText}`,
+            )
         }
 
         // Wait for the new subject to appear without reloading the page.
         await expect(
-            page.locator('[data-testid="email-subject"]', { hasText: 'E2E Real-Time Test' }),
+            page.locator('[data-testid="email-subject"]', {
+                hasText: 'E2E Real-Time Test',
+            }),
         ).toBeVisible({ timeout: 15000 })
 
-        const updatedSubjects = await page
-            .locator('[data-testid="email-subject"]')
-            .allInnerTexts()
+        const updatedSubjects = await page.locator('[data-testid="email-subject"]').allInnerTexts()
 
         expect(updatedSubjects).not.toEqual(initialSubjects)
     })
@@ -247,7 +265,10 @@ test.describe('Existing User Read-Only Flow', () => {
             expect(finalURL).toContain('/thread/')
 
             // Wait for thread content to load
-            await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+            await page.waitForSelector('text=Loading...', {
+                state: 'hidden',
+                timeout: 10000,
+            })
 
             // Verify thread page shows content (not blank)
             // Check for thread subject in header
@@ -256,13 +277,15 @@ test.describe('Existing User Read-Only Flow', () => {
 
             // Verify email body/content is visible
             // Message component should render the email body
-            const messageContent = page.locator(
-                'article, [data-testid="message"], .message, main div.border-b'
-            ).first()
+            const messageContent = page
+                .locator('article, [data-testid="message"], .message, main div.border-b')
+                .first()
             await expect(messageContent).toBeVisible({ timeout: 5000 })
 
             // Verify sender is displayed in the message
-            const senderInMessage = page.locator('text=/sender@example\\.com|colleague@example\\.com|reports@example\\.com/i')
+            const senderInMessage = page.locator(
+                'text=/sender@example\\.com|colleague@example\\.com|reports@example\\.com/i',
+            )
             await expect(senderInMessage.first()).toBeVisible({ timeout: 5000 })
 
             // Verify message body text is visible (not empty)
@@ -289,36 +312,44 @@ test.describe('Existing User Read-Only Flow', () => {
             // noinspection ES6RedundantAwait -- getAttribute returns Promise<string | null>, so await is required
             const threadUrl = await emailLinks.first().getAttribute('href')
             expect(threadUrl).toBeTruthy()
-            
+            if (!threadUrl) {
+                throw new Error('Thread URL is null')
+            }
+
             // Navigate directly to the thread URL (simulating a bookmark or direct navigation)
             // This should load the React app, not JSON
-            await page.goto(threadUrl!, { waitUntil: 'networkidle' })
-            
+            await page.goto(threadUrl, { waitUntil: 'networkidle' })
+
             // Verify we're on the thread page
-            await expect(page).toHaveURL(new RegExp(`.*${threadUrl}.*`), { timeout: 5000 })
-            
+            const escapedUrl = threadUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            await expect(page).toHaveURL(new RegExp(`.*${escapedUrl}.*`), {
+                timeout: 5000,
+            })
+
             // CRITICAL: Verify the React app loaded (not JSON)
             // Check for React app elements, not JSON content
             const pageContent = await page.content()
-            
+
             // Should contain React app structure (div with id="root" or React components)
             expect(pageContent).toContain('root')
-            
+
             // Should NOT be pure JSON (no JSON object at root level)
             // If it's JSON, the page would start with { or [ and have no HTML structure
-            expect(pageContent).not.toMatch(/^\s*[{\[]/)
-            
+            expect(pageContent).not.toMatch(/^\s*[{[]/)
+
             // Should have HTML structure
             expect(pageContent).toContain('<html')
             expect(pageContent).toContain('<body')
-            
+
             // Wait for React to hydrate and render
-            await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
-            
+            await page.waitForSelector('text=Loading...', {
+                state: 'hidden',
+                timeout: 10000,
+            })
+
             // Verify thread content is visible (React rendered it)
             const threadHeader = page.locator('h1, [role="heading"]').first()
             await expect(threadHeader).toBeVisible({ timeout: 5000 })
         }
     })
 })
-

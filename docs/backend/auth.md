@@ -23,11 +23,13 @@ The feature set is not in a single package but rather a scattered bunch of files
 
 ## Flow
 
-1. Frontend sends API requests with a Bearer token in the Authorization header.
-2. `RequireAuth` middleware validates the token and extracts the user's email.
-3. The email is stored in the request context for use by handlers.
-4. Handlers use `GetUserEmailFromContext` to retrieve the authenticated user's email.
-5. The auth handler checks if the user has completed setup by querying for user settings.
+1. The V-Mail front end redirects the user to Authelia for login.
+2. After successful login, Authelia provides a session token, a JWT, which the front end stores in the browser.
+3. After this, all API requests will include this as a Bearer token in the Authorization header.
+4. `RequireAuth` middleware validates the token and extracts the user's email.
+5. The email is stored in the request context for use by handlers.
+6. Handlers use `GetUserEmailFromContext` to retrieve the authenticated user's email.
+7. The auth handler checks if the user has completed setup by querying for user settings.
 
 ## Current limitations
 

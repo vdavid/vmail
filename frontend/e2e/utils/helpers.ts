@@ -1,4 +1,4 @@
-import { Locator, Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 
 import { setupAuth } from '../fixtures/auth'
 import { defaultTestUser } from '../fixtures/test-data'
@@ -9,7 +9,7 @@ import { defaultTestUser } from '../fixtures/test-data'
 export async function waitForAppReady(page: Page) {
     // Wait for the main app to load
     await page.waitForSelector('body', { state: 'visible' })
-    
+
     // Wait a bit for React to hydrate
     await page.waitForTimeout(500)
 }
@@ -32,21 +32,23 @@ export async function fillSettingsForm(
     imapPassword: string,
     smtpServer: string,
     smtpUsername: string,
-    smtpPassword: string
+    smtpPassword: string,
 ) {
     // Wait for form to be ready (settings page loads asynchronously)
-    await page.waitForSelector('input[name="imap_server_hostname"]', { timeout: 10000 })
-    
+    await page.waitForSelector('input[name="imap_server_hostname"]', {
+        timeout: 10000,
+    })
+
     // Fill IMAP settings
     await page.fill('input[name="imap_server_hostname"]', imapServer)
     await page.fill('input[name="imap_username"]', imapUsername)
     await page.fill('input[name="imap_password"]', imapPassword)
-    
+
     // Fill SMTP settings
     await page.fill('input[name="smtp_server_hostname"]', smtpServer)
     await page.fill('input[name="smtp_username"]', smtpUsername)
     await page.fill('input[name="smtp_password"]', smtpPassword)
-    
+
     // Use default values for other settings (they should have defaults)
 }
 
@@ -55,14 +57,16 @@ export async function fillSettingsForm(
  */
 export async function submitSettingsForm(page: Page) {
     // Wait for submit button to be enabled
-    await page.waitForSelector('button[type="submit"]:not([disabled])', { timeout: 5000 })
+    await page.waitForSelector('button[type="submit"]:not([disabled])', {
+        timeout: 5000,
+    })
     await page.click('button[type="submit"]')
-    
+
     // Wait for navigation away from the settings page (indicates success)
     // The form submission triggers a redirect to the inbox
     // Use a more flexible pattern that matches root path or inbox
     await page.waitForURL(/.*\/$/, { timeout: 10000 })
-    
+
     // Wait for the page to finish loading
     await waitForAppReady(page)
 }
@@ -78,9 +82,15 @@ export async function waitForEmailList(page: Page) {
         page.waitForSelector('text=No threads found', { timeout: 10000 }).catch(() => null),
         page.waitForSelector('text=No results found', { timeout: 10000 }).catch(() => null),
         page.waitForSelector('text=Enter a search query', { timeout: 10000 }).catch(() => null),
-        page.waitForSelector('text=Loading...', { timeout: 1000 }).then(() => 
-            page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
-        ).catch(() => null),
+        page
+            .waitForSelector('text=Loading...', { timeout: 1000 })
+            .then(() =>
+                page.waitForSelector('text=Loading...', {
+                    state: 'hidden',
+                    timeout: 10000,
+                }),
+            )
+            .catch(() => null),
     ])
 }
 
@@ -100,7 +110,9 @@ export async function clickFirstEmail(page: Page) {
  * Waits for and returns the search input from the header.
  */
 export async function getSearchInput(page: Page) {
-    await page.waitForSelector('input[placeholder="Search mail..."]', { timeout: 10000 })
+    await page.waitForSelector('input[placeholder="Search mail..."]', {
+        timeout: 10000,
+    })
     return page.locator('input[placeholder="Search mail..."]')
 }
 
@@ -125,7 +137,10 @@ export async function setupInboxTest(
     }
 
     // Wait for settings to load first (required for threads query)
-    await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+    await page.waitForSelector('text=Loading...', {
+        state: 'hidden',
+        timeout: 10000,
+    })
 
     // Wait for email list to load
     await waitForEmailList(page)
@@ -148,7 +163,10 @@ export async function setupInboxForNavigation(page: Page): Promise<{
     await navigateAndWait(page, '/')
 
     // Wait for settings to load first
-    await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+    await page.waitForSelector('text=Loading...', {
+        state: 'hidden',
+        timeout: 10000,
+    })
 
     await waitForEmailList(page)
 
@@ -164,7 +182,9 @@ export async function setupInboxForNavigation(page: Page): Promise<{
  */
 export async function testSettingsFormValidation(page: Page): Promise<boolean> {
     // Wait for form to be ready
-    await page.waitForSelector('input[name="imap_server_hostname"]', { timeout: 10000 })
+    await page.waitForSelector('input[name="imap_server_hostname"]', {
+        timeout: 10000,
+    })
 
     // Clear required fields
     await page.fill('input[name="imap_server_hostname"]', '')
@@ -181,9 +201,7 @@ export async function testSettingsFormValidation(page: Page): Promise<boolean> {
 
     // Check if the input is invalid (HTML5 validation)
     const imapServerInput = page.locator('input[name="imap_server_hostname"]')
-    return await imapServerInput.evaluate(
-        (el: HTMLInputElement) => !el.validity.valid,
-    )
+    return await imapServerInput.evaluate((el: HTMLInputElement) => !el.validity.valid)
 }
 
 /**
@@ -204,7 +222,9 @@ export async function setupInboxWithRedirectCheck(page: Page): Promise<boolean> 
     }
 
     // Wait for settings to load first
-    await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+    await page.waitForSelector('text=Loading...', {
+        state: 'hidden',
+        timeout: 10000,
+    })
     return true
 }
-

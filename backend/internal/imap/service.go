@@ -22,19 +22,33 @@ import (
 // handlers and services, ensuring per-user connection limits are enforced
 // consistently.
 type Service struct {
-	dbPool    *pgxpool.Pool
-	imapPool  IMAPPool
-	encryptor *crypto.Encryptor
-	cacheTTL  time.Duration
+	dbPool             *pgxpool.Pool
+	imapPool           IMAPPool
+	encryptor          *crypto.Encryptor
+	cacheTTL           time.Duration
+	threadCountUpdater db.ThreadCountUpdater
 }
 
 // NewService creates a new IMAP service.
 func NewService(dbPool *pgxpool.Pool, imapPool IMAPPool, encryptor *crypto.Encryptor) *Service {
 	return &Service{
-		dbPool:    dbPool,
-		imapPool:  imapPool,
-		encryptor: encryptor,
-		cacheTTL:  5 * time.Minute, // Default cache TTL
+		dbPool:             dbPool,
+		imapPool:           imapPool,
+		encryptor:          encryptor,
+		cacheTTL:           5 * time.Minute, // Default cache TTL
+		threadCountUpdater: db.NewThreadCountUpdater(dbPool),
+	}
+}
+
+// NewServiceWithThreadCountUpdater creates a new IMAP service with a custom thread count updater.
+// This is primarily for testing purposes.
+func NewServiceWithThreadCountUpdater(dbPool *pgxpool.Pool, imapPool IMAPPool, encryptor *crypto.Encryptor, updater db.ThreadCountUpdater) *Service {
+	return &Service{
+		dbPool:             dbPool,
+		imapPool:           imapPool,
+		encryptor:          encryptor,
+		cacheTTL:           5 * time.Minute,
+		threadCountUpdater: updater,
 	}
 }
 
@@ -541,7 +555,7 @@ func (s *Service) updateThreadCountInBackground(userID, folderName string) {
 	bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := db.UpdateThreadCount(bgCtx, s.dbPool, userID, folderName); err != nil {
+	if err := s.threadCountUpdater.UpdateThreadCount(bgCtx, userID, folderName); err != nil {
 		log.Printf("Warning: Failed to update thread count in background for folder %s: %v", folderName, err)
 	} else {
 		log.Printf("Updated thread count for folder %s", folderName)

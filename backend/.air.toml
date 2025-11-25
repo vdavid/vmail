@@ -1,0 +1,49 @@
+root = "."                     # Working dir. "." or absolute path. The directories below must be under root.
+tmp_dir = "tmp"                # Temporary directory for build artifacts
+
+[build]
+pre_cmd = []                   # Array of commands to run before each build
+cmd = "go build -o ./tmp/main ./cmd/server" # Just plain old shell command. You could use `make` as well.
+post_cmd = []                  # Array of commands to run after ^C
+bin = "tmp/main"               # Binary file yields from 'cmd', will be deprecated soon, recommend using entrypoint.
+entrypoint = ["./tmp/main"]    # Entrypoint binary relative to root. First item is the executable, more items are default arguments.
+full_bin = ""                  # Customize binary, can setup environment variables when run your app.
+args_bin = []                  # Add additional arguments when running binary (bin/full_bin).
+include_ext = ["go", "tpl", "tmpl", "html"] # Watch these filename extensions.
+exclude_dir = []               # Ignore these filename extensions or directories.
+include_dir = []               # Watch these directories if you specified.
+include_file = []              # Watch these files.
+exclude_file = []              # Exclude files.
+exclude_regex = ["_test\\.go"] # Exclude specific regular expressions.
+exclude_unchanged = false      # Exclude unchanged files.
+follow_symlink = false         # Follow symlink for directories
+log = ""                       # This log file is placed in your tmp_dir.
+poll = false                   # Poll files for changes instead of using fsnotify.
+poll_interval = 500            # Poll interval in ms (defaults to the minimum interval of 500ms).
+delay = 1000                   # Debounce, milliseconds. It's not necessary to trigger a build each time a file changes.
+stop_on_error = false          # Stop running old binary when build errors occur.
+send_interrupt = false         # Send Interrupt signal before killing process (windows does not support this feature)
+kill_delay = 500000000         # Nanoseconds. Delay after sending Interrupt signal
+rerun = false                  # Rerun binary or not
+rerun_delay = 500              # Delay after each execution
+
+[color]
+# Customize each part's color. If no color is found, use the raw app log.
+main = "magenta"               # Color for the main process output
+watcher = "cyan"               # Color for file watcher messages
+build = "yellow"               # Color for build messages
+runner = "green"               # Color for runner messages
+app = ""                       # Color for app name (empty = default)
+
+[log]
+time = false                   # Add timestamps to log output
+main_only = false              # Only show main log (silences watcher, build, runner)
+silent = false                 # silence all logs produced by air
+
+[misc]
+clean_on_exit = false          # Delete tmp directory on exit
+
+[screen]
+clear_on_rebuild = false       # Clear screen on rebuild (set to true for cleaner output)
+keep_scroll = true             # Keep scroll position when screen is cleared
+

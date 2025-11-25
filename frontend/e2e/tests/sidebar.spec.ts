@@ -25,9 +25,12 @@ test.describe('Sidebar and Folder Navigation', () => {
         if (currentURL.includes('/settings')) {
             return // Skip if redirected to settings
         }
-        
+
         // Wait for sidebar to load (folders API call)
-        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+        await page.waitForSelector('text=Loading...', {
+            state: 'hidden',
+            timeout: 10000,
+        })
 
         // Verify sidebar is visible
         // Sidebar structure: <div className='flex h-full w-64...'>
@@ -36,7 +39,9 @@ test.describe('Sidebar and Folder Navigation', () => {
 
         // Verify common folders are present (at least Inbox should be there)
         // Inbox link should be href="/" (inbox is special and doesn't use folder parameter)
-        const inboxLink = page.locator('a[href="/"], a:has-text("Inbox"), a:has-text("INBOX")').first()
+        const inboxLink = page
+            .locator('a[href="/"], a:has-text("Inbox"), a:has-text("INBOX")')
+            .first()
         await expect(inboxLink).toBeVisible({ timeout: 5000 })
     })
 
@@ -46,10 +51,12 @@ test.describe('Sidebar and Folder Navigation', () => {
         if (currentURL.includes('/settings')) {
             return // Skip if redirected to settings
         }
-        
+
         // Wait for sidebar folders to be visible
         // Inbox link should be href="/" (inbox is special and doesn't use folder parameter)
-        const inboxLink = page.locator('a[href="/"], a:has-text("Inbox"), a:has-text("INBOX")').first()
+        const inboxLink = page
+            .locator('a[href="/"], a:has-text("Inbox"), a:has-text("INBOX")')
+            .first()
         await expect(inboxLink).toBeVisible({ timeout: 5000 })
 
         // Click the Inbox link
@@ -64,8 +71,11 @@ test.describe('Sidebar and Folder Navigation', () => {
 
     test('navigating to folder via URL parameter works', async ({ page }) => {
         // Wait for initial page load and settings
-        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
-        
+        await page.waitForSelector('text=Loading...', {
+            state: 'hidden',
+            timeout: 10000,
+        })
+
         // Check if we were redirected to settings (user doesn't have settings)
         const currentURL = page.url()
         if (currentURL.includes('/settings')) {
@@ -77,14 +87,17 @@ test.describe('Sidebar and Folder Navigation', () => {
         await navigateAndWait(page, '/?folder=INBOX')
 
         // Wait for settings to load
-        await page.waitForSelector('text=Loading...', { state: 'hidden', timeout: 10000 })
+        await page.waitForSelector('text=Loading...', {
+            state: 'hidden',
+            timeout: 10000,
+        })
 
         // Verify URL is correct (might be redirected if no settings)
         const finalURL = page.url()
         if (finalURL.includes('/settings')) {
             return // User doesn't have settings
         }
-        
+
         await expect(page).toHaveURL(/.*folder=(INBOX|Inbox)/i)
 
         // Verify email list loads
@@ -96,7 +109,9 @@ test.describe('Sidebar and Folder Navigation', () => {
         const currentURL = page.url()
         if (currentURL.includes('/settings')) {
             // Already on settings page, just verify
-            await expect(page.locator('main h1, [role="main"] h1').first()).toContainText('Settings')
+            await expect(page.locator('main h1, [role="main"] h1').first()).toContainText(
+                'Settings',
+            )
             return
         }
 
@@ -114,4 +129,3 @@ test.describe('Sidebar and Folder Navigation', () => {
         await expect(page.locator('main h1, [role="main"] h1').first()).toContainText('Settings')
     })
 })
-

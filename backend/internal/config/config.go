@@ -52,8 +52,17 @@ func NewConfig() (*Config, error) {
 	}
 
 	if env == "development" {
-		if err := godotenv.Load(); err != nil {
-			log.Printf("Warning: .env file not found, using environment variables")
+		// First try the current dir, then try going up to find the project root
+		envPath := ".env"
+		if _, err := os.Stat(envPath); os.IsNotExist(err) {
+			// Try parent dir (if ran from `/backend`)
+			envPath = "../.env"
+			if _, err := os.Stat(envPath); os.IsNotExist(err) {
+				envPath = "../../.env" // If running from `/backend/tmp`, when using Air.
+			}
+		}
+		if err := godotenv.Load(envPath); err != nil {
+			log.Printf("Warning: .env file not found at %s, using environment variables", envPath)
 		}
 	}
 
