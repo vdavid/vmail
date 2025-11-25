@@ -10,6 +10,16 @@
 * **Containerization:** [`Docker`](https://www.docker.com/) and [`Docker Compose`](https://docs.docker.com/compose/)
     * Used for local development and deployment.
     * Multi-stage Dockerfile builds both frontend and backend.
+* **Development Process Management (dev-only):** [`Overmind`](https://github.com/DarthSim/overmind)
+    * Process manager for running multiple development services concurrently.
+    * Uses `tmux` under the hood to provide prefixed logging output.
+    * Configured via `Procfile.dev` to run backend (with Air) and frontend (Vite) together.
+    * **Note:** This is a development-only tool and is not used in production.
+* **Go Live Reload (dev-only):** [`air`](https://github.com/air-verse/air)
+    * Live reload tool for Go applications during development.
+    * Automatically rebuilds and restarts the server when Go files change.
+    * Configured via `.air.toml` in the project root.
+    * **Note:** This is a development-only tool and is not used in production.
 * **CI/CD:** [`GitHub Actions`](https://github.com/features/actions)
     * Automated testing, linting, and formatting checks on pull requests and pushes.
 * **Code Quality (Go):**

@@ -6,9 +6,6 @@ This doc is here to help you get started.
 
 (This doc is a WIP. If you have questions, please open an issue.)
 
-## Links
-
-
 ## Development getting started
 
 This setup lets you run the Go backend and the React frontend locally for debugging.
@@ -22,7 +19,7 @@ This project uses [mise](https://mise.jdx.dev) for tool version management. It a
    ```bash
    brew install mise
    ```
-   
+
    See more alternatives [here](https://mise.jdx.dev/getting-started.html).
 
 2. In the project directory, install all required tools:
@@ -41,6 +38,20 @@ This project uses [mise](https://mise.jdx.dev) for tool version management. It a
    go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
    ```
 
+4. Install development tools:
+   - **Overmind** (process manager for running multiple services):
+     ```bash
+     brew install overmind
+     ```
+     Or via Go:
+     ```bash
+     go install github.com/DarthSim/overmind/v2/cmd/overmind@latest
+     ```
+   - **Air** (Go live reload):
+     ```bash
+     go install github.com/air-verse/air@latest
+     ```
+
 ### 1. Database
 
 1. Run a Postgres v14+ instance and make it available on a port (e.g., 5432).
@@ -58,7 +69,7 @@ This project uses [mise](https://mise.jdx.dev) for tool version management. It a
 1. Set up [Authelia](https://www.authelia.com) locally or remotely.
 2. Make sure you know its URL (e.g., `http://localhost:9091`).
 
-### 3. Backend
+### 3. Configuration
 
 1. Copy `.env.example` to `.env` in the project root:
    ```bash
@@ -68,27 +79,50 @@ This project uses [mise](https://mise.jdx.dev) for tool version management. It a
    - Set `VMAIL_DB_HOST`, `VMAIL_DB_PASSWORD`, etc. to point to your Postgres instance.
    - Set `AUTHELIA_URL` to your Authelia instance.
    - Ensure `VMAIL_ENCRYPTION_KEY_BASE64` is set (generate a random 32-byte key and base64 encode it if needed).
-3. Run the server:
-   ```bash
-   go run backend/cmd/server/main.go
-   ```
-   The server will start on the port defined in `PORT` (default 11764).
 
-### 4. Frontend
+### 4. Running the application
 
-1. Navigate to the frontend directory:
-   ```bash
-   cd frontend
-   ```
-2. Install dependencies:
-   ```bash
-   pnpm install
-   ```
-3. Start the development server:
-   ```bash
-   pnpm dev
-   ```
-4. Open the URL shown (usually `http://localhost:5173`).
+#### Quick Start (Recommended)
+
+After setting up the database and Authelia, you can run both the backend and frontend with live reload using a single command:
+
+```bash
+overmind start -f Procfile.dev
+```
+
+This will:
+- Start the Go backend on `http://localhost:11764` with automatic reload on code changes (using [air](https://github.com/air-verse/air))
+- Start the React frontend on `http://localhost:7556` (or the port configured in `VITE_PORT`) with hot module replacement (Vite)
+- Display prefixed logs from both processes in a single terminal
+
+Press `Ctrl+C` to stop both servers.
+
+**Note:** Overmind uses `tmux` under the hood. You can connect to individual processes if needed:
+```bash
+overmind connect backend  # Connect to backend process
+overmind connect frontend # Connect to frontend process
+```
+
+#### Running services separately
+
+If you prefer to run the backend and frontend in separate terminals:
+
+**Backend (with live reload):**
+```bash
+air
+```
+
+Or without live reload:
+```bash
+go run backend/cmd/server/main.go
+```
+
+**Frontend:**
+```bash
+cd frontend
+pnpm install  # First time only
+pnpm dev
+```
 
 ## Tooling
 
