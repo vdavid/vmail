@@ -69,10 +69,7 @@ describe('InboxPage', () => {
 
         const threadLink = screen.getByText('Test Thread 1').closest('a')
         // The href should be base64-encoded
-        expect(threadLink).toHaveAttribute(
-            'href',
-            expect.stringMatching(/^\/thread\/[A-Za-z0-9_-]+$/),
-        )
+        expect(threadLink).toHaveAttribute('href', expect.stringMatching(/^\/thread\/[A-Za-z0-9_-]+$/))
     })
 
     it('should render folder name when folder param is provided', async () => {

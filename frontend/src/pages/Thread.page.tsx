@@ -70,12 +70,7 @@ export default function ThreadPage() {
     }
 
     if (decodeError) {
-        return (
-            <ErrorState
-                message={`Error decoding thread ID: ${decodeError.message}`}
-                onBack={handleBack}
-            />
-        )
+        return <ErrorState message={`Error decoding thread ID: ${decodeError.message}`} onBack={handleBack} />
     }
 
     if (error) {

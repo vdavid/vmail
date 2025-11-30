@@ -21,8 +21,7 @@ body {
     background-color: #05070f;
     background-image:
         radial-gradient(circle at 20% 20%, rgba(63, 85, 175, 0.45), transparent 55%),
-        radial-gradient(circle at 80% 0%, rgba(104, 64, 197, 0.35), transparent 60%),
-        url('/dark-bg.jpg');
+        radial-gradient(circle at 80% 0%, rgba(104, 64, 197, 0.35), transparent 60%), url('/dark-bg.jpg');
     background-size: cover;
     background-position: center;
     background-attachment: fixed;

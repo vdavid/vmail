@@ -15,9 +15,7 @@ export const useUIStore = create<UIState>((set) => ({
     incrementSelectedIndex: (maxIndex: number) => {
         set((state) => ({
             selectedThreadIndex:
-                state.selectedThreadIndex === null
-                    ? 0
-                    : Math.min(state.selectedThreadIndex + 1, maxIndex - 1),
+                state.selectedThreadIndex === null ? 0 : Math.min(state.selectedThreadIndex + 1, maxIndex - 1),
         }))
     },
     decrementSelectedIndex: () => {

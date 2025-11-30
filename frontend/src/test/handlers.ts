@@ -168,10 +168,7 @@ export const handlers = [
 
         // Test invalid query (400 Bad Request)
         if (query === 'from:') {
-            return HttpResponse.json(
-                { error: 'invalid search query: empty from: value' },
-                { status: 400 },
-            )
+            return HttpResponse.json({ error: 'invalid search query: empty from: value' }, { status: 400 })
         }
 
         // Test IMAP error (500 Internal Server Error)

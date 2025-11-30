@@ -32,7 +32,8 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Build check tool
-        run: go build -o scripts/check/check scripts/check/main.go
+        run: go build -o check .
+        working-directory: ./scripts/check
         env:
           GOTOOLCHAIN: auto
 
@@ -101,7 +102,8 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Build check tool
-        run: go build -o scripts/check/check scripts/check/main.go
+        run: go build -o check .
+        working-directory: ./scripts/check
 
       - name: Check Prettier
         run: ./scripts/check/check --check prettier --ci

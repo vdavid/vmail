@@ -15,3 +15,6 @@ frontend/test-results/
 
 # Air's logs and the built Go binary
 /backend/tmp
+
+# Check script binary
+/scripts/check/check

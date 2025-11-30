@@ -150,8 +150,7 @@ export default function SettingsPage() {
         const submitData = {
             ...formData,
             undo_send_delay_seconds: parseInt(numberInputs.undo_send_delay_seconds, 10) || 0,
-            pagination_threads_per_page:
-                parseInt(numberInputs.pagination_threads_per_page, 10) || 0,
+            pagination_threads_per_page: parseInt(numberInputs.pagination_threads_per_page, 10) || 0,
         }
         saveMutation.mutate(submitData)
     }
@@ -243,8 +242,7 @@ export default function SettingsPage() {
                         />
                         {formData.imap_password_set && (
                             <p className='mt-1 text-xs text-slate-400'>
-                                Password is currently set. Leave empty to keep the existing
-                                password.
+                                Password is currently set. Leave empty to keep the existing password.
                             </p>
                         )}
                     </div>
@@ -301,8 +299,7 @@ export default function SettingsPage() {
                         />
                         {formData.smtp_password_set && (
                             <p className='mt-1 text-xs text-slate-400'>
-                                Password is currently set. Leave empty to keep the existing
-                                password.
+                                Password is currently set. Leave empty to keep the existing password.
                             </p>
                         )}
                     </div>
@@ -312,10 +309,7 @@ export default function SettingsPage() {
                     <h2 className='text-lg font-semibold text-white'>Preferences</h2>
                     <div className='grid gap-4 md:grid-cols-2'>
                         <div>
-                            <label
-                                htmlFor='undo_send_delay_seconds'
-                                className='text-sm text-slate-300'
-                            >
+                            <label htmlFor='undo_send_delay_seconds' className='text-sm text-slate-300'>
                                 Undo send delay (seconds)
                             </label>
                             <input
@@ -332,10 +326,7 @@ export default function SettingsPage() {
                             />
                         </div>
                         <div>
-                            <label
-                                htmlFor='pagination_threads_per_page'
-                                className='text-sm text-slate-300'
-                            >
+                            <label htmlFor='pagination_threads_per_page' className='text-sm text-slate-300'>
                                 Threads per page
                             </label>
                             <input

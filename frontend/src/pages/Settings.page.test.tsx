@@ -54,10 +54,7 @@ describe('SettingsPage', () => {
     /**
      * Helper to update passwords and submit settings form.
      */
-    const updatePasswordsAndSubmit = async (
-        user: ReturnType<typeof userEvent.setup>,
-        password: string = 'test123',
-    ) => {
+    const updatePasswordsAndSubmit = async (user: ReturnType<typeof userEvent.setup>, password: string = 'test123') => {
         await waitFor(() => {
             expect(screen.getByDisplayValue('imap.example.com:993')).toBeInTheDocument()
         })

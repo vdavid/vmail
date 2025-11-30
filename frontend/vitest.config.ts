@@ -16,12 +16,7 @@ export default defineConfig({
         setupFiles: isPlaywright ? [] : ['./src/test/setup.ts'],
         css: true,
         // Exclude E2E tests from Vitest (they're for Playwright)
-        exclude: [
-            '**/node_modules/**',
-            '**/dist/**',
-            '**/e2e/**',
-            '**/.{idea,git,cache,output,temp}/**',
-        ],
+        exclude: ['**/node_modules/**', '**/dist/**', '**/e2e/**', '**/.{idea,git,cache,output,temp}/**'],
     },
     resolve: {
         alias: {

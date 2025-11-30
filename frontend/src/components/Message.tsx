@@ -10,9 +10,7 @@ interface MessageProps {
 
 export default function Message({ message }: MessageProps) {
     // Sanitize the HTML content before rendering
-    const sanitizedHTML = message.unsafe_body_html
-        ? DOMPurify.sanitize(message.unsafe_body_html)
-        : ''
+    const sanitizedHTML = message.unsafe_body_html ? DOMPurify.sanitize(message.unsafe_body_html) : ''
 
     const formatDate = (dateString: string | null) => {
         if (!dateString) return ''
@@ -29,15 +27,11 @@ export default function Message({ message }: MessageProps) {
                     <p className='text-sm uppercase tracking-wide text-slate-400'>From</p>
                     <p className='text-lg font-semibold text-white'>{message.from_address}</p>
                     <p className='text-xs text-slate-400'>
-                        To:{' '}
-                        <span className='text-slate-200'>{message.to_addresses.join(', ')}</span>
+                        To: <span className='text-slate-200'>{message.to_addresses.join(', ')}</span>
                     </p>
                     {message.cc_addresses.length > 0 && (
                         <p className='text-xs text-slate-400'>
-                            CC:{' '}
-                            <span className='text-slate-200'>
-                                {message.cc_addresses.join(', ')}
-                            </span>
+                            CC: <span className='text-slate-200'>{message.cc_addresses.join(', ')}</span>
                         </p>
                     )}
                 </div>
@@ -53,14 +47,9 @@ export default function Message({ message }: MessageProps) {
                     <p className='font-semibold text-white'>Attachments</p>
                     <ul className='mt-2 space-y-1'>
                         {attachments.map((attachment) => (
-                            <li
-                                key={attachment.id}
-                                className='flex items-center justify-between text-slate-200'
-                            >
+                            <li key={attachment.id} className='flex items-center justify-between text-slate-200'>
                                 <span>{attachment.filename}</span>
-                                <span className='text-xs text-slate-400'>
-                                    {formatFileSize(attachment.size_bytes)}
-                                </span>
+                                <span className='text-xs text-slate-400'>{formatFileSize(attachment.size_bytes)}</span>
                             </li>
                         ))}
                     </ul>
@@ -72,11 +61,7 @@ export default function Message({ message }: MessageProps) {
                     dangerouslySetInnerHTML={{ __html: sanitizedHTML }}
                 />
             ) : (
-                message.body_text && (
-                    <div className='mt-4 whitespace-pre-wrap text-slate-100'>
-                        {message.body_text}
-                    </div>
-                )
+                message.body_text && <div className='mt-4 whitespace-pre-wrap text-slate-100'>{message.body_text}</div>
             )}
         </article>
     )

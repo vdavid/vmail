@@ -83,9 +83,7 @@ export default function Sidebar({ isMobileOpen = false, onClose }: SidebarProps)
                         const isActive = isInbox
                             ? location.pathname === '/' &&
                               (location.search === '' ||
-                                  location.search.includes(
-                                      `folder=${encodeURIComponent(folder.name)}`,
-                                  ))
+                                  location.search.includes(`folder=${encodeURIComponent(folder.name)}`))
                             : location.pathname === '/' &&
                               location.search.includes(`folder=${encodeURIComponent(folder.name)}`)
 
@@ -105,9 +103,7 @@ export default function Sidebar({ isMobileOpen = false, onClose }: SidebarProps)
                             >
                                 <span
                                     className={`flex h-7 w-7 items-center justify-center rounded-full text-xs ${
-                                        isActive
-                                            ? 'bg-white/20 text-white'
-                                            : 'bg-white/5 text-slate-300'
+                                        isActive ? 'bg-white/20 text-white' : 'bg-white/5 text-slate-300'
                                     }`}
                                     aria-hidden='true'
                                 >

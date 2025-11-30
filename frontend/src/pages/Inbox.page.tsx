@@ -34,9 +34,7 @@ export default function InboxPage() {
         return (
             <div className='flex h-full flex-col gap-4 p-6 text-slate-200'>
                 <div className='h-8 w-32 rounded-full bg-white/10' />
-                <div className='rounded-3xl border border-white/5 bg-white/5 p-6 text-sm'>
-                    Loading...
-                </div>
+                <div className='rounded-3xl border border-white/5 bg-white/5 p-6 text-sm'>Loading...</div>
             </div>
         )
     }
@@ -55,28 +53,18 @@ export default function InboxPage() {
     return (
         <div className='flex h-full flex-col'>
             <div className='border-b border-white/5 px-4 py-2 sm:px-6'>
-                <h1 className='text-sm font-semibold text-slate-100'>
-                    {folder === 'INBOX' ? 'Inbox' : folder}
-                </h1>
+                <h1 className='text-sm font-semibold text-slate-100'>{folder === 'INBOX' ? 'Inbox' : folder}</h1>
             </div>
             <div className='flex-1 overflow-y-auto divide-y divide-white/5'>
-                {threadsResponse &&
-                threadsResponse.threads &&
-                threadsResponse.threads.length > 0 ? (
+                {threadsResponse && threadsResponse.threads && threadsResponse.threads.length > 0 ? (
                     threadsResponse.threads.map((thread, index) => (
-                        <EmailListItem
-                            key={thread.id}
-                            thread={thread}
-                            isSelected={selectedThreadIndex === index}
-                        />
+                        <EmailListItem key={thread.id} thread={thread} isSelected={selectedThreadIndex === index} />
                     ))
                 ) : (
                     <div className='p-6 text-center text-sm text-slate-400'>No threads found</div>
                 )}
             </div>
-            {threadsResponse?.pagination && (
-                <EmailListPagination pagination={threadsResponse.pagination} />
-            )}
+            {threadsResponse?.pagination && <EmailListPagination pagination={threadsResponse.pagination} />}
         </div>
     )
 }
