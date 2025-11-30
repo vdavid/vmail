@@ -18,6 +18,10 @@ func getCheckByName(name string) Check {
 		return &FrontendTestsCheck{}
 	case "e2e-tests":
 		return &E2ETestsCheck{}
+	case "gocyclo":
+		return &GocycloCheck{}
+	case "nilaway":
+		return &NilawayCheck{}
 	default:
 		// Try to find by exact name match (case-insensitive)
 		allChecks := getAllChecks()

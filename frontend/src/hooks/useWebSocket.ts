@@ -131,10 +131,7 @@ export function useWebSocket() {
             }
 
             socketRef.current = null
-            if (
-                socket.readyState === WebSocket.CONNECTING ||
-                socket.readyState === WebSocket.OPEN
-            ) {
+            if (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN) {
                 // Close socket as cleanup
                 socket.close()
             }

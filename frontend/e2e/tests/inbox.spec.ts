@@ -46,9 +46,7 @@ test.describe('Existing User Read-Only Flow', () => {
         } else {
             // Check for empty state message (in main content area)
             await expect(
-                page
-                    .locator('main text=No threads found, [role="main"] text=No threads found')
-                    .first(),
+                page.locator('main text=No threads found, [role="main"] text=No threads found').first(),
             ).toBeVisible()
         }
     })
@@ -69,9 +67,9 @@ test.describe('Existing User Read-Only Flow', () => {
             })
 
             // Verify thread content is visible (Message component or article)
-            await expect(
-                page.locator('article, [data-testid="message"], .message, main').first(),
-            ).toBeVisible({ timeout: 5000 })
+            await expect(page.locator('article, [data-testid="message"], .message, main').first()).toBeVisible({
+                timeout: 5000,
+            })
         }
     })
 
@@ -89,16 +87,12 @@ test.describe('Existing User Read-Only Flow', () => {
 
             // Verify email body is visible
             // The exact selector depends on your Message component
-            const messageBody = page
-                .locator('[data-testid="message-body"], .message-body, article, main')
-                .first()
+            const messageBody = page.locator('[data-testid="message-body"], .message-body, article, main').first()
             await expect(messageBody).toBeVisible({ timeout: 5000 })
 
             // Check for attachments if they exist
             // This is optional - only check if attachments are present
-            const attachments = page.locator(
-                '[data-testid="attachment"], .attachment, a[href*="attachment"]',
-            )
+            const attachments = page.locator('[data-testid="attachment"], .attachment, a[href*="attachment"]')
             const attachmentCount = await attachments.count()
             if (attachmentCount > 0) {
                 await expect(attachments.first()).toBeVisible()
@@ -180,9 +174,7 @@ test.describe('Existing User Read-Only Flow', () => {
 
         if (bannerVisible) {
             // eslint-disable-next-line no-console
-            console.log(
-                'WebSocket connection banner is visible - connection may not be established',
-            )
+            console.log('WebSocket connection banner is visible - connection may not be established')
             // eslint-disable-next-line no-console
             console.log(
                 'Console messages:',
@@ -216,9 +208,7 @@ test.describe('Existing User Read-Only Flow', () => {
 
         if (response.status !== 204) {
             // eslint-disable-next-line no-console
-            console.log(
-                `Test endpoint returned status ${String(response.status)}: ${response.statusText}`,
-            )
+            console.log(`Test endpoint returned status ${String(response.status)}: ${response.statusText}`)
         }
 
         // Wait for the new subject to appear without reloading the page.
@@ -233,9 +223,7 @@ test.describe('Existing User Read-Only Flow', () => {
         expect(updatedSubjects).not.toEqual(initialSubjects)
     })
 
-    test('clicking email navigates to thread with correct URL and displays body', async ({
-        page,
-    }) => {
+    test('clicking email navigates to thread with correct URL and displays body', async ({ page }) => {
         const result = await setupInboxTest(page)
         if (!result) {
             // Skip if redirected to settings
@@ -277,9 +265,7 @@ test.describe('Existing User Read-Only Flow', () => {
 
             // Verify email body/content is visible
             // Message component should render the email body
-            const messageContent = page
-                .locator('article, [data-testid="message"], .message, main div.border-b')
-                .first()
+            const messageContent = page.locator('article, [data-testid="message"], .message, main div.border-b').first()
             await expect(messageContent).toBeVisible({ timeout: 5000 })
 
             // Verify sender is displayed in the message

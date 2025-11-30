@@ -34,6 +34,27 @@ func commandExists(name string) bool {
 	return err == nil
 }
 
+// getToolPath returns the full path to a Go tool, checking PATH and GOBIN.
+// Returns the tool name unchanged if not found (will fail when executed).
+func getToolPath(name string) string {
+	// First check if it's in PATH
+	if path, err := exec.LookPath(name); err == nil {
+		return path
+	}
+
+	// Check in GOBIN
+	gobin := getGoBin()
+	if gobin != "" {
+		toolPath := filepath.Join(gobin, name)
+		if _, err := os.Stat(toolPath); err == nil {
+			return toolPath
+		}
+	}
+
+	// Return the name as-is, will fail when executed
+	return name
+}
+
 // getGoPath returns the GOPATH environment variable.
 func getGoPath() string {
 	cmd := exec.Command("go", "env", "GOPATH")
@@ -44,28 +65,64 @@ func getGoPath() string {
 	return strings.TrimSpace(string(output))
 }
 
+// getGoBin returns the GOBIN or GOPATH/bin directory where go install puts binaries.
+func getGoBin() string {
+	// First check GOBIN
+	cmd := exec.Command("go", "env", "GOBIN")
+	output, err := cmd.Output()
+	if err == nil && strings.TrimSpace(string(output)) != "" {
+		return strings.TrimSpace(string(output))
+	}
+	// Fall back to GOPATH/bin
+	gopath := getGoPath()
+	if gopath != "" {
+		return filepath.Join(gopath, "bin")
+	}
+	return ""
+}
+
 // ensureToolInstalled ensures a Go tool is installed, installing it if necessary.
-func ensureToolInstalled(toolName, installCmd string) error {
+// rootDir should be the project root directory.
+func ensureToolInstalled(toolName, installCmd, rootDir string) error {
+	gobin := getGoBin()
+	expectedPath := filepath.Join(gobin, toolName)
+
+	// Check if already installed
 	if commandExists(toolName) {
 		return nil
 	}
-
-	// Check in GOPATH/bin
-	gopath := getGoPath()
-	if gopath != "" {
-		toolPath := filepath.Join(gopath, "bin", toolName)
-		if _, err := os.Stat(toolPath); err == nil {
+	if gobin != "" {
+		if _, err := os.Stat(expectedPath); err == nil {
 			return nil
 		}
 	}
 
-	fmt.Printf("%sInstalling %s...%s\n", colorYellow, toolName, colorReset)
+	fmt.Printf("%sInstalling %s...%s ", colorYellow, toolName, colorReset)
+
 	parts := strings.Fields(installCmd)
 	cmd := exec.Command(parts[0], parts[1:]...)
+	// Run from backend directory for proper Go module context
+	backendDir := filepath.Join(rootDir, "backend")
+	cmd.Dir = backendDir
 	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=auto")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+
+	// Capture output to display on error
+	output, err := runCommand(cmd, true)
+	if err != nil {
+		fmt.Println()
+		fmt.Printf("      Command: %s\n", installCmd)
+		fmt.Printf("      Working dir: %s\n", backendDir)
+		fmt.Printf("      GOBIN: %s\n", gobin)
+		if output != "" {
+			fmt.Printf("      Output:\n")
+			fmt.Print(indentOutput(output, "        "))
+		} else {
+			fmt.Printf("      Output: (empty)\n")
+		}
+		return fmt.Errorf("failed to run '%s': %w", installCmd, err)
+	}
+
+	return nil
 }
 
 // addGoPathToPath adds GOPATH/bin to PATH if not already present.

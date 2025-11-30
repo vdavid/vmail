@@ -353,9 +353,7 @@ describe('EmailListItem', () => {
 
         render(<EmailListItem thread={thread} />, { wrapper: createWrapper() })
 
-        expect(
-            screen.getByText(/This is the body text from the first message/i),
-        ).toBeInTheDocument()
+        expect(screen.getByText(/This is the body text from the first message/i)).toBeInTheDocument()
     })
 
     it('displays preview snippet from HTML email body (extracted text)', () => {

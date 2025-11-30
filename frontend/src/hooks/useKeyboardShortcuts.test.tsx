@@ -191,9 +191,7 @@ describe('useKeyboardShortcuts', () => {
     })
 
     it('increments selected index when ArrowDown is pressed', async () => {
-        const mockThreads = [
-            { id: '1', stable_thread_id: 'thread-1', subject: 'Test 1', user_id: 'user-1' },
-        ]
+        const mockThreads = [{ id: '1', stable_thread_id: 'thread-1', subject: 'Test 1', user_id: 'user-1' }]
         const queryClient = setupMockThreadsAndQueryClient(mockThreads)
 
         renderHook(
@@ -257,9 +255,7 @@ describe('useKeyboardShortcuts', () => {
     })
 
     it('navigates to thread when "o" is pressed with selected thread', async () => {
-        const mockThreads = [
-            { id: '1', stable_thread_id: 'thread-1', subject: 'Test 1', user_id: 'user-1' },
-        ]
+        const mockThreads = [{ id: '1', stable_thread_id: 'thread-1', subject: 'Test 1', user_id: 'user-1' }]
         const queryClient = setupMockThreadsAndQueryClient(mockThreads)
 
         renderHook(
@@ -285,9 +281,7 @@ describe('useKeyboardShortcuts', () => {
     })
 
     it('navigates to thread when Enter is pressed with selected thread', async () => {
-        const mockThreads = [
-            { id: '1', stable_thread_id: 'thread-1', subject: 'Test 1', user_id: 'user-1' },
-        ]
+        const mockThreads = [{ id: '1', stable_thread_id: 'thread-1', subject: 'Test 1', user_id: 'user-1' }]
         const queryClient = setupMockThreadsAndQueryClient(mockThreads)
 
         renderHook(

@@ -47,9 +47,7 @@ test.describe('Search Functionality', () => {
         await waitForEmailList(page)
 
         // Verify search results page shows query (use data-testid for style-independent testing)
-        await expect(page.locator('[data-testid="search-page-heading"]').first()).toContainText(
-            'Search results',
-        )
+        await expect(page.locator('[data-testid="search-page-heading"]').first()).toContainText('Search results')
 
         // Verify we found the expected message from sampleMessages
         const expectedMessage = sampleMessages.find((m) => m.subject.includes('Special Report'))

@@ -167,9 +167,7 @@ export const api = {
             const errorText = await response.text()
             // Try to extract a meaningful error message from the response
             const errorMessage =
-                errorText && errorText.length > 0 && errorText.length < 200
-                    ? errorText
-                    : 'Failed to fetch folders'
+                errorText && errorText.length > 0 && errorText.length < 200 ? errorText : 'Failed to fetch folders'
             throw new Error(errorMessage)
         }
         return (await response.json()) as Promise<Folder[]>

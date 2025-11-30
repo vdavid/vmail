@@ -39,9 +39,7 @@ test.describe('Sidebar and Folder Navigation', () => {
 
         // Verify common folders are present (at least Inbox should be there)
         // Inbox link should be href="/" (inbox is special and doesn't use folder parameter)
-        const inboxLink = page
-            .locator('a[href="/"], a:has-text("Inbox"), a:has-text("INBOX")')
-            .first()
+        const inboxLink = page.locator('a[href="/"], a:has-text("Inbox"), a:has-text("INBOX")').first()
         await expect(inboxLink).toBeVisible({ timeout: 5000 })
     })
 
@@ -54,9 +52,7 @@ test.describe('Sidebar and Folder Navigation', () => {
 
         // Wait for sidebar folders to be visible
         // Inbox link should be href="/" (inbox is special and doesn't use folder parameter)
-        const inboxLink = page
-            .locator('a[href="/"], a:has-text("Inbox"), a:has-text("INBOX")')
-            .first()
+        const inboxLink = page.locator('a[href="/"], a:has-text("Inbox"), a:has-text("INBOX")').first()
         await expect(inboxLink).toBeVisible({ timeout: 5000 })
 
         // Click the Inbox link
@@ -109,9 +105,7 @@ test.describe('Sidebar and Folder Navigation', () => {
         const currentURL = page.url()
         if (currentURL.includes('/settings')) {
             // Already on settings page, just verify
-            await expect(page.locator('main h1, [role="main"] h1').first()).toContainText(
-                'Settings',
-            )
+            await expect(page.locator('main h1, [role="main"] h1').first()).toContainText('Settings')
             return
         }
 

@@ -2,12 +2,7 @@ import { test, expect } from '@playwright/test'
 
 import { setupAuth } from '../fixtures/auth'
 import { defaultTestUser } from '../fixtures/test-data'
-import {
-    fillSettingsForm,
-    navigateAndWait,
-    submitSettingsForm,
-    testSettingsFormValidation,
-} from '../utils/helpers'
+import { fillSettingsForm, navigateAndWait, submitSettingsForm, testSettingsFormValidation } from '../utils/helpers'
 
 /**
  * Test 1: New User Onboarding Flow
@@ -69,9 +64,7 @@ test.describe('New User Onboarding', () => {
 
         // Verify we're no longer on the settings page
         // Use main content area to avoid sidebar h1
-        await expect(page.locator('main h1, [role="main"] h1').first()).not.toContainText(
-            'Settings',
-        )
+        await expect(page.locator('main h1, [role="main"] h1').first()).not.toContainText('Settings')
     })
 
     test('shows validation errors for empty required fields', async ({ page }) => {
