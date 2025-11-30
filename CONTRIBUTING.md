@@ -55,13 +55,13 @@ This project uses [mise](https://mise.jdx.dev) for tool version management. It a
 ### 1. Database
 
 1. Run a Postgres v14+ instance and make it available on a port (e.g., 5432).
-   You can use Docker for this:
+   You can use Docker for this (note the random port 3436!):
    ```bash
-   docker run -d --name vmail-postgres -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=vmail postgres:16-alpine
+   docker run -d --name vmail-postgres -p 127.0.0.1:3436:5432 -e POSTGRES_USER=vmail -e POSTGRES_PASSWORD=vmail -e POSTGRES_DB=vmail postgres:18-alpine
    ```
-2. Run the migrations:
+2. Run the migrations (customize this to your DB setup):
    ```bash
-   migrate -path backend/migrations -database "postgres://postgres:postgres@localhost:5432/vmail?sslmode=disable" up
+   migrate -path backend/migrations -database "postgres://vmail:vmail@localhost:3436/vmail?sslmode=disable" up
    ```
 
 ### 2. Authentication
@@ -76,9 +76,11 @@ This project uses [mise](https://mise.jdx.dev) for tool version management. It a
    cp .env.example .env
    ```
 2. Edit `.env` to match your local setup:
-   - Set `VMAIL_DB_HOST`, `VMAIL_DB_PASSWORD`, etc. to point to your Postgres instance.
+   - Set `VMAIL_DB_PORT` to `3436` if you used the suggested Docker command above.
+   - Set `VMAIL_DB_PASSWORD` to `postgres` if you used the suggested Docker command above.
+   - Optionally set the other `VMAIL_DB_*` settings, too., if you prefer a different DB setup.
    - Set `AUTHELIA_URL` to your Authelia instance.
-   - Ensure `VMAIL_ENCRYPTION_KEY_BASE64` is set (generate a random 32-byte key and base64 encode it if needed).
+   - Set `VMAIL_ENCRYPTION_KEY_BASE64` – you can use `openssl rand -base64 32` to generate a random key and base64 it.
 
 ### 4. Running the application
 
