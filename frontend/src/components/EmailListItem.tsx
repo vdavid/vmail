@@ -34,10 +34,7 @@ function formatDate(sentAt: string | null | undefined): string {
     return dateFormatter.format(date)
 }
 
-function getPreviewSnippet(
-    previewSnippet: string | undefined,
-    bodyText: string | undefined,
-): string {
+function getPreviewSnippet(previewSnippet: string | undefined, bodyText: string | undefined): string {
     // Prefer backend preview_snippet, fallback to first message body_text
     const source = previewSnippet || bodyText
     if (!source) {
@@ -145,10 +142,7 @@ export default function EmailListItem({ thread, isSelected }: EmailListItemProps
 
             {/* Star column */}
             <div className='flex justify-center text-base'>
-                <span
-                    className={isStarred ? 'text-amber-400' : 'text-slate-500'}
-                    aria-hidden='true'
-                >
+                <span className={isStarred ? 'text-amber-400' : 'text-slate-500'} aria-hidden='true'>
                     {isStarred ? '★' : '☆'}
                 </span>
             </div>
@@ -175,9 +169,7 @@ export default function EmailListItem({ thread, isSelected }: EmailListItemProps
                     {previewSnippet && (
                         <>
                             <span className='opacity-60 text-slate-400'> - </span>
-                            <span className='truncate opacity-60 text-slate-400'>
-                                {previewSnippet}
-                            </span>
+                            <span className='truncate opacity-60 text-slate-400'>{previewSnippet}</span>
                         </>
                     )}
                 </div>

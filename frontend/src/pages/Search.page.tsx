@@ -41,9 +41,7 @@ function SearchResults({
     if (!threadsResponse?.threads || threadsResponse.threads.length === 0) {
         return (
             <div className='p-6 text-center text-sm text-slate-400'>
-                {hasQuery
-                    ? `No results found for "${trimmedQuery}"`
-                    : 'Enter a search query to find emails'}
+                {hasQuery ? `No results found for "${trimmedQuery}"` : 'Enter a search query to find emails'}
             </div>
         )
     }
@@ -51,11 +49,7 @@ function SearchResults({
     return (
         <>
             {threadsResponse.threads.map((thread, index) => (
-                <EmailListItem
-                    key={thread.id}
-                    thread={thread}
-                    isSelected={selectedThreadIndex === index}
-                />
+                <EmailListItem key={thread.id} thread={thread} isSelected={selectedThreadIndex === index} />
             ))}
         </>
     )
@@ -65,9 +59,7 @@ function LoadingState() {
     return (
         <div className='flex h-full flex-col gap-4 p-6 text-slate-200'>
             <div className='h-8 w-40 rounded-full bg-white/10' />
-            <div className='rounded-3xl border border-white/5 bg-white/5 p-6 text-sm'>
-                Loading...
-            </div>
+            <div className='rounded-3xl border border-white/5 bg-white/5 p-6 text-sm'>Loading...</div>
         </div>
     )
 }
@@ -76,9 +68,7 @@ function ErrorState({ error }: { error: Error }) {
     return (
         <div className='p-6 text-slate-100'>
             <h1 className='text-2xl font-bold'>Search</h1>
-            <p className='mt-4 rounded-2xl bg-red-900/40 p-4 text-sm text-red-100'>
-                Error searching: {error.message}
-            </p>
+            <p className='mt-4 rounded-2xl bg-red-900/40 p-4 text-sm text-red-100'>Error searching: {error.message}</p>
         </div>
     )
 }
@@ -128,9 +118,7 @@ export default function SearchPage() {
                     trimmedQuery={trimmedQuery}
                 />
             </div>
-            {threadsResponse?.pagination && (
-                <EmailListPagination pagination={threadsResponse.pagination} />
-            )}
+            {threadsResponse?.pagination && <EmailListPagination pagination={threadsResponse.pagination} />}
         </div>
     )
 }

@@ -11,12 +11,7 @@ export function useKeyboardShortcuts() {
     const location = useLocation()
     const [searchParams] = useSearchParams()
     const folder = searchParams.get('folder') || 'INBOX'
-    const {
-        selectedThreadIndex,
-        incrementSelectedIndex,
-        decrementSelectedIndex,
-        setSelectedThreadIndex,
-    } = useUIStore()
+    const { selectedThreadIndex, incrementSelectedIndex, decrementSelectedIndex, setSelectedThreadIndex } = useUIStore()
 
     // Get user settings to determine pagination limit
     const { data: settings } = useQuery({
@@ -77,10 +72,7 @@ export function useKeyboardShortcuts() {
 
         const handleKeyDown = (event: KeyboardEvent) => {
             // Don't handle shortcuts when typing in input fields
-            if (
-                event.target instanceof HTMLInputElement ||
-                event.target instanceof HTMLTextAreaElement
-            ) {
+            if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
                 return
             }
 

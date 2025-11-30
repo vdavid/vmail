@@ -41,9 +41,7 @@ describe('Message', () => {
         render(<Message message={message} />)
 
         // eslint-disable-next-line @typescript-eslint/unbound-method
-        expect(DOMPurify.sanitize).toHaveBeenCalledWith(
-            '<p>Test HTML</p><script>alert("xss")</script>',
-        )
+        expect(DOMPurify.sanitize).toHaveBeenCalledWith('<p>Test HTML</p><script>alert("xss")</script>')
     })
 
     it('renders sanitized HTML via dangerouslySetInnerHTML', () => {

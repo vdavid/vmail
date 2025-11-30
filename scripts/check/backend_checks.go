@@ -92,13 +92,13 @@ func (c *GovulncheckCheck) Name() string {
 
 func (c *GovulncheckCheck) Run(ctx *CheckContext) error {
 	addGoPathToPath()
-	if err := ensureToolInstalled("govulncheck", "go install golang.org/x/vuln/cmd/govulncheck@latest"); err != nil {
+	if err := ensureToolInstalled("govulncheck", "go install golang.org/x/vuln/cmd/govulncheck@latest", ctx.RootDir); err != nil {
 		return fmt.Errorf("failed to install govulncheck: %w", err)
 	}
 
 	// govulncheck requires a module context, so only run on backend/
 	backendDir := filepath.Join(ctx.RootDir, "backend")
-	cmd := exec.Command("govulncheck", "./...")
+	cmd := exec.Command(getToolPath("govulncheck"), "./...")
 	cmd.Dir = backendDir
 	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=auto")
 	output, err := runCommand(cmd, true)
@@ -158,13 +158,13 @@ func (c *StaticcheckCheck) Name() string {
 
 func (c *StaticcheckCheck) Run(ctx *CheckContext) error {
 	addGoPathToPath()
-	if err := ensureToolInstalled("staticcheck", "go install honnef.co/go/tools/cmd/staticcheck@latest"); err != nil {
+	if err := ensureToolInstalled("staticcheck", "go install honnef.co/go/tools/cmd/staticcheck@latest", ctx.RootDir); err != nil {
 		return fmt.Errorf("failed to install staticcheck: %w", err)
 	}
 
 	// staticcheck requires a module context, so only run on backend/
 	backendDir := filepath.Join(ctx.RootDir, "backend")
-	cmd := exec.Command("staticcheck", "./...")
+	cmd := exec.Command(getToolPath("staticcheck"), "./...")
 	cmd.Dir = backendDir
 	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=auto")
 	output, err := runCommand(cmd, true)
@@ -189,13 +189,13 @@ func (c *IneffassignCheck) Name() string {
 
 func (c *IneffassignCheck) Run(ctx *CheckContext) error {
 	addGoPathToPath()
-	if err := ensureToolInstalled("ineffassign", "go install github.com/gordonklaus/ineffassign@latest"); err != nil {
+	if err := ensureToolInstalled("ineffassign", "go install github.com/gordonklaus/ineffassign@latest", ctx.RootDir); err != nil {
 		return fmt.Errorf("failed to install ineffassign: %w", err)
 	}
 
 	// ineffassign requires a module context, so only run on backend/
 	backendDir := filepath.Join(ctx.RootDir, "backend")
-	cmd := exec.Command("ineffassign", "./...")
+	cmd := exec.Command(getToolPath("ineffassign"), "./...")
 	cmd.Dir = backendDir
 	output, err := runCommand(cmd, true)
 	if err != nil {
@@ -219,7 +219,7 @@ func (c *MisspellCheck) Name() string {
 
 func (c *MisspellCheck) Run(ctx *CheckContext) error {
 	addGoPathToPath()
-	if err := ensureToolInstalled("misspell", "go install github.com/client9/misspell/cmd/misspell@latest"); err != nil {
+	if err := ensureToolInstalled("misspell", "go install github.com/client9/misspell/cmd/misspell@latest", ctx.RootDir); err != nil {
 		return fmt.Errorf("failed to install misspell: %w", err)
 	}
 
@@ -229,7 +229,7 @@ func (c *MisspellCheck) Run(ctx *CheckContext) error {
 	}
 
 	for _, path := range paths {
-		cmd := exec.Command("misspell", "-error", ".")
+		cmd := exec.Command(getToolPath("misspell"), "-error", ".")
 		cmd.Dir = path
 		output, err := runCommand(cmd, true)
 		if err != nil {
@@ -250,10 +250,8 @@ func (c *GocycloCheck) Name() string {
 
 func (c *GocycloCheck) Run(ctx *CheckContext) error {
 	addGoPathToPath()
-	if !commandExists("gocyclo") {
-		// Skip if not installed, but don't fail
-		fmt.Printf("%sSKIP%s (gocyclo not found)", colorYellow, colorReset)
-		return nil
+	if err := ensureToolInstalled("gocyclo", "go install github.com/fzipp/gocyclo/cmd/gocyclo@latest", ctx.RootDir); err != nil {
+		return fmt.Errorf("failed to install gocyclo: %w", err)
 	}
 
 	paths := []string{
@@ -278,7 +276,7 @@ func (c *GocycloCheck) Run(ctx *CheckContext) error {
 				return nil
 			}
 
-			cmd := exec.Command("gocyclo", "-over", "15", filePath)
+			cmd := exec.Command(getToolPath("gocyclo"), "-over", "15", filePath)
 			output, err := runCommand(cmd, true)
 			if err == nil && strings.TrimSpace(output) != "" {
 				lines := strings.Split(strings.TrimSpace(output), "\n")
@@ -320,15 +318,13 @@ func (c *NilawayCheck) Name() string {
 
 func (c *NilawayCheck) Run(ctx *CheckContext) error {
 	addGoPathToPath()
-	if !commandExists("nilaway") {
-		// Skip if not installed, but don't fail
-		fmt.Printf("%sSKIP%s (nilaway not found)", colorYellow, colorReset)
-		return nil
+	if err := ensureToolInstalled("nilaway", "go install go.uber.org/nilaway/cmd/nilaway@latest", ctx.RootDir); err != nil {
+		return fmt.Errorf("failed to install nilaway: %w", err)
 	}
 
 	// nilaway requires a module context, so only run on backend/
 	backendDir := filepath.Join(ctx.RootDir, "backend")
-	cmd := exec.Command("nilaway", "./...")
+	cmd := exec.Command(getToolPath("nilaway"), "./...")
 	cmd.Dir = backendDir
 	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=auto")
 	output, err := runCommand(cmd, true)

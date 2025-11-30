@@ -64,9 +64,7 @@ describe('useWebSocket', () => {
                 queries: { retry: false },
             },
         })
-        const invalidateSpy = vi
-            .spyOn(queryClient, 'invalidateQueries')
-            .mockResolvedValue(undefined)
+        const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue(undefined)
 
         renderWithClient(queryClient)
 

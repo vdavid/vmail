@@ -38,9 +38,8 @@ func runCheck(check Check, ctx *CheckContext) error {
 
 	if err != nil {
 		fmt.Printf("%sFAILED%s (%s)\n", colorRed, colorReset, formatDuration(duration))
-		if ctx.Verbose {
-			fmt.Printf("      Error: %v\n", err)
-		}
+		// Always show error details on failure
+		fmt.Printf("      Error: %v\n", err)
 		return err
 	}
 	fmt.Printf("%sOK%s (%s)\n", colorGreen, colorReset, formatDuration(duration))
@@ -61,9 +60,8 @@ func runBackendChecks(ctx *CheckContext) (bool, []string) {
 
 		if err != nil {
 			fmt.Printf("%sFAILED%s (%s)\n", colorRed, colorReset, formatDuration(duration))
-			if ctx.Verbose {
-				fmt.Printf("      Error: %v\n", err)
-			}
+			// Always show error details on failure
+			fmt.Printf("      Error: %v\n", err)
 			failed = true
 			failedChecks = append(failedChecks, getCheckCLIName(check))
 		} else {
@@ -88,9 +86,8 @@ func runFrontendChecks(ctx *CheckContext) (bool, []string) {
 
 		if err != nil {
 			fmt.Printf("%sFAILED%s (%s)\n", colorRed, colorReset, formatDuration(duration))
-			if ctx.Verbose {
-				fmt.Printf("      Error: %v\n", err)
-			}
+			// Always show error details on failure
+			fmt.Printf("      Error: %v\n", err)
 			failed = true
 			failedChecks = append(failedChecks, getCheckCLIName(check))
 		} else {
