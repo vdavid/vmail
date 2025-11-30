@@ -66,8 +66,10 @@ This project uses [mise](https://mise.jdx.dev) for tool version management. It a
 
 ### 2. Authentication
 
-1. Set up [Authelia](https://www.authelia.com) locally or remotely.
-2. Make sure you know its URL (e.g., `http://localhost:9091`).
+For local development, **no authentication setup is needed**. The backend runs in "dev" mode by default,
+which uses stub authentication (all requests are authenticated as `test@example.com`).
+
+If you want to test with real Authelia integration, see the [README](README.md#running) for setup options.
 
 ### 3. Configuration
 
@@ -77,16 +79,15 @@ This project uses [mise](https://mise.jdx.dev) for tool version management. It a
    ```
 2. Edit `.env` to match your local setup:
    - Set `VMAIL_DB_PORT` to `3436` if you used the suggested Docker command above.
-   - Set `VMAIL_DB_PASSWORD` to `postgres` if you used the suggested Docker command above.
-   - Optionally set the other `VMAIL_DB_*` settings, too., if you prefer a different DB setup.
-   - Set `AUTHELIA_URL` to your Authelia instance.
-   - Set `VMAIL_ENCRYPTION_KEY_BASE64` – you can use `openssl rand -base64 32` to generate a random key and base64 it.
+   - Set `VMAIL_DB_PASSWORD` to `vmail` if you used the suggested Docker command above.
+   - Optionally set the other `VMAIL_DB_*` settings too if you prefer a different DB setup.
+   - Set `VMAIL_ENCRYPTION_KEY_BASE64` – generate with `openssl rand -base64 32`.
 
 ### 4. Running the application
 
-#### Quick Start (Recommended)
+#### Quick start (recommended)
 
-After setting up the database and Authelia, you can run both the backend and frontend with live reload using a single command:
+After setting up the database and configuration, run both the backend and frontend with live reload:
 
 ```bash
 overmind start -f Procfile.dev
@@ -103,6 +104,14 @@ Press `Ctrl+C` to stop both servers.
 ```bash
 overmind connect backend  # Connect to backend process
 overmind connect frontend # Connect to frontend process
+```
+
+Alternatively, to only run the front end or back end:
+
+```bash
+cd frontend && pnpm dev                 # Frontend
+cd backend && go run cmd/server/main.go # Backend without live reload (for line-to-line debugging in IntelliJ/GoLand)
+cd backend && PORT=11764 air            # Backend with live reload
 ```
 
 #### Running services separately

@@ -1,0 +1,32 @@
+# Authelia User Database for V-Mail
+#
+# Copy this file to users.yml and add your user(s).
+# For full documentation, see: https://www.authelia.com/reference/guides/passwords/
+#
+# To generate a password hash, run:
+#   docker run --rm authelia/authelia:latest authelia crypto hash generate argon2 --password 'YOUR_PASSWORD'
+#
+# Or if you have authelia installed locally:
+#   authelia crypto hash generate argon2 --password 'YOUR_PASSWORD'
+
+users:
+  # Example user - REPLACE with your own!
+  # Username: admin
+  # Password: change-me (you MUST generate a new hash!)
+  admin:
+    displayname: "Admin User"
+    # This hash is for "change-me" - GENERATE YOUR OWN!
+    # Run: docker run --rm authelia/authelia:latest authelia crypto hash generate argon2 --password 'YOUR_SECURE_PASSWORD'
+    password: "$argon2id$v=19$m=65536,t=3,p=4$JDJhJDEwJHRlc3RoYXNoMTIzNDU2Nzg5MA$placeholder_replace_me"
+    email: admin@example.com
+    groups:
+      - admins
+
+  # Add more users as needed:
+  # john:
+  #   displayname: "John Doe"
+  #   password: "$argon2id$v=19$m=65536,t=3,p=4$..."
+  #   email: john@example.com
+  #   groups:
+  #     - users
+

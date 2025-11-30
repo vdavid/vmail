@@ -111,10 +111,57 @@ export interface ThreadsResponse {
     pagination: Pagination
 }
 
-function getAuthHeaders() {
-    return {
-        Authorization: 'Bearer token',
+/**
+ * Check if we're in dev mode (no Authelia URL configured).
+ * In dev mode, we send a Bearer token for the backend's stub auth.
+ * In production, the reverse proxy handles auth via headers.
+ */
+const isDevMode = !import.meta.env.VITE_AUTHELIA_URL
+
+/**
+ * Returns auth headers for API requests.
+ * In dev mode, sends a Bearer token for stub auth.
+ * In production (with Authelia), no auth headers needed - reverse proxy handles it.
+ */
+function getAuthHeaders(): Record<string, string> {
+    if (isDevMode) {
+        return { Authorization: 'Bearer token' }
     }
+    return {}
+}
+
+/**
+ * Redirects to Authelia login page when not authenticated.
+ * Used when the backend returns 401 Unauthorized in production mode.
+ */
+function redirectToLogin(): void {
+    const autheliaUrl = import.meta.env.VITE_AUTHELIA_URL as string | undefined
+    if (autheliaUrl) {
+        const returnUrl = encodeURIComponent(window.location.href)
+        window.location.href = `${autheliaUrl}/?rd=${returnUrl}`
+    } else {
+        // In dev mode, 401 shouldn't happen since we send a token
+        // eslint-disable-next-line no-console
+        console.error('Auth failed in dev mode - this should not happen')
+    }
+}
+
+/**
+ * Handles API response, redirecting to login on 401.
+ * Returns true if the response was OK, false if it was a 401 (and redirect was triggered).
+ * Throws an error for other non-OK responses.
+ */
+async function handleResponse(response: Response, errorMessage: string): Promise<Response> {
+    if (response.status === 401) {
+        redirectToLogin()
+        // Return a never-resolving promise to prevent further processing
+        // since we're redirecting away
+        return new Promise(() => {})
+    }
+    if (!response.ok) {
+        throw new Error(errorMessage)
+    }
+    return response
 }
 
 export const api = {
@@ -123,10 +170,8 @@ export const api = {
             credentials: 'include',
             headers: getAuthHeaders(),
         })
-        if (!response.ok) {
-            throw new Error('Failed to fetch auth status')
-        }
-        return (await response.json()) as Promise<AuthStatus>
+        const handled = await handleResponse(response, 'Failed to fetch auth status')
+        return (await handled.json()) as Promise<AuthStatus>
     },
 
     async getSettings(): Promise<UserSettings> {
@@ -134,6 +179,10 @@ export const api = {
             credentials: 'include',
             headers: getAuthHeaders(),
         })
+        if (response.status === 401) {
+            redirectToLogin()
+            return new Promise(() => {})
+        }
         if (!response.ok) {
             // Preserve status code information so caller can distinguish 404 from other errors
             const error = new Error('Failed to fetch settings')
@@ -153,9 +202,7 @@ export const api = {
             credentials: 'include',
             body: JSON.stringify(settings),
         })
-        if (!response.ok) {
-            throw new Error('Failed to save settings')
-        }
+        await handleResponse(response, 'Failed to save settings')
     },
 
     async getFolders(): Promise<Folder[]> {
@@ -163,6 +210,10 @@ export const api = {
             credentials: 'include',
             headers: getAuthHeaders(),
         })
+        if (response.status === 401) {
+            redirectToLogin()
+            return new Promise(() => {})
+        }
         if (!response.ok) {
             const errorText = await response.text()
             // Try to extract a meaningful error message from the response
@@ -185,10 +236,8 @@ export const api = {
             credentials: 'include',
             headers: getAuthHeaders(),
         })
-        if (!response.ok) {
-            throw new Error('Failed to fetch threads')
-        }
-        return (await response.json()) as Promise<ThreadsResponse>
+        const handled = await handleResponse(response, 'Failed to fetch threads')
+        return (await handled.json()) as Promise<ThreadsResponse>
     },
 
     async getThread(threadId: string): Promise<Thread> {
@@ -199,10 +248,8 @@ export const api = {
             credentials: 'include',
             headers: getAuthHeaders(),
         })
-        if (!response.ok) {
-            throw new Error('Failed to fetch thread')
-        }
-        return (await response.json()) as Promise<Thread>
+        const handled = await handleResponse(response, 'Failed to fetch thread')
+        return (await handled.json()) as Promise<Thread>
     },
 
     async search(query: string, page: number = 1, limit?: number): Promise<ThreadsResponse> {
@@ -217,9 +264,7 @@ export const api = {
             credentials: 'include',
             headers: getAuthHeaders(),
         })
-        if (!response.ok) {
-            throw new Error('Failed to search')
-        }
-        return (await response.json()) as Promise<ThreadsResponse>
+        const handled = await handleResponse(response, 'Failed to search')
+        return (await handled.json()) as Promise<ThreadsResponse>
     },
 }

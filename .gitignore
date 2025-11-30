@@ -18,3 +18,9 @@ frontend/test-results/
 
 # Check script binary
 /scripts/check/check
+
+# Authelia config (keep .example files, ignore actual configs)
+/config/authelia/configuration.yml
+/config/authelia/users.yml
+/config/authelia/db.sqlite3
+/config/authelia/notifications.txt

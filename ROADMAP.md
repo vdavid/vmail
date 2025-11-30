@@ -1,4 +1,4 @@
-# Roadmap
+# Roadmap overview
 
 1. [x] **Milestone 1: The IMAP spike**
     * Goal: Prove the core technology works.
@@ -6,13 +6,13 @@
 2. [ ] **Milestone 2: Read-only V-Mail (MVP)**
     * Goal: A read-only, online-only client.
     * Tasks:
-        * Set up auth.
-        * Build the Go API for reading (threads, messages).
-        * Build the React UI (layout, sidebar, list, thread view).
-        * Implement j/k/o/u navigation.
-        * No sending, no offline.
-        * Create Settings page with reading/writing fields.
-        * Build onboarding flow.
+        * [x] Set up auth.
+        * [ ] Build the Go API for reading (threads, messages).
+        * [ ] Build the React UI (layout, sidebar, list, thread view).
+        * [x] Implement j/k/o/u navigation.
+        * [x] No sending, no offline.
+        * [x] Create Settings page with reading/writing fields.
+        * [x] Build onboarding flow.
 3. [ ] **Milestone 3: Actions**
     * Goal: Be able to manage email.
     * Tasks: Implement Archive, Star, Trash (both frontend and backend). Implement the search bar UI to call the search API.
@@ -21,7 +21,10 @@
     * Tasks: Build composer UI. Implement SMTP logic on the backend. Implement Reply/Forward. Implement "Undo Send."
 5. [ ] **Milestone 5: Quality of life**
     * Goal: Polish the MVP.
-    * Tasks: Auto-save drafts. Add keyboard shortcuts. Add pagination. Add IDLE and WebSocket connection.
+    * [ ] Tasks: Auto-save drafts.
+    * [x] Add keyboard shortcuts.
+    * [x] Add pagination.
+    * [x] Add IDLE and WebSocket connection.
 6. [ ] **Milestone 6: Offline**
     * Goal: Basic offline support.
     * Tasks: Implement IndexedDB caching for recently viewed emails. Build the sync logic.
@@ -30,10 +33,10 @@
 
 ### **2/7. 🔐 Authentication**
 
-- [ ]  Update `auth.ValidateToken()` in `middleware.go` to parse and validate JWT tokens from Authelia,
-  extract the user's email from the token claims, and verify the token's signature and expiration.
-  It's currently a stub, and it always returns "test@example.com".
-- [ ]  Update `frontend/src/hooks/useWebSocket.ts` to get actual JWT token instead of hardcoded "token"
+- [x]  Add `VMAIL_AUTH_MODE` config option: "dev" (stub auth) or "header" (trusts reverse proxy headers).
+  In header mode, backend reads `Remote-Email`/`Remote-User` headers from Caddy's forward_auth.
+- [x]  Update frontend to redirect to Authelia on 401 and remove hardcoded tokens.
+- [x]  Update WebSocket handler to support header-based auth.
 
 ### **2/8. 🔐 Proper basic functionality**
 
@@ -41,7 +44,8 @@
 - [ ] Sent emails are not part of threads in Inbox. Make sure they are included. I guess same for vice versa. Add backend test to cover this.
 - [x] Rewrite /scripts/check.sh in Go because the logic is too complex now. Also, make it run E2E tests just once, and log it when failed, AND run gofmt and pnpm lint:fix automatically.
 - [x] Write docs for how to run the app in dev mode, and in general to run it with a single command, forking to Go and the frontend, with Go having live reload. These things would be nice.
-- [ ] Ensure line-to-line debugging is possible for Go, and 
+- [x] Ensure line-to-line debugging is possible for Go 
+- [ ] Add a "Test IMAP and SMTP connections" button to the Settings page.
 
 ## Milestone 3: Actions
 

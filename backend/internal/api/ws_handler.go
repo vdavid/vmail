@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 
@@ -47,38 +48,56 @@ var wsUpgrader = websocket.Upgrader{
 }
 
 // Handle upgrades the HTTP connection to a WebSocket and registers it with the Hub.
-// Authentication is handled via query parameter (?token=...) since WebSocket connections
-// cannot set custom headers in browsers.
-// The token is validated using the same ValidateToken function used by the RequireAuth middleware.
+// Authentication depends on VMAIL_AUTH_MODE:
+//   - "header": Uses Remote-Email/Remote-User headers from reverse proxy (Caddy handles auth on upgrade).
+//   - "dev": Uses token from query parameter (?token=...) or Authorization header.
 func (h *WebSocketHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Extract token from the query parameter
-	token := r.URL.Query().Get("token")
-	if token == "" {
-		// Fallback to Authorization header if query parameter is not provided.
-		// This allows testing with tools that can set headers.
-		authHeader := r.Header.Get("Authorization")
-		if authHeader != "" {
-			fields := strings.Fields(authHeader)
-			if len(fields) >= 2 && strings.EqualFold(fields[0], "Bearer") {
-				token = strings.TrimSpace(strings.Join(fields[1:], " "))
+	authMode := os.Getenv("VMAIL_AUTH_MODE")
+	var userEmail string
+	var err error
+
+	if authMode == "header" {
+		// In header mode, Caddy's forward_auth handles the WebSocket upgrade request.
+		// Remote-Email/Remote-User headers are set by Caddy after Authelia validation.
+		userEmail = r.Header.Get("Remote-Email")
+		if userEmail == "" {
+			userEmail = r.Header.Get("Remote-User")
+		}
+		if userEmail == "" {
+			log.Printf("WebSocketHandler: No Remote-Email or Remote-User header present")
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+	} else {
+		// Dev mode: Extract token from query parameter or Authorization header
+		token := r.URL.Query().Get("token")
+		if token == "" {
+			// Fallback to Authorization header if query parameter is not provided.
+			// This allows testing with tools that can set headers.
+			authHeader := r.Header.Get("Authorization")
+			if authHeader != "" {
+				fields := strings.Fields(authHeader)
+				if len(fields) >= 2 && strings.EqualFold(fields[0], "Bearer") {
+					token = strings.TrimSpace(strings.Join(fields[1:], " "))
+				}
 			}
 		}
-	}
 
-	if token == "" {
-		log.Printf("WebSocketHandler: No token provided (neither query parameter nor Authorization header)")
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+		if token == "" {
+			log.Printf("WebSocketHandler: No token provided (neither query parameter nor Authorization header)")
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
 
-	// Validate token using the same function as the RequireAuth middleware.
-	userEmail, err := auth.ValidateToken(token)
-	if err != nil {
-		log.Printf("WebSocketHandler: Token validation failed: %v", err)
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
+		// Validate token using the same function as the RequireAuth middleware.
+		userEmail, err = auth.ValidateToken(token)
+		if err != nil {
+			log.Printf("WebSocketHandler: Token validation failed: %v", err)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
 	}
 
 	// Get or create the user by their email address.

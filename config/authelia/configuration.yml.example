@@ -1,0 +1,117 @@
+# Authelia Configuration for V-Mail
+#
+# Copy this file to configuration.yml and edit the values below.
+# For full documentation, see: https://www.authelia.com/configuration/
+#
+# IMPORTANT: Generate your own secrets! Run these commands:
+#   openssl rand -hex 32  # For jwt_secret
+#   openssl rand -hex 32  # For session.secret
+#   openssl rand -hex 32  # For storage.encryption_key
+
+# =============================================================================
+# REQUIRED: Edit these values
+# =============================================================================
+
+# Your domain settings
+# Replace "example.com" with your actual domain
+domain: example.com
+
+# The URL where Authelia will be accessible (for redirects)
+# Example: https://auth.example.com
+default_redirection_url: https://auth.example.com
+
+# =============================================================================
+# Secrets - GENERATE YOUR OWN!
+# =============================================================================
+
+# JWT secret for tokens (run: openssl rand -hex 32)
+jwt_secret: CHANGE_ME_GENERATE_WITH_openssl_rand_hex_32
+
+# Session secret (run: openssl rand -hex 32)
+session:
+  secret: CHANGE_ME_GENERATE_WITH_openssl_rand_hex_32
+  cookies:
+    - domain: example.com
+      authelia_url: https://auth.example.com
+      default_redirection_url: https://mail.example.com
+
+# Storage encryption key (run: openssl rand -hex 32)
+storage:
+  encryption_key: CHANGE_ME_GENERATE_WITH_openssl_rand_hex_32
+  local:
+    path: /config/db.sqlite3
+
+# =============================================================================
+# Server settings (usually don't need to change)
+# =============================================================================
+
+server:
+  address: tcp://0.0.0.0:9091
+
+log:
+  level: info
+
+# =============================================================================
+# Authentication backend - uses users.yml file
+# =============================================================================
+
+authentication_backend:
+  file:
+    path: /config/users.yml
+    password:
+      algorithm: argon2id
+
+# =============================================================================
+# Access control - protects your V-Mail instance
+# =============================================================================
+
+access_control:
+  default_policy: deny
+  rules:
+    # Allow access to V-Mail for authenticated users
+    - domain: mail.example.com
+      policy: one_factor
+    # Allow access to Authelia itself
+    - domain: auth.example.com
+      policy: bypass
+
+# =============================================================================
+# Session storage - uses Redis container
+# =============================================================================
+
+session:
+  name: authelia_session
+  expiration: 1h
+  inactivity: 5m
+  redis:
+    host: redis
+    port: 6379
+
+# =============================================================================
+# Notifications - for password resets and 2FA setup
+# =============================================================================
+
+# Option 1: Filesystem (for testing - emails written to /config/notifications.txt)
+notifier:
+  filesystem:
+    filename: /config/notifications.txt
+
+# Option 2: SMTP (for production - uncomment and configure)
+# notifier:
+#   smtp:
+#     host: smtp.example.com
+#     port: 587
+#     username: your-email@example.com
+#     password: your-smtp-password
+#     sender: "V-Mail Auth <auth@example.com>"
+
+# =============================================================================
+# Optional: Two-factor authentication
+# =============================================================================
+
+# Uncomment to enable TOTP (authenticator apps like Google Authenticator)
+# totp:
+#   issuer: V-Mail
+#   period: 30
+#   skew: 1
+

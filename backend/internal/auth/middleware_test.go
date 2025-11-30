@@ -7,6 +7,20 @@ import (
 	"testing"
 )
 
+// setAuthMode sets VMAIL_AUTH_MODE and returns a cleanup function.
+func setAuthMode(t *testing.T, mode string) func() {
+	t.Helper()
+	originalValue := os.Getenv("VMAIL_AUTH_MODE")
+	if err := os.Setenv("VMAIL_AUTH_MODE", mode); err != nil {
+		t.Fatalf("Failed to set VMAIL_AUTH_MODE: %v", err)
+	}
+	return func() {
+		if err := os.Setenv("VMAIL_AUTH_MODE", originalValue); err != nil {
+			t.Fatalf("Failed to restore VMAIL_AUTH_MODE: %v", err)
+		}
+	}
+}
+
 func TestRequireAuth(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		email, ok := GetUserEmailFromContext(r.Context())
@@ -24,7 +38,10 @@ func TestRequireAuth(t *testing.T) {
 
 	authHandler := RequireAuth(handler)
 
-	t.Run("allows request with valid Bearer token", func(t *testing.T) {
+	t.Run("allows request with valid Bearer token in dev mode", func(t *testing.T) {
+		cleanup := setAuthMode(t, "dev")
+		defer cleanup()
+
 		req := httptest.NewRequest("GET", "/test", nil)
 		req.Header.Set("Authorization", "Bearer valid_token_12345")
 
@@ -244,6 +261,109 @@ func TestValidateToken(t *testing.T) {
 			if err == nil {
 				t.Errorf("Expected error for token with empty email: %q", token)
 			}
+		}
+	})
+}
+
+func TestRequireAuthHeaderMode(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		email, ok := GetUserEmailFromContext(r.Context())
+		if !ok {
+			t.Error("Expected user email in context")
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte(email))
+		if err != nil {
+			t.Errorf("Failed to write response: %v", err)
+			return
+		}
+	})
+
+	authHandler := RequireAuth(handler)
+
+	t.Run("allows request with Remote-Email header", func(t *testing.T) {
+		cleanup := setAuthMode(t, "header")
+		defer cleanup()
+
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Remote-Email", "user@example.com")
+
+		rr := httptest.NewRecorder()
+		authHandler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", rr.Code)
+		}
+		if rr.Body.String() != "user@example.com" {
+			t.Errorf("Expected body 'user@example.com', got %s", rr.Body.String())
+		}
+	})
+
+	t.Run("allows request with Remote-User header when Remote-Email is missing", func(t *testing.T) {
+		cleanup := setAuthMode(t, "header")
+		defer cleanup()
+
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Remote-User", "testuser")
+
+		rr := httptest.NewRecorder()
+		authHandler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", rr.Code)
+		}
+		if rr.Body.String() != "testuser" {
+			t.Errorf("Expected body 'testuser', got %s", rr.Body.String())
+		}
+	})
+
+	t.Run("prefers Remote-Email over Remote-User", func(t *testing.T) {
+		cleanup := setAuthMode(t, "header")
+		defer cleanup()
+
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Remote-Email", "email@example.com")
+		req.Header.Set("Remote-User", "username")
+
+		rr := httptest.NewRecorder()
+		authHandler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", rr.Code)
+		}
+		if rr.Body.String() != "email@example.com" {
+			t.Errorf("Expected body 'email@example.com', got %s", rr.Body.String())
+		}
+	})
+
+	t.Run("rejects request without Remote-Email or Remote-User headers", func(t *testing.T) {
+		cleanup := setAuthMode(t, "header")
+		defer cleanup()
+
+		req := httptest.NewRequest("GET", "/test", nil)
+
+		rr := httptest.NewRecorder()
+		authHandler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusUnauthorized {
+			t.Errorf("Expected status 401, got %d", rr.Code)
+		}
+	})
+
+	t.Run("ignores Authorization header in header mode", func(t *testing.T) {
+		cleanup := setAuthMode(t, "header")
+		defer cleanup()
+
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Authorization", "Bearer some_token")
+
+		rr := httptest.NewRecorder()
+		authHandler.ServeHTTP(rr, req)
+
+		// Should fail because no Remote-* headers are present
+		if rr.Code != http.StatusUnauthorized {
+			t.Errorf("Expected status 401, got %d", rr.Code)
 		}
 	})
 }

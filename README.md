@@ -23,15 +23,86 @@ confusion.
 
 ## Running
 
-- Install [Authelia](https://www.authelia.com) and run it. Get its hostname, you'll need it.
-- Get your IMAP and SMTP credentials ready.
-- Clone this repo by `git clone git@github.com:vdavid/vmail.git && cd vmail`.
-- Run `cp .env.example .env` to create a private env file.
-- Edit the `.env` file and follow the instructions inside.
-- Make sure you have **Docker** and **Docker Compose** installed.
-- Run `docker compose up -d --build` to start the services.
-- Open `http://localhost:11764` in the browser (or configure port mapping if using Docker).
-- Log in with your Authelia credentials.
+### Prerequisites
+
+- **Docker and Docker Compose** installed
+- **A reverse proxy** (Caddy, Nginx, or Traefik) for HTTPS
+- Your **IMAP and SMTP credentials** ready
+
+### Option A: Bundled Authelia (easiest)
+
+V-Mail can run its own Authelia instance. This is the simplest setup if you don't already have Authelia.
+
+```bash
+git clone git@github.com:vdavid/vmail.git && cd vmail
+
+# Set up V-Mail config
+cp .env.example .env
+# Edit .env - see comments inside
+
+# Set up Authelia config
+cp config/authelia/configuration.yml.example config/authelia/configuration.yml
+cp config/authelia/users.yml.example config/authelia/users.yml
+# Edit both files - generate secrets and add your user (see comments inside)
+
+# Start everything
+docker compose -f docker-compose.yml -f docker-compose.with-authelia.yml up -d --build
+```
+
+Then configure your reverse proxy (example for Caddy):
+
+```
+# V-Mail (protected by Authelia)
+mail.example.com {
+    forward_auth localhost:9091 {
+        uri /api/verify?rd=https://auth.example.com
+        copy_headers Remote-User Remote-Email
+    }
+    reverse_proxy localhost:40941
+}
+
+# Authelia login portal
+auth.example.com {
+    reverse_proxy localhost:9091
+}
+```
+
+### Option B: Bring your own Authelia
+
+If you already have Authelia (or another forward_auth-compatible solution like Authentik), use the base compose file:
+
+```bash
+git clone git@github.com:vdavid/vmail.git && cd vmail
+cp .env.example .env
+# Edit .env - set VMAIL_AUTH_MODE=header and AUTHELIA_URL
+docker compose up -d --build
+```
+
+Configure your reverse proxy to do `forward_auth` to your existing Authelia instance.
+
+### Reverse proxy setup
+
+V-Mail uses Authelia for authentication via your reverse proxy's `forward_auth` feature.
+The reverse proxy intercepts requests, checks with Authelia, and passes auth headers to V-Mail.
+
+**Caddy example:**
+
+```
+mail.example.com {
+    forward_auth authelia:9091 {
+        uri /api/verify?rd=https://auth.example.com
+        copy_headers Remote-User Remote-Email
+    }
+    reverse_proxy localhost:40941
+}
+```
+
+For Nginx, see [Authelia's Nginx docs](https://www.authelia.com/integration/proxies/nginx/).
+
+**Important notes:**
+- HTTPS is required (Authelia cookies need secure context)
+- Never expose V-Mail directly to the internet without the reverse proxy
+- The header-based auth trusts `Remote-User`/`Remote-Email` headers from your proxy
 
 ## Tech stack
 

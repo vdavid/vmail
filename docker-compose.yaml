@@ -8,6 +8,10 @@ services:
     restart: unless-stopped
     networks:
       - vmail-internal
+    ports:
+      # Expose to host so your reverse proxy can reach it
+      # Using a random high port (40941) to avoid conflicts with common services
+      - "40941:8080"
     depends_on:
       - db
     environment:
@@ -16,18 +20,21 @@ services:
       - VMAIL_ENCRYPTION_KEY_BASE64=${VMAIL_ENCRYPTION_KEY_BASE64}
 
       # Postgres DB settings
-      - VMAIL_DB_HOST=${VMAIL_DB_HOST}
+      - VMAIL_DB_HOST=${VMAIL_DB_HOST:-db}
       - VMAIL_DB_PORT=5432
-      - VMAIL_DB_USER=${VMAIL_DB_USER}
+      - VMAIL_DB_USER=${VMAIL_DB_USER:-vmail}
       - VMAIL_DB_PASSWORD=${VMAIL_DB_PASSWORD}
       - VMAIL_DB_NAME=vmail
       - VMAIL_DB_SSLMODE=disable
 
-      # Authelia settings
-      - AUTHELIA_URL=${AUTHELIA_URL}
+      # Auth settings
+      # VMAIL_AUTH_MODE: "dev" for development (stub auth), "header" for production (reverse proxy headers)
+      # When using docker-compose.with-authelia.yml, this is overridden to "header"
+      - VMAIL_AUTH_MODE=${VMAIL_AUTH_MODE:-dev}
+      - AUTHELIA_URL=${AUTHELIA_URL:-}
 
       # Timezone
-      - TZ=${TZ}
+      - TZ=${TZ:-UTC}
 
   # Postgres DB
   db:
@@ -39,10 +46,10 @@ services:
     volumes:
       - vmail-db-data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_USERNAME=${VMAIL_DB_USER}
+      - POSTGRES_USER=${VMAIL_DB_USER:-vmail}
       - POSTGRES_PASSWORD=${VMAIL_DB_PASSWORD}
       - POSTGRES_DB=vmail
-      - TZ=${TZ}
+      - TZ=${TZ:-UTC}
 
 # Volumes for persistent data
 volumes:

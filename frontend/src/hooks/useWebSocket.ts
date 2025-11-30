@@ -39,18 +39,24 @@ export function useWebSocket() {
 
         setStatus('connecting')
 
-        // Get the token (currently hardcoded as "token", same as used in API calls).
-        // TODO: When Authelia is implemented, this should get the actual JWT token.
-        const token = 'token'
-
         const wsEnvUrl = import.meta.env.VITE_WS_URL as string | undefined
+        const autheliaUrl = import.meta.env.VITE_AUTHELIA_URL as string | undefined
         let wsUrl: string
+
         if (wsEnvUrl && wsEnvUrl.length > 0) {
             wsUrl = wsEnvUrl
         } else {
             const baseUrl = `${window.location.origin.replace(/^http/, 'ws')}/api/v1/ws`
-            // Append token as query parameter since WebSocket connections can't set headers.
-            wsUrl = `${baseUrl}?token=${encodeURIComponent(token)}`
+
+            // In production (with Authelia), the reverse proxy handles auth via headers
+            // on the WebSocket upgrade request. No token needed in the URL.
+            // In dev mode (no Authelia URL), we pass a stub token for the backend.
+            if (autheliaUrl) {
+                wsUrl = baseUrl
+            } else {
+                // Dev mode: pass a stub token
+                wsUrl = `${baseUrl}?token=token`
+            }
         }
 
         // Connect

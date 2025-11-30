@@ -16,10 +16,15 @@ type Config struct {
 	// Environment is the deployment environment (development, production, etc.).
 	// Defaults to "development" if VMAIL_ENV is not set.
 	Environment string
+	// AuthMode controls how the backend authenticates requests.
+	// "dev": Uses stub auth that returns "test@example.com" (default for development).
+	// "header": Trusts Remote-User/Remote-Email headers from reverse proxy (for production with Authelia).
+	AuthMode string
 	// EncryptionKeyBase64 is the base64-encoded encryption key used for encrypting/decrypting
 	// user credentials. Must be 32 bytes when decoded (44 characters in base64).
 	EncryptionKeyBase64 string
 	// AutheliaURL is the base URL of the Authelia authentication server.
+	// Required when AuthMode is "header", optional otherwise.
 	AutheliaURL string
 	// DBHost is the PostgreSQL database hostname. Defaults to "localhost".
 	DBHost string
@@ -68,6 +73,7 @@ func NewConfig() (*Config, error) {
 
 	config := &Config{
 		Environment:         env,
+		AuthMode:            getEnvOrDefault("VMAIL_AUTH_MODE", "dev"),
 		EncryptionKeyBase64: os.Getenv("VMAIL_ENCRYPTION_KEY_BASE64"),
 		AutheliaURL:         os.Getenv("AUTHELIA_URL"),
 		DBHost:              getEnvOrDefault("VMAIL_DB_HOST", "localhost"),
@@ -90,6 +96,11 @@ func NewConfig() (*Config, error) {
 
 // Validate checks that all required configuration values are set and valid.
 func (c *Config) Validate() error {
+	// Validate AuthMode: must be "dev" or "header"
+	if c.AuthMode != "dev" && c.AuthMode != "header" {
+		return fmt.Errorf("VMAIL_AUTH_MODE must be 'dev' or 'header', got: %s", c.AuthMode)
+	}
+
 	if c.EncryptionKeyBase64 == "" {
 		return fmt.Errorf("VMAIL_ENCRYPTION_KEY_BASE64 is required")
 	}
@@ -103,17 +114,20 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("VMAIL_ENCRYPTION_KEY_BASE64 must decode to 32 bytes, got %d bytes", len(decoded))
 	}
 
-	if c.AutheliaURL == "" {
-		return fmt.Errorf("AUTHELIA_URL is required")
-	}
+	// AutheliaURL is only required when AuthMode is "header"
+	if c.AuthMode == "header" {
+		if c.AutheliaURL == "" {
+			return fmt.Errorf("AUTHELIA_URL is required when VMAIL_AUTH_MODE is 'header'")
+		}
 
-	// Validate AutheliaURL format: must be a valid URL with http or https scheme
-	parsedURL, err := url.Parse(c.AutheliaURL)
-	if err != nil {
-		return fmt.Errorf("AUTHELIA_URL is not a valid URL: %w", err)
-	}
-	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return fmt.Errorf("AUTHELIA_URL must use http:// or https:// scheme, got: %s", parsedURL.Scheme)
+		// Validate AutheliaURL format: must be a valid URL with http or https scheme
+		parsedURL, err := url.Parse(c.AutheliaURL)
+		if err != nil {
+			return fmt.Errorf("AUTHELIA_URL is not a valid URL: %w", err)
+		}
+		if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+			return fmt.Errorf("AUTHELIA_URL must use http:// or https:// scheme, got: %s", parsedURL.Scheme)
+		}
 	}
 
 	if c.DBPassword == "" {

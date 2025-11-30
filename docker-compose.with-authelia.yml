@@ -1,0 +1,47 @@
+# Bundled Authelia setup for V-Mail
+#
+# Use this overlay when you want V-Mail to manage its own Authelia instance.
+# Run with: docker compose -f docker-compose.yml -f docker-compose.with-authelia.yml up -d
+#
+# Before starting:
+# 1. Copy config/authelia/configuration.yml.example to config/authelia/configuration.yml
+# 2. Copy config/authelia/users.yml.example to config/authelia/users.yml
+# 3. Edit both files - see comments inside for guidance
+# 4. Generate secrets (see configuration.yml for instructions)
+# 5. Set AUTHELIA_URL in your .env to your Authelia's public URL (for example, https://auth.example.com)
+
+services:
+  # Authelia - authentication server
+  authelia:
+    image: authelia/authelia:latest
+    container_name: vmail-authelia
+    restart: unless-stopped
+    networks:
+      - vmail-internal
+    ports:
+      # Expose to host so your reverse proxy can reach it
+      - "9091:9091"
+    volumes:
+      - ./config/authelia:/config
+    environment:
+      - TZ=${TZ:-UTC}
+    depends_on:
+      - redis
+
+  # Redis - session storage for Authelia
+  redis:
+    image: redis:alpine
+    container_name: vmail-redis
+    restart: unless-stopped
+    networks:
+      - vmail-internal
+    volumes:
+      - vmail-redis-data:/data
+    environment:
+      - TZ=${TZ:-UTC}
+
+  # Override V-Mail to use header-based auth
+  vmail:
+    environment:
+      - VMAIL_AUTH_MODE=header
+
