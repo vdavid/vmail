@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/emersion/go-imap"
@@ -208,7 +209,19 @@ func (s *Service) getOrCreateThread(ctx context.Context, userID, stableThreadID 
 }
 
 // processMessage processes a single message and saves it to the database.
+// It uses References and In-Reply-To headers for cross-folder threading when available.
 func (s *Service) processMessage(ctx context.Context, imapMsg *imap.Message, rootUID uint32, stableThreadID string, userID, folderName string, uidToMessageMap map[uint32]*imap.Message) error {
+	// Check for cross-folder threading via References or In-Reply-To
+	// This allows messages from Sent to link to threads in Inbox (and vice versa)
+	references := ExtractReferences(imapMsg)
+	if imapMsg.Envelope != nil && (len(references) > 0 || imapMsg.Envelope.InReplyTo != "") {
+		crossFolderStableID, err := s.determineStableThreadID(ctx, userID, imapMsg.Envelope.MessageId, imapMsg.Envelope.InReplyTo, references)
+		if err == nil && crossFolderStableID != imapMsg.Envelope.MessageId {
+			// Found a parent in another folder - use that thread
+			stableThreadID = crossFolderStableID
+		}
+	}
+
 	threadModel, err := s.getOrCreateThread(ctx, userID, stableThreadID, rootUID, uidToMessageMap)
 	if err != nil {
 		return err
@@ -404,8 +417,11 @@ func (s *Service) processFullSyncMessages(ctx context.Context, messages []*imap.
 
 // SyncThreadsForFolder syncs threads from IMAP for a specific folder.
 // Uses incremental sync if possible (only syncs new messages since last sync).
+// After syncing, it completes thread chains by fetching referenced messages from other folders.
 func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName string) error {
-	return s.withClientAndSelectFolder(ctx, userID, folderName, func(client *imapclient.Client, mbox *imap.MailboxStatus) error {
+	var syncedMessages []*imap.Message
+
+	err := s.withClientAndSelectFolder(ctx, userID, folderName, func(client *imapclient.Client, mbox *imap.MailboxStatus) error {
 
 		// Check if we can do incremental sync
 		syncInfo, err := db.GetFolderSyncInfo(ctx, s.dbPool, userID, folderName)
@@ -427,6 +443,7 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 			}
 			log.Printf("IMAP Sync: Fetched %d message headers for user %s, folder %s", len(messages), userID, folderName)
 			s.processIncrementalMessages(ctx, messages, userID, folderName)
+			syncedMessages = messages // Capture for thread chain completion
 
 			// Update sync info with the highest UID
 			highestUIDInt64 := int64(incResult.highestUID)
@@ -453,6 +470,7 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 		}
 
 		log.Printf("IMAP Sync: Fetched %d message headers for user %s, folder %s", len(messages), userID, folderName)
+		syncedMessages = messages // Capture for thread chain completion
 
 		// Process messages: use thread structure if available, otherwise use incremental processing
 		threadMaps := fullResult.threadMaps
@@ -481,13 +499,28 @@ func (s *Service) SyncThreadsForFolder(ctx context.Context, userID, folderName s
 
 		return nil
 	})
+
+	if err != nil {
+		return err
+	}
+
+	// Complete thread chains by fetching missing parent and child messages from other folders
+	if len(syncedMessages) > 0 {
+		s.completeThreadChains(ctx, syncedMessages, userID, folderName)
+	}
+
+	return nil
 }
 
 // processIncrementalMessage processes a single message during incremental sync.
 // It matches the message to an existing thread or creates a new one.
-// For simplicity, we use the message's own Message-ID to match threads.
-// If the Message-ID matches a thread's stable ID, it's the root message of that thread.
-// Otherwise, we create a new thread. Full sync will correct any threading issues.
+//
+// Threading logic:
+//  1. If the message has References, use the first Message-ID (the root)
+//  2. If no References but has In-Reply-To, look up the parent message
+//  3. If parent is found, use the parent's thread (cross-folder threading)
+//  4. If parent not found, use In-Reply-To or References[0] as stable thread ID
+//  5. If no threading headers, use the message's own Message-ID as the stable thread ID
 func (s *Service) processIncrementalMessage(ctx context.Context, imapMsg *imap.Message, userID, folderName string) error {
 	if imapMsg.Envelope == nil || len(imapMsg.Envelope.MessageId) == 0 {
 		log.Printf("Warning: Message UID %d has no Message-ID, skipping", imapMsg.Uid)
@@ -495,44 +528,19 @@ func (s *Service) processIncrementalMessage(ctx context.Context, imapMsg *imap.M
 	}
 
 	messageID := imapMsg.Envelope.MessageId
+	inReplyTo := imapMsg.Envelope.InReplyTo
+	references := ExtractReferences(imapMsg)
 
-	// For incremental sync, we use a simplified approach:
-	// 1. Try to find a thread where this Message-ID is the stable thread ID (root message)
-	// 2. If not found, check if this message is already in the DB (might be a reply)
-	// 3. If still not found, create a new thread with this Message-ID as root
-	// Note: This is a simplification - full sync will correct threading using THREAD command
-
-	// First, try to find the thread by Message-ID (this works for root messages)
-	threadModel, err := db.GetThreadByStableID(ctx, s.dbPool, userID, messageID)
+	// Determine the stable thread ID using threading logic
+	stableThreadID, err := s.determineStableThreadID(ctx, userID, messageID, inReplyTo, references)
 	if err != nil {
-		if !errors.Is(err, db.ErrThreadNotFound) {
-			return fmt.Errorf("failed to get thread: %w", err)
-		}
+		return err
+	}
 
-		// Thread was not found - check if this message already exists (might be a reply to an existing thread)
-		existingMsg, err := db.GetMessageByMessageID(ctx, s.dbPool, userID, messageID)
-		if err == nil && existingMsg != nil {
-			// Message already exists, get its thread
-			threadModel, err = db.GetThreadByID(ctx, s.dbPool, existingMsg.ThreadID)
-			if err != nil {
-				return fmt.Errorf("failed to get existing message's thread: %w", err)
-			}
-		} else {
-			// New message - create a new thread
-			// For incremental sync, we'll use this message's Message-ID as the stable ID
-			// Full sync will correct this if it's actually a reply
-			threadModel = &models.Thread{
-				UserID:         userID,
-				StableThreadID: messageID,
-				Subject:        "",
-			}
-			if imapMsg.Envelope != nil {
-				threadModel.Subject = imapMsg.Envelope.Subject
-			}
-			if err := db.SaveThread(ctx, s.dbPool, threadModel); err != nil {
-				return fmt.Errorf("failed to save thread: %w", err)
-			}
-		}
+	// Get or create the thread
+	threadModel, err := s.getOrCreateThreadForMessage(ctx, userID, messageID, stableThreadID, imapMsg.Envelope.Subject)
+	if err != nil {
+		return err
 	}
 
 	// Parse and save the message
@@ -546,6 +554,101 @@ func (s *Service) processIncrementalMessage(ctx context.Context, imapMsg *imap.M
 	}
 
 	return nil
+}
+
+// determineStableThreadID determines the stable thread ID for a message.
+// It uses References and In-Reply-To headers to link messages across folders.
+// The References header is preferred because it contains the full chain from root to parent.
+func (s *Service) determineStableThreadID(ctx context.Context, userID, messageID, inReplyTo string, references []string) (string, error) {
+	// Clean up In-Reply-To (some servers wrap it in quotes)
+	inReplyTo = strings.Trim(inReplyTo, "'")
+
+	// If we have References header, the first entry is always the root message
+	// This is the most reliable way to determine the thread
+	if len(references) > 0 {
+		rootRef := strings.Trim(references[0], "'")
+
+		// Check if root message exists in DB
+		rootMsg, err := db.GetMessageByMessageID(ctx, s.dbPool, userID, rootRef)
+		if err == nil && rootMsg != nil {
+			// Found root - get its thread's stable ID
+			rootThread, err := db.GetThreadByID(ctx, s.dbPool, rootMsg.ThreadID)
+			if err == nil && rootThread != nil {
+				return rootThread.StableThreadID, nil
+			}
+		}
+
+		// Root not found in DB - check if there's a thread with root ref as stable ID
+		_, err = db.GetThreadByStableID(ctx, s.dbPool, userID, rootRef)
+		if err == nil {
+			return rootRef, nil
+		}
+
+		// No thread exists for root - use root ref as stable thread ID
+		// This ensures all messages in the chain use the same stable ID
+		return rootRef, nil
+	}
+
+	// No References header - fall back to In-Reply-To
+	if inReplyTo != "" {
+		// Look up parent message by its Message-ID
+		parentMsg, err := db.GetMessageByMessageID(ctx, s.dbPool, userID, inReplyTo)
+		if err == nil && parentMsg != nil {
+			// Found parent - get its thread's stable ID for consistency
+			parentThread, err := db.GetThreadByID(ctx, s.dbPool, parentMsg.ThreadID)
+			if err == nil && parentThread != nil {
+				return parentThread.StableThreadID, nil
+			}
+		}
+
+		// Parent message not found - check if there's already a thread with In-Reply-To as stable ID
+		_, err = db.GetThreadByStableID(ctx, s.dbPool, userID, inReplyTo)
+		if err == nil {
+			return inReplyTo, nil
+		}
+
+		// No parent found - use In-Reply-To as stable thread ID
+		return inReplyTo, nil
+	}
+
+	// No References or In-Reply-To - this is a root message, use its own Message-ID
+	return messageID, nil
+}
+
+// getOrCreateThreadForMessage gets an existing thread or creates a new one.
+func (s *Service) getOrCreateThreadForMessage(ctx context.Context, userID, messageID, stableThreadID, subject string) (*models.Thread, error) {
+	// First, check if this message already exists (might be synced from another folder)
+	existingMsg, err := db.GetMessageByMessageID(ctx, s.dbPool, userID, messageID)
+	if err == nil && existingMsg != nil {
+		// Message already exists - use its thread
+		threadModel, err := db.GetThreadByID(ctx, s.dbPool, existingMsg.ThreadID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get existing message's thread: %w", err)
+		}
+		return threadModel, nil
+	}
+
+	// Try to find an existing thread by the stable thread ID
+	threadModel, err := db.GetThreadByStableID(ctx, s.dbPool, userID, stableThreadID)
+	if err == nil {
+		return threadModel, nil
+	}
+
+	if !errors.Is(err, db.ErrThreadNotFound) {
+		return nil, fmt.Errorf("failed to get thread: %w", err)
+	}
+
+	// Create a new thread
+	threadModel = &models.Thread{
+		UserID:         userID,
+		StableThreadID: stableThreadID,
+		Subject:        subject,
+	}
+	if err := db.SaveThread(ctx, s.dbPool, threadModel); err != nil {
+		return nil, fmt.Errorf("failed to save thread: %w", err)
+	}
+
+	return threadModel, nil
 }
 
 // updateThreadCountInBackground updates the thread count in the background.
@@ -682,6 +785,234 @@ func (s *Service) ShouldSyncFolder(ctx context.Context, userID, folderName strin
 
 	age := time.Since(*syncInfo.SyncedAt)
 	return age > s.cacheTTL, nil
+}
+
+// completeThreadChains fetches missing parent AND child messages for the given messages.
+// Parents: Messages referenced in References/In-Reply-To headers
+// Children: Messages in other folders that have In-Reply-To pointing to the synced messages
+// This enables complete cross-folder threading.
+func (s *Service) completeThreadChains(ctx context.Context, messages []*imap.Message, userID, currentFolder string) {
+	// Collect Message-IDs for both parent and child lookup
+	allRefs := make(map[string]bool)      // References to look up (parents)
+	syncedMsgIDs := make(map[string]bool) // Message-IDs of synced messages (to find children)
+
+	for _, msg := range messages {
+		if msg.Envelope != nil && msg.Envelope.MessageId != "" {
+			syncedMsgIDs[msg.Envelope.MessageId] = true
+		}
+
+		refs := ExtractReferences(msg)
+		for _, ref := range refs {
+			ref = strings.Trim(ref, "'")
+			allRefs[ref] = true
+		}
+		if msg.Envelope != nil && msg.Envelope.InReplyTo != "" {
+			inReplyTo := strings.Trim(msg.Envelope.InReplyTo, "'")
+			allRefs[inReplyTo] = true
+		}
+	}
+
+	// Fetch missing parent messages (messages referenced by synced messages)
+	if len(allRefs) > 0 {
+		missingRefs := s.findMissingMessageIDs(ctx, userID, allRefs)
+		if len(missingRefs) > 0 {
+			log.Printf("Thread chain completion: Found %d missing parent references, fetching...", len(missingRefs))
+			s.fetchMissingMessages(ctx, userID, missingRefs)
+		}
+	}
+
+	// Fetch child messages (messages in other folders that reference synced messages)
+	if len(syncedMsgIDs) > 0 {
+		s.fetchChildMessages(ctx, userID, syncedMsgIDs, currentFolder)
+	}
+}
+
+// fetchChildMessages searches other folders for messages that have In-Reply-To
+// pointing to any of the given Message-IDs, and fetches them.
+func (s *Service) fetchChildMessages(ctx context.Context, userID string, parentMsgIDs map[string]bool, currentFolder string) {
+	// Folders to search for children (skip the current folder since we just synced it)
+	searchFolders := []string{"INBOX", "Sent"}
+
+	for _, folderName := range searchFolders {
+		if folderName == currentFolder {
+			continue // Skip current folder
+		}
+
+		s.searchAndFetchChildrenInFolder(ctx, userID, folderName, parentMsgIDs)
+	}
+}
+
+// searchAndFetchChildrenInFolder searches a folder for messages with In-Reply-To
+// matching any of the parent Message-IDs and fetches them.
+func (s *Service) searchAndFetchChildrenInFolder(ctx context.Context, userID, folderName string, parentMsgIDs map[string]bool) {
+	err := s.withClientAndSelectFolder(ctx, userID, folderName, func(client *imapclient.Client, mbox *imap.MailboxStatus) error {
+		for parentMsgID := range parentMsgIDs {
+			// Check if we already have a child for this parent in this folder
+			// Search for messages with In-Reply-To matching the parent
+			criteria := imap.NewSearchCriteria()
+			criteria.Header.Add("In-Reply-To", parentMsgID)
+
+			uids, err := client.UidSearch(criteria)
+			if err != nil || len(uids) == 0 {
+				continue
+			}
+
+			// Check which of these are missing from DB
+			for _, uid := range uids {
+				existingMsg, _ := db.GetMessageByUID(ctx, s.dbPool, userID, folderName, int64(uid))
+				if existingMsg != nil {
+					continue // Already have this message
+				}
+
+				// Fetch and save the message
+				msgs, err := FetchMessageHeaders(client, []uint32{uid})
+				if err != nil || len(msgs) == 0 {
+					continue
+				}
+
+				imapMsg := msgs[0]
+				if imapMsg.Envelope == nil {
+					continue
+				}
+
+				// Determine thread ID
+				inReplyTo := strings.Trim(imapMsg.Envelope.InReplyTo, "'")
+				references := ExtractReferences(imapMsg)
+				stableThreadID, err := s.determineStableThreadID(ctx, userID, imapMsg.Envelope.MessageId, inReplyTo, references)
+				if err != nil {
+					continue
+				}
+
+				threadModel, err := s.getOrCreateThreadForMessage(ctx, userID, imapMsg.Envelope.MessageId, stableThreadID, imapMsg.Envelope.Subject)
+				if err != nil {
+					continue
+				}
+
+				msg, err := ParseMessage(imapMsg, threadModel.ID, userID, folderName)
+				if err != nil {
+					continue
+				}
+
+				if err := db.SaveMessage(ctx, s.dbPool, msg); err == nil {
+					log.Printf("Thread chain completion: Fetched child message from %s (In-Reply-To: %s)", folderName, parentMsgID)
+				}
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		log.Printf("Warning: Failed to search folder %s for child messages: %v", folderName, err)
+	}
+}
+
+// findMissingMessageIDs checks which Message-IDs are not in the database.
+func (s *Service) findMissingMessageIDs(ctx context.Context, userID string, refs map[string]bool) []string {
+	missing := make([]string, 0)
+	for ref := range refs {
+		msg, err := db.GetMessageByMessageID(ctx, s.dbPool, userID, ref)
+		if err != nil || msg == nil {
+			missing = append(missing, ref)
+		}
+	}
+	return missing
+}
+
+// fetchMissingMessages searches for and fetches messages by their Message-IDs.
+// It searches across Inbox and Sent folders (the most common for threading) to find messages.
+func (s *Service) fetchMissingMessages(ctx context.Context, userID string, missingRefs []string) {
+	// Search in the most common folders for cross-folder threading
+	// INBOX and Sent cover 99% of threading cases
+	searchFolders := []string{"INBOX", "Sent"}
+
+	// Track which Message-IDs we still need to find
+	stillMissing := make(map[string]bool)
+	for _, ref := range missingRefs {
+		stillMissing[ref] = true
+	}
+
+	// Search each folder for missing messages
+	for _, folderName := range searchFolders {
+		if len(stillMissing) == 0 {
+			break // Found all messages
+		}
+
+		found := s.searchAndFetchInFolder(ctx, userID, folderName, stillMissing)
+		for _, msgID := range found {
+			delete(stillMissing, msgID)
+		}
+	}
+
+	if len(stillMissing) > 0 {
+		log.Printf("Thread chain completion: Could not find %d referenced messages", len(stillMissing))
+	}
+}
+
+// searchAndFetchInFolder searches for Message-IDs in a specific folder and fetches them.
+// Returns the list of Message-IDs that were found and fetched.
+func (s *Service) searchAndFetchInFolder(ctx context.Context, userID, folderName string, messageIDs map[string]bool) []string {
+	found := make([]string, 0)
+
+	err := s.withClientAndSelectFolder(ctx, userID, folderName, func(client *imapclient.Client, mbox *imap.MailboxStatus) error {
+		for msgID := range messageIDs {
+			// Search for message by Message-ID header
+			criteria := imap.NewSearchCriteria()
+			criteria.Header.Add("Message-ID", msgID)
+
+			uids, err := client.UidSearch(criteria)
+			if err != nil {
+				continue // Skip this Message-ID, try next
+			}
+
+			if len(uids) == 0 {
+				continue // Not in this folder
+			}
+
+			// Fetch and save the message
+			messages, err := FetchMessageHeaders(client, uids)
+			if err != nil {
+				continue
+			}
+
+			for _, imapMsg := range messages {
+				if imapMsg.Envelope == nil {
+					continue
+				}
+
+				// Determine the stable thread ID for this message
+				inReplyTo := strings.Trim(imapMsg.Envelope.InReplyTo, "'")
+				references := ExtractReferences(imapMsg)
+				stableThreadID, err := s.determineStableThreadID(ctx, userID, imapMsg.Envelope.MessageId, inReplyTo, references)
+				if err != nil {
+					continue
+				}
+
+				// Get or create thread
+				threadModel, err := s.getOrCreateThreadForMessage(ctx, userID, imapMsg.Envelope.MessageId, stableThreadID, imapMsg.Envelope.Subject)
+				if err != nil {
+					continue
+				}
+
+				// Parse and save the message
+				msg, err := ParseMessage(imapMsg, threadModel.ID, userID, folderName)
+				if err != nil {
+					continue
+				}
+
+				if err := db.SaveMessage(ctx, s.dbPool, msg); err == nil {
+					found = append(found, imapMsg.Envelope.MessageId)
+					log.Printf("Thread chain completion: Fetched message %s from %s", msgID, folderName)
+				}
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		log.Printf("Warning: Failed to search folder %s for thread completion: %v", folderName, err)
+	}
+
+	return found
 }
 
 // Close closes the service and cleans up connections.

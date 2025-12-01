@@ -204,6 +204,13 @@ func setupTestUser(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, 
 		log.Println("Synced INBOX folder to database")
 	}
 
+	// Sync Sent folder for cross-folder threading support
+	if err := imapService.SyncThreadsForFolder(ctx, userID, "Sent"); err != nil {
+		log.Printf("Warning: Failed to sync Sent folder: %v", err)
+	} else {
+		log.Println("Synced Sent folder to database")
+	}
+
 	return nil
 }
 

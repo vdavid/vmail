@@ -98,7 +98,7 @@ func GetThreadsForFolder(ctx context.Context, pool *pgxpool.Pool, userID, folder
             t.user_id, 
             t.stable_thread_id, 
             t.subject, 
-            MAX(m2.sent_at) AS last_sent_at,
+            (SELECT MAX(m2.sent_at) FROM messages m2 WHERE m2.thread_id = t.id) AS last_sent_at,
             (SELECT m3.from_address 
              FROM messages m3 
              WHERE m3.thread_id = t.id 
@@ -116,10 +116,9 @@ func GetThreadsForFolder(ctx context.Context, pool *pgxpool.Pool, userID, folder
                 WHERE m5.thread_id = t.id 
                 AND a.is_inline = false
             ) AS has_attachments,
-            COUNT(DISTINCT m.id) AS message_count
+            (SELECT COUNT(*) FROM messages m6 WHERE m6.thread_id = t.id) AS message_count
         FROM threads t
         INNER JOIN messages m ON t.id = m.thread_id
-        LEFT JOIN messages m2 ON m2.thread_id = t.id
         WHERE t.user_id = $1 AND m.imap_folder_name = $2
         GROUP BY t.id, t.user_id, t.stable_thread_id, t.subject
         ORDER BY last_sent_at DESC NULLS LAST

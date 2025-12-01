@@ -14,7 +14,23 @@ import (
 var ErrMessageNotFound = errors.New("message not found")
 
 // SaveMessage saves or updates a message in the database.
+// If a message with the same Message-ID already exists for this user in a DIFFERENT folder,
+// it is skipped to avoid duplicates (e.g., when you email yourself, the same message appears in both
+// Inbox and Sent with the same Message-ID).
+// Updates to the same folder+UID are allowed (for refreshing message data).
 func SaveMessage(ctx context.Context, pool *pgxpool.Pool, message *models.Message) error {
+	// Check if message with same Message-ID already exists for this user in a different folder
+	if message.MessageIDHeader != "" {
+		existing, err := GetMessageByMessageID(ctx, pool, message.UserID, message.MessageIDHeader)
+		if err == nil && existing != nil {
+			// Message exists - only skip if it's in a different folder (true duplicate)
+			if existing.IMAPFolderName != message.IMAPFolderName {
+				return nil
+			}
+			// Same folder - this is an update, allow it
+		}
+	}
+
 	var id string
 	err := pool.QueryRow(ctx, `
 		INSERT INTO messages (

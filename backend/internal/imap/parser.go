@@ -143,3 +143,55 @@ func ExtractStableThreadID(envelope *imap.Envelope) string {
 	}
 	return envelope.MessageId
 }
+
+// ExtractReferences extracts the References header from an IMAP message.
+// The References header contains a space-separated list of Message-IDs
+// from the root message to the parent (the message being replied to).
+// Returns nil if no References header is found.
+func ExtractReferences(imapMsg *imap.Message) []string {
+	if imapMsg == nil || imapMsg.Body == nil {
+		return nil
+	}
+
+	// Find the References header in the Body map
+	for key, reader := range imapMsg.Body {
+		// Check if this is the References header section
+		if strings.Contains(strings.ToUpper(string(key.FetchItem())), "REFERENCES") {
+			data, err := io.ReadAll(reader)
+			if err != nil {
+				return nil
+			}
+			return parseReferencesHeader(string(data))
+		}
+	}
+
+	return nil
+}
+
+// parseReferencesHeader parses the References header value into a slice of Message-IDs.
+func parseReferencesHeader(header string) []string {
+	header = strings.TrimSpace(header)
+	lowerHeader := strings.ToLower(header)
+	if strings.HasPrefix(lowerHeader, "references:") {
+		header = strings.TrimSpace(header[11:])
+	}
+
+	if header == "" {
+		return nil
+	}
+
+	parts := strings.Fields(header)
+	refs := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.Trim(part, "'\"")
+		if part != "" {
+			refs = append(refs, part)
+		}
+	}
+
+	if len(refs) == 0 {
+		return nil
+	}
+
+	return refs
+}

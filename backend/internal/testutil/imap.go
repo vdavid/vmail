@@ -258,6 +258,21 @@ func (s *TestIMAPServer) EnsureINBOX(t *testing.T) {
 // AddMessage adds a test message to the specified folder and returns its UID.
 func (s *TestIMAPServer) AddMessage(t *testing.T, folderName, messageID, subject, from, to string, sentAt time.Time) uint32 {
 	t.Helper()
+	return s.AddMessageWithReplyTo(t, folderName, messageID, subject, from, to, "", sentAt)
+}
+
+// AddMessageWithReplyTo adds a test message with an In-Reply-To header and returns its UID.
+// Use this to test cross-folder threading where replies reference parent messages.
+func (s *TestIMAPServer) AddMessageWithReplyTo(t *testing.T, folderName, messageID, subject, from, to, inReplyTo string, sentAt time.Time) uint32 {
+	t.Helper()
+	return s.AddMessageWithReferences(t, folderName, messageID, subject, from, to, inReplyTo, nil, sentAt)
+}
+
+// AddMessageWithReferences adds a test message with In-Reply-To and References headers.
+// references is a slice of Message-IDs from root to parent (can be nil for no references).
+// Use this to test cross-folder threading with full reference chains.
+func (s *TestIMAPServer) AddMessageWithReferences(t *testing.T, folderName, messageID, subject, from, to, inReplyTo string, references []string, sentAt time.Time) uint32 {
+	t.Helper()
 
 	client, cleanup := s.Connect(t)
 	defer cleanup()
@@ -268,16 +283,30 @@ func (s *TestIMAPServer) AddMessage(t *testing.T, folderName, messageID, subject
 		t.Fatalf("Failed to select folder: %v", err)
 	}
 
-	// Create a simple RFC 822 message
-	messageBody := fmt.Sprintf(`Message-ID: %s
-Date: %s
-From: %s
-To: %s
-Subject: %s
-Content-Type: text/plain; charset=utf-8
+	// Build In-Reply-To header if provided
+	inReplyToHeader := ""
+	if inReplyTo != "" {
+		inReplyToHeader = "In-Reply-To: " + inReplyTo + "\r\n"
+	}
 
-Test message body.
-`, messageID, sentAt.Format(time.RFC1123Z), from, to, subject)
+	// Build References header if provided
+	referencesHeader := ""
+	if len(references) > 0 {
+		referencesHeader = "References: " + strings.Join(references, " ") + "\r\n"
+	}
+
+	// Create a simple RFC 822 message with proper CRLF line endings
+	// RFC 822 requires CRLF for line termination
+	messageBody := "Message-ID: " + messageID + "\r\n" +
+		"Date: " + sentAt.Format(time.RFC1123Z) + "\r\n" +
+		"From: " + from + "\r\n" +
+		"To: " + to + "\r\n" +
+		"Subject: " + subject + "\r\n" +
+		inReplyToHeader +
+		referencesHeader +
+		"Content-Type: text/plain; charset=utf-8\r\n" +
+		"\r\n" +
+		"Test message body.\r\n"
 
 	// Append the message to the folder
 	flags := []string{imap.SeenFlag}
@@ -403,6 +432,18 @@ func (s *TestIMAPServer) EnsureINBOXForE2E() error {
 
 // AddMessageForE2E adds a test message to the specified folder and returns its UID (non-test context).
 func (s *TestIMAPServer) AddMessageForE2E(folderName, messageID, subject, from, to string, sentAt time.Time) (uint32, error) {
+	return s.AddMessageWithReplyToForE2E(folderName, messageID, subject, from, to, "", sentAt)
+}
+
+// AddMessageWithReplyToForE2E adds a test message with an In-Reply-To header (non-test context).
+// Use this to test cross-folder threading where replies reference parent messages.
+func (s *TestIMAPServer) AddMessageWithReplyToForE2E(folderName, messageID, subject, from, to, inReplyTo string, sentAt time.Time) (uint32, error) {
+	return s.AddMessageWithReferencesForE2E(folderName, messageID, subject, from, to, inReplyTo, nil, sentAt)
+}
+
+// AddMessageWithReferencesForE2E adds a test message with In-Reply-To and References headers (non-test context).
+// references is a slice of Message-IDs from root to parent (can be nil for no references).
+func (s *TestIMAPServer) AddMessageWithReferencesForE2E(folderName, messageID, subject, from, to, inReplyTo string, references []string, sentAt time.Time) (uint32, error) {
 	client, err := s.ConnectForE2E()
 	if err != nil {
 		return 0, err
@@ -417,16 +458,30 @@ func (s *TestIMAPServer) AddMessageForE2E(folderName, messageID, subject, from, 
 		return 0, fmt.Errorf("failed to select folder: %w", err)
 	}
 
-	// Create a simple RFC 822 message
-	messageBody := fmt.Sprintf(`Message-ID: %s
-Date: %s
-From: %s
-To: %s
-Subject: %s
-Content-Type: text/plain; charset=utf-8
+	// Build In-Reply-To header if provided
+	inReplyToHeader := ""
+	if inReplyTo != "" {
+		inReplyToHeader = "In-Reply-To: " + inReplyTo + "\r\n"
+	}
 
-Test message body.
-`, messageID, sentAt.Format(time.RFC1123Z), from, to, subject)
+	// Build References header if provided
+	referencesHeader := ""
+	if len(references) > 0 {
+		referencesHeader = "References: " + strings.Join(references, " ") + "\r\n"
+	}
+
+	// Create a simple RFC 822 message with proper CRLF line endings
+	// RFC 822 requires CRLF for line termination
+	messageBody := "Message-ID: " + messageID + "\r\n" +
+		"Date: " + sentAt.Format(time.RFC1123Z) + "\r\n" +
+		"From: " + from + "\r\n" +
+		"To: " + to + "\r\n" +
+		"Subject: " + subject + "\r\n" +
+		inReplyToHeader +
+		referencesHeader +
+		"Content-Type: text/plain; charset=utf-8\r\n" +
+		"\r\n" +
+		"Test message body.\r\n"
 
 	// Append the message to the folder
 	flags := []string{imap.SeenFlag}

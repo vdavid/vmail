@@ -8,7 +8,8 @@ import (
 )
 
 // FetchMessageHeaders fetches message headers for the given UIDs.
-// Returns envelope, body structure, flags, and UID for each message.
+// Returns envelope, body structure, flags, UID, and References header for each message.
+// The References header is stored in the Body map under the "HEADER.FIELDS (REFERENCES)" key.
 func FetchMessageHeaders(c *client.Client, uids []uint32) ([]*imap.Message, error) {
 	if c == nil {
 		return nil, fmt.Errorf("client is nil")
@@ -23,12 +24,22 @@ func FetchMessageHeaders(c *client.Client, uids []uint32) ([]*imap.Message, erro
 		seqSet.AddNum(uid)
 	}
 
-	// Fetch envelope, body structure, flags, and UID
+	// Fetch envelope, body structure, flags, UID, and References header
+	// References is not part of the ENVELOPE, so we fetch it separately
+	referencesSection := &imap.BodySectionName{
+		BodyPartName: imap.BodyPartName{
+			Specifier: imap.HeaderSpecifier,
+			Fields:    []string{"References"},
+		},
+		Peek: true,
+	}
+
 	items := []imap.FetchItem{
 		imap.FetchEnvelope,
 		imap.FetchBodyStructure,
 		imap.FetchFlags,
 		imap.FetchUid,
+		referencesSection.FetchItem(),
 	}
 
 	messages := make(chan *imap.Message, len(uids))
