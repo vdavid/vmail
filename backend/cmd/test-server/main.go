@@ -82,8 +82,7 @@ func setupTestEnvironment() error {
 		return fmt.Errorf("failed to set VMAIL_TEST_MODE: %w", err)
 	}
 
-	testEncryptionKey := "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM="
-	if err := os.Setenv("VMAIL_ENCRYPTION_KEY_BASE64", testEncryptionKey); err != nil {
+	if err := os.Setenv("VMAIL_ENCRYPTION_KEY_BASE64", testutil.TestEncryptionKeyBase64); err != nil {
 		return fmt.Errorf("failed to set VMAIL_ENCRYPTION_KEY_BASE64: %w", err)
 	}
 

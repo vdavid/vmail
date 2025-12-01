@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/vdavid/vmail/backend/internal/testutil"
 )
 
 func TestNewConfig(t *testing.T) {
@@ -14,7 +16,7 @@ func TestNewConfig(t *testing.T) {
 	}("VMAIL_ENV", originalEnv)
 
 	_ = os.Setenv("VMAIL_ENV", "production")
-	_ = os.Setenv("VMAIL_ENCRYPTION_KEY_BASE64", "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=")
+	_ = os.Setenv("VMAIL_ENCRYPTION_KEY_BASE64", testutil.TestEncryptionKeyBase64)
 	_ = os.Setenv("AUTHELIA_URL", "http://authelia:9091")
 	_ = os.Setenv("VMAIL_DB_PASSWORD", "test-password")
 	_ = os.Setenv("VMAIL_DB_HOST", "localhost")
@@ -44,8 +46,8 @@ func TestNewConfig(t *testing.T) {
 		t.Errorf("expected Environment 'production', got '%s'", config.Environment)
 	}
 
-	if config.EncryptionKeyBase64 != "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=" {
-		t.Errorf("expected EncryptionKeyBase64 'dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=', got '%s'", config.EncryptionKeyBase64)
+	if config.EncryptionKeyBase64 != testutil.TestEncryptionKeyBase64 {
+		t.Errorf("expected EncryptionKeyBase64 '%s', got '%s'", testutil.TestEncryptionKeyBase64, config.EncryptionKeyBase64)
 	}
 
 	if config.AutheliaURL != "http://authelia:9091" {
@@ -79,7 +81,7 @@ func TestNewConfig(t *testing.T) {
 
 func TestNewConfigWithDefaults(t *testing.T) {
 	_ = os.Setenv("VMAIL_ENV", "production")
-	_ = os.Setenv("VMAIL_ENCRYPTION_KEY_BASE64", "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=")
+	_ = os.Setenv("VMAIL_ENCRYPTION_KEY_BASE64", testutil.TestEncryptionKeyBase64)
 	_ = os.Setenv("AUTHELIA_URL", "http://authelia:9091")
 	_ = os.Setenv("VMAIL_DB_PASSWORD", "password")
 
@@ -131,7 +133,7 @@ func TestValidate(t *testing.T) {
 			name: "valid config with dev auth mode",
 			config: &Config{
 				AuthMode:            "dev",
-				EncryptionKeyBase64: "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=",
+				EncryptionKeyBase64: testutil.TestEncryptionKeyBase64,
 				DBPassword:          "password",
 				DBPort:              "5432",
 				Port:                "11764",
@@ -142,7 +144,7 @@ func TestValidate(t *testing.T) {
 			name: "valid config with header auth mode",
 			config: &Config{
 				AuthMode:            "header",
-				EncryptionKeyBase64: "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=",
+				EncryptionKeyBase64: testutil.TestEncryptionKeyBase64,
 				AutheliaURL:         "http://authelia:9091",
 				DBPassword:          "password",
 				DBPort:              "5432",
@@ -154,7 +156,7 @@ func TestValidate(t *testing.T) {
 			name: "invalid auth mode",
 			config: &Config{
 				AuthMode:            "invalid",
-				EncryptionKeyBase64: "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=",
+				EncryptionKeyBase64: testutil.TestEncryptionKeyBase64,
 				DBPassword:          "password",
 				DBPort:              "5432",
 				Port:                "11764",
@@ -178,7 +180,7 @@ func TestValidate(t *testing.T) {
 			name: "missing authelia URL in header mode",
 			config: &Config{
 				AuthMode:            "header",
-				EncryptionKeyBase64: "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=",
+				EncryptionKeyBase64: testutil.TestEncryptionKeyBase64,
 				DBPassword:          "password",
 				DBPort:              "5432",
 				Port:                "11764",
@@ -190,7 +192,7 @@ func TestValidate(t *testing.T) {
 			name: "authelia URL not required in dev mode",
 			config: &Config{
 				AuthMode:            "dev",
-				EncryptionKeyBase64: "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=",
+				EncryptionKeyBase64: testutil.TestEncryptionKeyBase64,
 				DBPassword:          "password",
 				DBPort:              "5432",
 				Port:                "11764",
@@ -201,7 +203,7 @@ func TestValidate(t *testing.T) {
 			name: "missing DB password",
 			config: &Config{
 				AuthMode:            "dev",
-				EncryptionKeyBase64: "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=",
+				EncryptionKeyBase64: testutil.TestEncryptionKeyBase64,
 				AutheliaURL:         "http://authelia:9091",
 				DBPort:              "5432",
 				Port:                "11764",
@@ -313,7 +315,7 @@ func TestNewConfigWithEnvFile(t *testing.T) {
 	}("VMAIL_ENV", originalEnv)
 
 	_ = os.Setenv("VMAIL_ENV", "development")
-	_ = os.Setenv("VMAIL_ENCRYPTION_KEY_BASE64", "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=")
+	_ = os.Setenv("VMAIL_ENCRYPTION_KEY_BASE64", testutil.TestEncryptionKeyBase64)
 	_ = os.Setenv("AUTHELIA_URL", "http://authelia:9091")
 	_ = os.Setenv("VMAIL_DB_PASSWORD", "test-password")
 
@@ -346,7 +348,7 @@ func TestValidateEncryptionKey(t *testing.T) {
 	}{
 		{
 			name:      "valid 32-byte base64 key",
-			key:       "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=",
+			key:       testutil.TestEncryptionKeyBase64,
 			shouldErr: false,
 		},
 		{
@@ -429,7 +431,7 @@ func TestValidateAutheliaURL(t *testing.T) {
 			// AutheliaURL is only validated when AuthMode is "header"
 			config := &Config{
 				AuthMode:            "header",
-				EncryptionKeyBase64: "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=",
+				EncryptionKeyBase64: testutil.TestEncryptionKeyBase64,
 				AutheliaURL:         tt.url,
 				DBPassword:          "password",
 				DBPort:              "5432",
@@ -518,7 +520,7 @@ func TestValidatePort(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			config := &Config{
 				AuthMode:            "dev",
-				EncryptionKeyBase64: "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=",
+				EncryptionKeyBase64: testutil.TestEncryptionKeyBase64,
 				DBPassword:          "password",
 				DBPort:              tt.dbPort,
 				Port:                tt.port,

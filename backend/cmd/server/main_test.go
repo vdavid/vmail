@@ -42,7 +42,7 @@ func getTestConfig() *config.Config {
 
 	return &config.Config{
 		Environment:         "test",
-		EncryptionKeyBase64: "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=",
+		EncryptionKeyBase64: testutil.TestEncryptionKeyBase64,
 		AutheliaURL:         "http://authelia:9091",
 		DBHost:              pgHost,
 		DBPort:              pgPort,
