@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	sortthread "github.com/emersion/go-imap-sortthread"
 	imapclient "github.com/emersion/go-imap/client"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jhillyerd/enmime"
 	"github.com/vdavid/vmail/backend/internal/crypto"
 	"github.com/vdavid/vmail/backend/internal/db"
 	"github.com/vdavid/vmail/backend/internal/models"
@@ -1013,6 +1015,95 @@ func (s *Service) searchAndFetchInFolder(ctx context.Context, userID, folderName
 	}
 
 	return found
+}
+
+// FetchAttachmentContent fetches attachment content directly from IMAP without storing it.
+// It identifies the attachment by content ID (for inline) or filename (for regular attachments).
+func (s *Service) FetchAttachmentContent(ctx context.Context, userID, folderName string, imapUID int64, contentID, filename string) ([]byte, string, string, error) {
+	var content []byte
+	var mimeType string
+	var actualFilename string
+
+	err := s.withClientAndSelectFolder(ctx, userID, folderName, func(client *imapclient.Client, _ *imap.MailboxStatus) error {
+		return s.fetchAttachmentFromMessage(client, imapUID, contentID, filename, &content, &mimeType, &actualFilename)
+	})
+
+	if err != nil {
+		return nil, "", "", err
+	}
+
+	return content, mimeType, actualFilename, nil
+}
+
+// fetchAttachmentFromMessage fetches a specific attachment from a message.
+func (s *Service) fetchAttachmentFromMessage(client *imapclient.Client, imapUID int64, contentID, filename string, content *[]byte, mimeType, actualFilename *string) error {
+	seqSet := new(imap.SeqSet)
+	seqSet.AddNum(uint32(imapUID))
+
+	section := &imap.BodySectionName{}
+	items := []imap.FetchItem{section.FetchItem()}
+
+	messages := make(chan *imap.Message, 1)
+	done := make(chan error, 1)
+
+	go func() {
+		done <- client.UidFetch(seqSet, items, messages)
+	}()
+
+	msg := <-messages
+	if msg == nil {
+		return fmt.Errorf("message not found: UID %d", imapUID)
+	}
+
+	bodyReader := msg.GetBody(section)
+	if bodyReader == nil {
+		return fmt.Errorf("failed to get message body")
+	}
+
+	return s.findAndExtractAttachment(bodyReader, contentID, filename, content, mimeType, actualFilename)
+}
+
+// findAndExtractAttachment parses the message body and extracts the matching attachment.
+func (s *Service) findAndExtractAttachment(bodyReader io.Reader, contentID, filename string, content *[]byte, mimeType, actualFilename *string) error {
+	envelope, err := enmime.ReadEnvelope(bodyReader)
+	if err != nil {
+		return fmt.Errorf("failed to parse email: %w", err)
+	}
+
+	// Search in inline parts first (for CID matches)
+	for _, part := range envelope.Inlines {
+		partCID := strings.Trim(part.ContentID, "<>")
+		if matchesAttachment(partCID, part.FileName, contentID, filename) {
+			*content = part.Content
+			*mimeType = part.ContentType
+			*actualFilename = part.FileName
+			return nil
+		}
+	}
+
+	// Then search in regular attachments
+	for _, part := range envelope.Attachments {
+		partCID := strings.Trim(part.ContentID, "<>")
+		if matchesAttachment(partCID, part.FileName, contentID, filename) {
+			*content = part.Content
+			*mimeType = part.ContentType
+			*actualFilename = part.FileName
+			return nil
+		}
+	}
+
+	return fmt.Errorf("attachment not found")
+}
+
+// matchesAttachment checks if a part matches the requested attachment.
+func matchesAttachment(partCID, partFilename, wantCID, wantFilename string) bool {
+	if wantCID != "" && partCID == wantCID {
+		return true
+	}
+	if wantFilename != "" && partFilename == wantFilename {
+		return true
+	}
+	return false
 }
 
 // Close closes the service and cleans up connections.

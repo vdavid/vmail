@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,6 +16,9 @@ import (
 	"github.com/vdavid/vmail/backend/internal/imap"
 	"github.com/vdavid/vmail/backend/internal/models"
 )
+
+// cidPattern matches cid: URLs in src attributes (e.g., src="cid:image001.png@01DXXXXXXX")
+var cidPattern = regexp.MustCompile(`(?i)(src\s*=\s*["'])cid:([^"']+)(["'])`)
 
 // ThreadHandler handles individual thread-related API requests.
 type ThreadHandler struct {
@@ -120,6 +124,7 @@ func assignAttachments(messages []*models.Message, attachmentsMap map[string][]*
 
 // convertMessagesToThreadMessages converts []*Message to []Message for the response.
 // Ensures that Attachments is always an array, never nil, and filters out nil messages.
+// Also replaces cid: URLs in HTML with API endpoint URLs for inline attachments.
 func convertMessagesToThreadMessages(messages []*models.Message) []models.Message {
 	threadMessages := make([]models.Message, 0, len(messages))
 	for _, msg := range messages {
@@ -128,10 +133,56 @@ func convertMessagesToThreadMessages(messages []*models.Message) []models.Messag
 			if msg.Attachments == nil {
 				msg.Attachments = []models.Attachment{}
 			}
+			// Replace cid: URLs with API endpoints for inline images
+			msg.UnsafeBodyHTML = replaceCIDUrls(msg.ID, msg.UnsafeBodyHTML, msg.Attachments)
 			threadMessages = append(threadMessages, *msg)
 		}
 	}
 	return threadMessages
+}
+
+// replaceCIDUrls replaces cid: URLs in HTML with API endpoint URLs.
+// This allows inline images to be loaded via our attachment API.
+func replaceCIDUrls(messageID, html string, attachments []models.Attachment) string {
+	if html == "" {
+		return html
+	}
+
+	// Build a map of content_id -> attachment_id for quick lookup
+	cidToAttachmentID := make(map[string]string)
+	for _, att := range attachments {
+		if att.ContentID != "" {
+			cidToAttachmentID[att.ContentID] = att.ID
+		}
+	}
+
+	// Replace cid: URLs with API endpoint URLs
+	return cidPattern.ReplaceAllStringFunc(html, func(match string) string {
+		submatches := cidPattern.FindStringSubmatch(match)
+		if len(submatches) != 4 {
+			return match
+		}
+
+		prefix := submatches[1]    // src="
+		contentID := submatches[2] // the cid value
+		suffix := submatches[3]    // "
+
+		// Look up the attachment ID
+		attachmentID, found := cidToAttachmentID[contentID]
+		if !found {
+			// If not found, try without angle brackets (some clients include them)
+			attachmentID, found = cidToAttachmentID[strings.Trim(contentID, "<>")]
+		}
+
+		if !found {
+			// Attachment not found in our records - keep original
+			return match
+		}
+
+		// Build the API URL
+		apiURL := fmt.Sprintf("/api/v1/messages/%s/attachments/%s", messageID, attachmentID)
+		return prefix + apiURL + suffix
+	})
 }
 
 // GetThread returns a single email thread with all its messages.

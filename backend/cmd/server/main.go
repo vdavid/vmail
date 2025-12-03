@@ -58,6 +58,7 @@ func NewServer(cfg *config.Config, dbPool *pgxpool.Pool) http.Handler {
 	foldersHandler := api.NewFoldersHandler(dbPool, encryptor, imapPool)
 	threadsHandler := api.NewThreadsHandler(dbPool, encryptor, imapService)
 	threadHandler := api.NewThreadHandler(dbPool, encryptor, imapService)
+	attachmentHandler := api.NewAttachmentHandler(dbPool, imapService)
 	searchHandler := api.NewSearchHandler(dbPool, encryptor, imapService)
 	wsHandler := api.NewWebSocketHandler(dbPool, imapService, wsHub)
 	testHandler := api.NewTestHandler(dbPool, encryptor, imapService, wsHub)
@@ -99,6 +100,15 @@ func NewServer(cfg *config.Config, dbPool *pgxpool.Pool) http.Handler {
 		// Set the thread_id in the URL path for the handler to use
 		r.URL.Path = "/api/v1/thread/" + path
 		threadHandler.GetThread(w, r)
+	})))
+
+	// Handle /api/v1/messages/{messageId}/attachments/{attachmentId} pattern
+	mux.Handle("/api/v1/messages/", auth.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/attachments/") {
+			attachmentHandler.GetAttachment(w, r)
+			return
+		}
+		http.Error(w, "Not found", http.StatusNotFound)
 	})))
 
 	return mux

@@ -87,6 +87,48 @@ export interface Attachment {
     content_id?: string
 }
 
+/**
+ * Generates the URL to download an attachment.
+ * @param messageId The message ID containing the attachment
+ * @param attachmentId The attachment ID
+ * @param download If true, forces a download dialog. If false, opens inline if browser supports it.
+ */
+export function getAttachmentUrl(messageId: string, attachmentId: string, download: boolean = false): string {
+    const base = `${API_BASE_URL}/messages/${messageId}/attachments/${attachmentId}`
+    return download ? `${base}?download=true` : base
+}
+
+/**
+ * Downloads an attachment using fetch (includes auth headers) and triggers browser download.
+ */
+export async function downloadAttachment(messageId: string, attachmentId: string, filename: string): Promise<void> {
+    const url = getAttachmentUrl(messageId, attachmentId, true)
+    const response = await fetch(url, {
+        credentials: 'include',
+        headers: getAuthHeaders(),
+    })
+
+    if (response.status === 401) {
+        redirectToLogin()
+        return
+    }
+
+    if (!response.ok) {
+        throw new Error('Failed to download attachment')
+    }
+
+    // Create blob and trigger download
+    const blob = await response.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(blobUrl)
+}
+
 export interface Thread {
     id: string
     stable_thread_id: string

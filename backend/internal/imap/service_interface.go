@@ -40,6 +40,11 @@ type IMAPService interface {
 	// This function blocks until the context is canceled.
 	StartIdleListener(ctx context.Context, userID string, hub *websocket.Hub)
 
+	// FetchAttachmentContent fetches attachment content directly from IMAP without storing it.
+	// It identifies the attachment by content ID (for inline) or filename (for regular attachments).
+	// Returns the content bytes, MIME type, and filename.
+	FetchAttachmentContent(ctx context.Context, userID, folderName string, imapUID int64, contentID, filename string) ([]byte, string, string, error)
+
 	// Close closes the service and cleans up connections.
 	Close()
 }

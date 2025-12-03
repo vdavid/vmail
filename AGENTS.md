@@ -35,8 +35,8 @@ Always follow this process when developing in this project:
 2. Before touching code of a specific domain, read the related docs within `/docs` or similar.
    List folders if you need to. Example: `docs/backend/auth.md` for auth logic, `backend/migrations/*.sql` for DB schema.
 3. Do the changes, in small iterations. Adhere to the [style guide](docs/style-guide.md)!
-4. Use `./scripts/check.sh` to check that everything is still working.
-    - Or use a subset, for example, if you only touch the front end.
+4. Use `./scripts/check.sh` to check that everything is still working. 
+    - Or use a subset, for example, if you only touch the front end or tests. See [the script's readme](scripts/check/README.md)
     - Even fix gocyclo's cyclomatic complexity warnings! I know it's a pain, but it's helpful to keep Go funcs simple.
 5. Make sure to add tests for the new code. Think about unit tests, integration tests, and end-to-end tests.
 6. Check if you added new patterns, external dependencies, or architectural changes. Update all related docs.

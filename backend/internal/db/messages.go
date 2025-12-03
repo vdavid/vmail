@@ -256,6 +256,87 @@ func GetMessageByUID(ctx context.Context, pool *pgxpool.Pool, userID, folderName
 	return &msg, nil
 }
 
+// GetMessageByID returns a message by its database ID.
+func GetMessageByID(ctx context.Context, pool *pgxpool.Pool, messageID string) (*models.Message, error) {
+	var msg models.Message
+
+	err := pool.QueryRow(ctx, `
+		SELECT 
+			id,
+			thread_id,
+			user_id,
+			imap_uid,
+			imap_folder_name,
+			message_id_header,
+			from_address,
+			to_addresses,
+			cc_addresses,
+			sent_at,
+			subject,
+			unsafe_body_html,
+			body_text,
+			is_read,
+			is_starred
+		FROM messages
+		WHERE id = $1
+	`, messageID).Scan(
+		&msg.ID,
+		&msg.ThreadID,
+		&msg.UserID,
+		&msg.IMAPUID,
+		&msg.IMAPFolderName,
+		&msg.MessageIDHeader,
+		&msg.FromAddress,
+		&msg.ToAddresses,
+		&msg.CCAddresses,
+		&msg.SentAt,
+		&msg.Subject,
+		&msg.UnsafeBodyHTML,
+		&msg.BodyText,
+		&msg.IsRead,
+		&msg.IsStarred,
+	)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrMessageNotFound
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get message by ID: %w", err)
+	}
+
+	return &msg, nil
+}
+
+// GetAttachmentByID returns an attachment by its database ID.
+func GetAttachmentByID(ctx context.Context, pool *pgxpool.Pool, attachmentID string) (*models.Attachment, error) {
+	var att models.Attachment
+
+	err := pool.QueryRow(ctx, `
+		SELECT id, message_id, filename, mime_type, size_bytes, is_inline, content_id
+		FROM attachments
+		WHERE id = $1
+	`, attachmentID).Scan(
+		&att.ID,
+		&att.MessageID,
+		&att.Filename,
+		&att.MimeType,
+		&att.SizeBytes,
+		&att.IsInline,
+		&att.ContentID,
+	)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("attachment not found")
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get attachment by ID: %w", err)
+	}
+
+	return &att, nil
+}
+
 // SaveAttachment saves an attachment to the database.
 func SaveAttachment(ctx context.Context, pool *pgxpool.Pool, attachment *models.Attachment) error {
 	var attachmentID string

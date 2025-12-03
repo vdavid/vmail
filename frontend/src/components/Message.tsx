@@ -2,7 +2,7 @@
    We sanitize the content so it should be safe. */
 import DOMPurify from 'dompurify'
 
-import type { Message as MessageType } from '../lib/api'
+import { downloadAttachment, type Attachment, type Message as MessageType } from '../lib/api'
 
 interface MessageProps {
     message: MessageType
@@ -18,7 +18,17 @@ export default function Message({ message }: MessageProps) {
         return date.toLocaleString()
     }
 
-    const attachments = message.attachments?.filter((att) => !att.is_inline) ?? []
+    // Show all attachments - inline ones that aren't referenced in HTML should still be downloadable
+    const attachments = message.attachments ?? []
+
+    const handleDownload = async (attachment: Attachment) => {
+        try {
+            await downloadAttachment(message.id, attachment.id, attachment.filename)
+        } catch (error) {
+            // eslint-disable-next-line no-console
+            console.error('Failed to download attachment:', error)
+        }
+    }
 
     return (
         <article className='rounded-3xl border border-white/5 bg-slate-950/50 p-5 text-slate-100 shadow-[0_25px_50px_-12px_rgba(15,23,42,0.8)]'>
@@ -43,16 +53,22 @@ export default function Message({ message }: MessageProps) {
                 </div>
             )}
             {attachments.length > 0 && (
-                <div className='mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-sm'>
-                    <p className='font-semibold text-white'>Attachments</p>
-                    <ul className='mt-2 space-y-1'>
+                <div className='mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm'>
+                    <p className='mb-3 font-semibold text-white'>Attachments</p>
+                    <div className='flex flex-wrap gap-2'>
                         {attachments.map((attachment) => (
-                            <li key={attachment.id} className='flex items-center justify-between text-slate-200'>
-                                <span>{attachment.filename}</span>
+                            <button
+                                key={attachment.id}
+                                type='button'
+                                onClick={() => void handleDownload(attachment)}
+                                className='flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-slate-200 transition-colors hover:border-white/20 hover:bg-white/10'
+                            >
+                                <span className='text-lg'>{getFileIcon(attachment.mime_type)}</span>
+                                <span className='max-w-[150px] truncate'>{attachment.filename}</span>
                                 <span className='text-xs text-slate-400'>{formatFileSize(attachment.size_bytes)}</span>
-                            </li>
+                            </button>
                         ))}
-                    </ul>
+                    </div>
                 </div>
             )}
             {sanitizedHTML ? (
@@ -71,4 +87,16 @@ function formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${String(bytes)} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function getFileIcon(mimeType: string): string {
+    if (mimeType.startsWith('image/')) return '🖼️'
+    if (mimeType.startsWith('video/')) return '🎬'
+    if (mimeType.startsWith('audio/')) return '🎵'
+    if (mimeType === 'application/pdf') return '📄'
+    if (mimeType.includes('zip') || mimeType.includes('archive') || mimeType.includes('compressed')) return '📦'
+    if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return '📊'
+    if (mimeType.includes('document') || mimeType.includes('word')) return '📝'
+    if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return '📽️'
+    return '📎'
 }

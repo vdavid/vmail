@@ -23,6 +23,50 @@ func (_m *IMAPService) Close() {
 	_m.Called()
 }
 
+// FetchAttachmentContent provides a mock function with given fields: ctx, userID, folderName, imapUID, contentID, filename
+func (_m *IMAPService) FetchAttachmentContent(ctx context.Context, userID string, folderName string, imapUID int64, contentID string, filename string) ([]byte, string, string, error) {
+	ret := _m.Called(ctx, userID, folderName, imapUID, contentID, filename)
+
+	if len(ret) == 0 {
+		panic("no return value specified for FetchAttachmentContent")
+	}
+
+	var r0 []byte
+	var r1 string
+	var r2 string
+	var r3 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int64, string, string) ([]byte, string, string, error)); ok {
+		return rf(ctx, userID, folderName, imapUID, contentID, filename)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int64, string, string) []byte); ok {
+		r0 = rf(ctx, userID, folderName, imapUID, contentID, filename)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]byte)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, int64, string, string) string); ok {
+		r1 = rf(ctx, userID, folderName, imapUID, contentID, filename)
+	} else {
+		r1 = ret.Get(1).(string)
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, string, string, int64, string, string) string); ok {
+		r2 = rf(ctx, userID, folderName, imapUID, contentID, filename)
+	} else {
+		r2 = ret.Get(2).(string)
+	}
+
+	if rf, ok := ret.Get(3).(func(context.Context, string, string, int64, string, string) error); ok {
+		r3 = rf(ctx, userID, folderName, imapUID, contentID, filename)
+	} else {
+		r3 = ret.Error(3)
+	}
+
+	return r0, r1, r2, r3
+}
+
 // Search provides a mock function with given fields: ctx, userID, query, page, limit
 func (_m *IMAPService) Search(ctx context.Context, userID string, query string, page int, limit int) ([]*models.Thread, int, error) {
 	ret := _m.Called(ctx, userID, query, page, limit)

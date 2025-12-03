@@ -86,24 +86,39 @@ func parseBody(bodyReader io.Reader, msg *models.Message) error {
 	msg.UnsafeBodyHTML = htmlBody
 	msg.BodyText = envelope.Text
 
-	// Parse attachments
+	// Parse regular attachments (downloadable files)
 	for _, part := range envelope.Attachments {
-		attachment := &models.Attachment{
-			Filename:  part.FileName,
-			MimeType:  part.ContentType,
-			SizeBytes: int64(len(part.Content)),
-			IsInline:  false,
-		}
+		attachment := createAttachment(part, false)
+		msg.Attachments = append(msg.Attachments, attachment)
+	}
 
+	// Parse inline parts (embedded images, etc.)
+	for _, part := range envelope.Inlines {
+		attachment := createAttachment(part, true)
+		msg.Attachments = append(msg.Attachments, attachment)
+	}
+
+	// Also check OtherParts for any parts with ContentID (inline images that enmime didn't classify)
+	for _, part := range envelope.OtherParts {
 		if part.ContentID != "" {
-			attachment.ContentID = part.ContentID
-			attachment.IsInline = true
+			attachment := createAttachment(part, true)
+			msg.Attachments = append(msg.Attachments, attachment)
 		}
-
-		msg.Attachments = append(msg.Attachments, *attachment)
 	}
 
 	return nil
+}
+
+// createAttachment creates an Attachment from an enmime Part.
+func createAttachment(part *enmime.Part, isInline bool) models.Attachment {
+	contentID := strings.Trim(part.ContentID, "<>")
+	return models.Attachment{
+		Filename:  part.FileName,
+		MimeType:  part.ContentType,
+		SizeBytes: int64(len(part.Content)),
+		IsInline:  isInline || contentID != "",
+		ContentID: contentID,
+	}
 }
 
 // formatAddress formats an IMAP address to a string.

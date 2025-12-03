@@ -17,7 +17,7 @@ users:
     displayname: "Admin User"
     # This hash is for "change-me" - GENERATE YOUR OWN!
     # Run: docker run --rm authelia/authelia:latest authelia crypto hash generate argon2 --password 'YOUR_SECURE_PASSWORD'
-    password: "$argon2id$v=19$m=65536,t=3,p=4$JDJhJDEwJHRlc3RoYXNoMTIzNDU2Nzg5MA$placeholder_replace_me"
+    password: "YOUR-PASSWORD"
     email: admin@example.com
     groups:
       - admins
@@ -25,7 +25,7 @@ users:
   # Add more users as needed:
   # john:
   #   displayname: "John Doe"
-  #   password: "$argon2id$v=19$m=65536,t=3,p=4$..."
+  #   password: "ANOTHER-PASSWORD"
   #   email: john@example.com
   #   groups:
   #     - users

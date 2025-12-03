@@ -19,6 +19,9 @@ frontend/test-results/
 # Check script binary
 /scripts/check/check
 
+# Design artifacts
+/_design
+
 # Authelia config (keep .example files, ignore actual configs)
 /config/authelia/configuration.yml
 /config/authelia/users.yml
