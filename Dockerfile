@@ -1,5 +1,5 @@
 # --- Stage 1: Build the React front end ---
-FROM node:25-alpine AS builder-fe
+FROM node:26-alpine AS builder-fe
 
 # Install pnpm
 RUN npm install -g pnpm
