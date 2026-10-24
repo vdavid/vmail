@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -164,9 +165,12 @@ func NewTestIMAPServer(t *testing.T) *TestIMAPServer {
 
 	addr := listener.Addr().String()
 
-	// Start server in goroutine
+	// Start server in goroutine. Cleanup waits for it to return, because logging via t
+	// after the test has completed panics.
+	served := make(chan struct{})
 	go func() {
-		if err := s.Serve(listener); err != nil {
+		defer close(served)
+		if err := s.Serve(listener); err != nil && !errors.Is(err, net.ErrClosed) {
 			t.Logf("IMAP server error: %v", err)
 		}
 	}()
@@ -180,6 +184,7 @@ func NewTestIMAPServer(t *testing.T) *TestIMAPServer {
 			t.Logf("Failed to close IMAP server: %v", err)
 			return
 		}
+		<-served
 	}
 
 	// Memory backend creates a default user with these credentials
