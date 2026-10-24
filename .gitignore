@@ -27,3 +27,6 @@ frontend/test-results/
 /config/authelia/users.yml
 /config/authelia/db.sqlite3
 /config/authelia/notifications.txt
+
+# new-worktree.sh warm-start markers
+.warming-worktree*
