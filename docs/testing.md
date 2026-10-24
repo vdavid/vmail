@@ -69,7 +69,7 @@ For daily development, unit and integration tests are usually enough.
 
 **Prerequisites:**
 
-- Go 1.25.5+
+- Go 1.27.3+
 - Node.js 25+ and pnpm 10+
 - A `.env` file with database credentials (see `.env.example`)
 
